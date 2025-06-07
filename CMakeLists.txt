@@ -6,6 +6,8 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/src/axon")
 
 include(FetchContent)
 
+find_package(MLIR 20.1 REQUIRED CONFIG)
+find_package(LLVM 20.1 REQUIRED CONFIG)
 find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
 
 FetchContent_Declare(
@@ -24,3 +26,4 @@ set_target_properties(_axon_impl
   PROPERTIES 
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/src/axon"
 )
+target_link_libraries(_axon_impl PUBLIC ${llvm_libs})
