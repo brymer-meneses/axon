@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 project(axon)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/src/axon")
 
 include(FetchContent)
 
@@ -16,5 +17,5 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nanobind)
 
 
-nanobind_add_module(axon src/axon.cpp)
-target_compile_features(axon PUBLIC cxx_std_23)
+nanobind_add_module(_axon_impl src/axon/axon.cpp)
+target_compile_features(_axon_impl PUBLIC cxx_std_23)
