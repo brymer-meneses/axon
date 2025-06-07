@@ -16,6 +16,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nanobind)
 
-
 nanobind_add_module(_axon_impl src/axon/axon.cpp)
+install(TARGETS _axon_impl LIBRARY DESTINATION axon)
 target_compile_features(_axon_impl PUBLIC cxx_std_23)
+
+set_target_properties(_axon_impl
+  PROPERTIES 
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/src/axon"
+)
