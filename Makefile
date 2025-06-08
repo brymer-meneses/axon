@@ -10,7 +10,7 @@ build: config
 	cmake --build build
 
 test: build
-	PYTHONPATH="src" pytest tests
+	pytest tests
 
 clean:
 	rm -rf build

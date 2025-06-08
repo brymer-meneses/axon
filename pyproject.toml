@@ -1,6 +1,3 @@
-[build-system]
-requires = ["nanobind>=1.0.0"]
-build-backend = "nanobind.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

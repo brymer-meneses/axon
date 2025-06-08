@@ -1,2 +1,2 @@
 
-from ._axon_impl import *
+from ._axon_impl import func

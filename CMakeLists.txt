@@ -6,9 +6,10 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/src/axon")
 
 include(FetchContent)
 
-find_package(MLIR 20.1 REQUIRED CONFIG)
 find_package(LLVM 20.1 REQUIRED CONFIG)
-find_package(Python 3.8 COMPONENTS Interpreter Development REQUIRED)
+find_package(MLIR 20.1 REQUIRED CONFIG)
+find_package(Python 3.10 COMPONENTS Interpreter Development.Module REQUIRED)
+
 
 FetchContent_Declare(
   nanobind
@@ -23,7 +24,10 @@ install(TARGETS _axon_impl LIBRARY DESTINATION axon)
 target_compile_features(_axon_impl PUBLIC cxx_std_23)
 
 set_target_properties(_axon_impl
-  PROPERTIES 
+  PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/src/axon"
 )
-target_link_libraries(_axon_impl PUBLIC ${llvm_libs})
+target_link_libraries(_axon_impl PUBLIC
+    ${llvm_libs}
+    Python::Module
+)
