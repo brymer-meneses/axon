@@ -23,6 +23,7 @@ target_sources(_axon_cpp
   src/axon/tensor.cpp
   src/axon/op.cpp
   src/axon/context.cpp
+  src/axon/basic_storage.cpp
 )
 target_compile_features(_axon_cpp PUBLIC cxx_std_23)
 target_link_libraries(_axon_cpp PRIVATE nanobind)

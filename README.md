@@ -1,7 +1,6 @@
 # Axon 
 
-Axon is a tiny Deep Learning Library that uses MLIR to optimize the forward and
-backward pass of the tensor operations.
+Axon is a tiny Deep Learning Library that uses MLIR to optimize tensor operations.
 
 ```python
 a = axon.Tensor(1)

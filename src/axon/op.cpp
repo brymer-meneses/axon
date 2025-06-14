@@ -32,7 +32,7 @@ export struct BatchMinus {
   TensorId right;
 };
 
-export using TensorOperation =
+export using Operation =
     std::variant<BatchMatMul, BatchScalarMul, BatchMul, BatchAdd, BatchMinus>;
 
 }  // namespace axon

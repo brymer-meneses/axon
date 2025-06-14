@@ -12,9 +12,7 @@ build/CMakeCache.txt: CMakeLists.txt
 		-DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
 		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-config: build/CMakeCache.txt
-
-build: config
+build: build/CMakeCache.txt
 	cmake --build build
 
 test: build
