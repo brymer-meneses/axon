@@ -5,7 +5,7 @@ project(axon)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(FetchContent)
-include(cmake/eigen.cmake)
+include(cmake/xtensor.cmake)
 include(cmake/nanobind.cmake)
 
 find_package(LLVM 20.1 REQUIRED CONFIG)
@@ -16,31 +16,24 @@ llvm_map_components_to_libnames(llvm_libs support core irreader)
 include_directories(${LLVM_INCLUDE_DIRS})
 
 nanobind_build_library(nanobind SHARED)
-nanobind_add_module(_axon_cpp)
-target_sources(_axon_cpp 
+nanobind_add_module(_cpp)
+target_sources(_cpp 
   PUBLIC FILE_SET CXX_MODULES FILES
-  src/axon/axon.cpp
-  src/axon/tensor.cpp
-  src/axon/op.cpp
-  src/axon/context.cpp
-  src/axon/basic_storage.cpp
+  src/cpp/axon.cpp
+  src/cpp/tensor.cpp
+  src/cpp/context.cpp
+  src/cpp/convert.cpp
+  src/cpp/basic_storage.cpp
 )
-target_compile_features(_axon_cpp PUBLIC cxx_std_23)
-target_link_libraries(_axon_cpp PRIVATE nanobind)
-target_include_directories(_axon_cpp PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_features(_cpp PUBLIC cxx_std_23)
+target_link_libraries(_cpp PRIVATE nanobind xtensor)
+target_include_directories(_cpp PUBLIC ${xtensor_INCLUDE_DIRS})
 
-nanobind_opt_size(_axon_cpp)
-nanobind_lto(_axon_cpp)
-nanobind_set_visibility(_axon_cpp)
-nanobind_disable_stack_protector(_axon_cpp)
-nanobind_extension(_axon_cpp)
-nanobind_link_options(_axon_cpp)
-
-set_target_properties(_axon_cpp
+set_target_properties(_cpp
   PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/src/axon"
 )
-target_link_libraries(_axon_cpp PUBLIC
+target_link_libraries(_cpp PUBLIC
     Python::Module
     ${llvm_libs}
 )

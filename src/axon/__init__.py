@@ -1,21 +1,22 @@
-from . import _axon_cpp
+from typing import List, TypeAlias
+from axon._cpp import Tensor, Context
 
-class Tensor:
+import numpy as np
 
-    def __init__(self, data, requires_grad=False) -> None:
-        import inspect
+TensorLike: TypeAlias = np.ndarray | List
 
-        self._requires_grad = requires_grad
-        self._data = data
-        self._ctx = _axon_cpp.Context(inspect.stack()[1].function);
+def tensor(data: TensorLike, requires_grad: bool) -> Tensor:
+    current_context = Context._get_current()
+    if current_context == None:
+        raise RuntimeError("Cannot invoke this function without a context.")
 
+    if not isinstance(data, np.ndarray):
+        data = np.array(data, dtype=np.float32)
 
-    def __add__(self, other: "Tensor") -> "Tensor":
-        raise NotImplementedError
-
-    def __mul__(self, other: "Tensor") -> "Tensor":
-        raise NotImplementedError
-
-    def __matmul__(self, other: "Tensor") -> "Tensor":
-        raise NotImplementedError
-
+    return current_context._create_tensor(data, requires_grad)
+    
+__all__ = [
+    "tensor",
+    "Context",
+    "Tensor",
+]

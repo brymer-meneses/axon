@@ -3,11 +3,11 @@
 Axon is a tiny Deep Learning Library that uses MLIR to optimize tensor operations.
 
 ```python
-a = axon.Tensor(1)
-b = axon.Tensor(1)
-c = a + b
-c.backward()
+import axon
 
-print(a.grad)
-print(b.grad)
+with axon.Context() as ctx:
+    t1 = axon.tensor(1, requires_grad=True)
+    t2 = axon.tensor(2, requires_grad=True)
+    t3 = t1 + t2
+    t3.backward()
 ```
