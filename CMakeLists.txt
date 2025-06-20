@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.22)
 
 project(axon)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
 include(FetchContent)
 include(cmake/xtensor.cmake)
 include(cmake/nanobind.cmake)
@@ -21,9 +19,11 @@ target_sources(_cpp
   PUBLIC FILE_SET CXX_MODULES FILES
   src/cpp/axon.cpp
   src/cpp/tensor.cpp
-  src/cpp/context.cpp
   src/cpp/convert.cpp
-  src/cpp/basic_storage.cpp
+  src/cpp/global_context.cpp
+  src/cpp/storage.cpp
+  src/cpp/tensor_metadata.cpp
+  src/cpp/ids.cpp
 )
 target_compile_features(_cpp PUBLIC cxx_std_23)
 target_link_libraries(_cpp PRIVATE nanobind xtensor)

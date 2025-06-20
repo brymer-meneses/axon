@@ -1,19 +1,11 @@
 module;
 
 #include <cassert>
-#include <memory>
-#include <optional>
-#include <vector>
-
-#include "nanobind/nanobind.h"
-#include "nanobind/ndarray.h"
 
 export module axon.tensor;
 
-import axon.common;
-import axon.context;
-
-namespace nb = nanobind;
+import axon.ids;
+import axon.global_context;
 
 namespace axon {
 
@@ -21,12 +13,13 @@ namespace axon {
 // inside a `Context`.
 export class Tensor {
  public:
-  Tensor(std::shared_ptr<Context> context, TensorId id)
-      : context(context), id(id) {
-    assert(id.is_valid());
+  Tensor(TensorId id) : id(id) {}
+
+  ~Tensor() {
+    auto& ctx = GlobalContext::Get();
+    ctx.Destroy(id);
   }
 
-  std::shared_ptr<Context> context;
   TensorId id;
 };
 

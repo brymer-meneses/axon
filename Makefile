@@ -15,8 +15,9 @@ build/CMakeCache.txt: CMakeLists.txt
 build: build/CMakeCache.txt
 	cmake --build build
 
-test: build
-	pytest tests
-
 clean:
 	rm -rf build
+
+test: build
+	pytest -s tests
+
