@@ -5,16 +5,20 @@ Axon is a tiny Deep Learning Library that uses MLIR to optimize tensor operation
 ```python
 import axon
 
-ctx = axon.Context()
+jit = axon.create_jit_context()
 
-@ctx.compile
-def linear(x: axon.Tensor, b: axon.Tensor) -> None:
-    pass
+@jit.compile
+class Linear(axon.Module):
 
-axon.set_current_context(ctx)
+    def __init__(self) -> None:
+        super().__init__()
+        self.w = axon.rand((512, 1024), requires_grad=True)
+        self.b = axon.rand((1024, 1), requires_grad=True)
 
-t1 = axon.tensor(1, requires_grad=True)
-t2 = axon.tensor(2, requires_grad=True)
-t3 = t1 + t2
-t3.backward()
+    def forward(self, x: axon.Tensor) -> axon.Tensor:
+        return self.w @ x + self.b
+
+@jit.compile
+def mse_loss(y_pred: axon.Tensor, y_label: axon.Tensor) -> axon.Tensor:
+    return 0.5 * (y_pred - y_label) ** 2
 ```
