@@ -10,7 +10,7 @@ import axon.global_context;
 namespace axon {
 
 // A `Tensor` is a lightweight "handle" to the `TensorMetadata` which lives
-// inside a `Context`.
+// inside the `GlobalContext`.
 export class Tensor {
  public:
   Tensor(TensorId id) : id(id) {}
