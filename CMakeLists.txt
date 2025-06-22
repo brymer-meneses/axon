@@ -17,13 +17,13 @@ nanobind_build_library(nanobind SHARED)
 nanobind_add_module(_cpp)
 target_sources(_cpp 
   PUBLIC FILE_SET CXX_MODULES FILES
-  src/cpp/axon.cpp
-  src/cpp/tensor.cpp
-  src/cpp/convert.cpp
-  src/cpp/global_context.cpp
-  src/cpp/storage.cpp
-  src/cpp/tensor_metadata.cpp
-  src/cpp/ids.cpp
+  src/graph.cpp
+  src/axon.cpp
+  src/storage.cpp
+  src/inst.cpp
+  src/ids.cpp
+  src/tensor.cpp
+  src/context.cpp
 )
 target_compile_features(_cpp PUBLIC cxx_std_23)
 target_link_libraries(_cpp PRIVATE nanobind xtensor)
