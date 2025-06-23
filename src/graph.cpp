@@ -16,13 +16,6 @@ import axon.inst;
 
 namespace axon {
 
-struct Data {
-  using Storage = xt::xarray<float>;
-  std::unique_ptr<Storage> data;
-
-  Data(Storage data) : data(std::make_unique<Storage>(data)) {}
-};
-
 struct BackwardBuilder {
   using InstStorage = Storage<InstId, Inst>;
 
@@ -83,6 +76,13 @@ struct BackwardBuilder {
       -> void {};
 };
 
+export struct Data {
+  using Storage = xt::xarray<float>;
+  std::shared_ptr<Storage> data;
+
+  Data(Storage data) : data(std::make_shared<Storage>(data)) {}
+};
+
 export class Graph {
  public:
   auto create_tensor(xt::xarray<float> data, bool requires_grad) -> InstId {
@@ -104,6 +104,11 @@ export class Graph {
 
   auto requires_grad(InstId inst_id) const -> bool {
     return insts_.get(inst_id).requires_grad();
+  }
+
+  auto data(InstId inst_id) const -> Data {
+    auto data_id = insts_.get(inst_id).data_id;
+    return data_.get(data_id);
   }
 
   auto insts() -> Storage<InstId, Inst>& { return insts_; }

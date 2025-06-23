@@ -2,8 +2,11 @@ module;
 
 #include "nanobind/nanobind.h"
 #include "nanobind/ndarray.h"
+#include "nanobind/stl/shared_ptr.h"
+#include "nanobind/stl/string.h"
 #include "xtensor/containers/xadapt.hpp"
 #include "xtensor/containers/xarray.hpp"
+#include "xtensor/io/xio.hpp"
 
 export module axon;
 
@@ -32,7 +35,7 @@ NB_MODULE(_cpp, m) {
       .def("__repr__",
            [](std::shared_ptr<axon::Tensor> tensor) {
              std::stringstream stream;
-             stream << *context.graph()->data().get(tensor->inst_id());
+             stream << *tensor->data().data;
              return stream.str();
            })
       .def(
@@ -40,7 +43,7 @@ NB_MODULE(_cpp, m) {
           [](std::shared_ptr<axon::Tensor> lhs,
              std::shared_ptr<axon::Tensor> rhs) {
             auto graph = context.graph();
-            auto inst_id = context.apply_operator<axon::Add>(lhs->inst_id(),
+            auto inst_id = graph->apply_operation<axon::Add>(lhs->inst_id(),
                                                              rhs->inst_id());
             return std::make_shared<axon::Tensor>(inst_id, graph);
           },

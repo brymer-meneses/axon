@@ -17,6 +17,7 @@ export class Tensor {
 
   auto requires_grad() const -> bool { return graph_->requires_grad(inst_id_); }
   auto inst_id() const -> InstId { return inst_id_; }
+  auto data() const -> Data { return graph_->data(inst_id_); }
 
  private:
   // The execution graph where this tensor lives.
