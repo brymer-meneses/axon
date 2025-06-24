@@ -65,11 +65,19 @@ export struct Inst {
   }
 };
 
-export struct BackwardBuilder {
-  using InstStorage = Storage<InstId, Inst>;
+export template <typename T>
+struct BackwardBuilder {};
 
-  static auto build(const Add& op, Inst& inst, const InstStorage& storage)
-      -> void {
+export template <>
+struct BackwardBuilder<Create> {
+  static auto build(const Create& op, Inst& inst,
+                    const Storage<InstId, Inst>& storage) -> void {};
+};
+
+export template <>
+struct BackwardBuilder<Add> {
+  static auto build(const Add& op, Inst& inst,
+                    const Storage<InstId, Inst>& storage) -> void {
     const auto& lhs = storage.get(op.lhs_id);
     const auto& rhs = storage.get(op.rhs_id);
 
@@ -84,9 +92,12 @@ export struct BackwardBuilder {
       inst.deps.emplace_back(AddBackward(), op.rhs_id);
     }
   };
+};
 
-  static auto build(const Mul& op, Inst& inst, const InstStorage& storage)
-      -> void {
+export template <>
+struct BackwardBuilder<Mul> {
+  static auto build(const Mul& op, Inst& inst,
+                    const Storage<InstId, Inst>& storage) -> void {
     const auto& lhs = storage.get(op.lhs_id);
     const auto& rhs = storage.get(op.rhs_id);
 
@@ -102,9 +113,12 @@ export struct BackwardBuilder {
       inst.deps.emplace_back(MulBackward(lhs.data_id), op.rhs_id);
     }
   };
+};
 
-  static auto build(const MatMul& op, Inst& inst, const InstStorage& storage)
-      -> void {
+export template <>
+struct BackwardBuilder<MatMul> {
+  static auto build(const MatMul& op, Inst& inst,
+                    const Storage<InstId, Inst>& storage) -> void {
     const auto& lhs = storage.get(op.lhs_id);
     const auto& rhs = storage.get(op.rhs_id);
 
@@ -119,10 +133,7 @@ export struct BackwardBuilder {
     if (rhs.requires_grad()) {
       inst.deps.emplace_back(MatMulBackwardR(lhs.data_id), op.rhs_id);
     }
-  };
-
-  static auto build(const Create& create, Inst& inst, InstStorage& storage)
-      -> void {};
+  }
 };
 
 }  // namespace axon

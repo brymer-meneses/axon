@@ -34,7 +34,7 @@ class Storage {
     return values_[index.value()];
   }
 
-  auto iter() {
+  auto iter() const {
     return std::views::iota(0u, values_.size()) |
            std::views::transform([](auto val) { return IndexType(val); });
   }
