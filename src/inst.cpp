@@ -10,6 +10,8 @@ import axon.storage;
 
 namespace axon {
 
+namespace insts {
+
 export struct AddBackward {};
 
 export struct MulBackward {
@@ -22,16 +24,6 @@ export struct MatMulBackwardL {
 
 export struct MatMulBackwardR {
   DataId left_id;
-};
-
-export struct Dependency {
-  using GradOp =
-      std::variant<AddBackward, MulBackward, MatMulBackwardL, MatMulBackwardR>;
-
-  GradOp op;
-
-  // The insruction that requires this gradient.
-  InstId inst_id;
 };
 
 export struct Create {};
@@ -51,8 +43,20 @@ export struct MatMul {
   InstId rhs_id;
 };
 
+}  // namespace insts
+
+export struct Dependency {
+  using GradOp = std::variant<insts::AddBackward, insts::MulBackward,
+                              insts::MatMulBackwardL, insts::MatMulBackwardR>;
+
+  GradOp op;
+
+  // The insruction that requires this gradient.
+  InstId inst_id;
+};
+
 export struct Inst {
-  using Op = std::variant<Create, Add, MatMul, Mul>;
+  using Op = std::variant<insts::Create, insts::Add, insts::MatMul, insts::Mul>;
 
   Op op;
   DataId data_id;
@@ -62,77 +66,6 @@ export struct Inst {
 
   auto requires_grad() const -> bool {
     return grad_id.has_value() or grad_id == DataId::Pending;
-  }
-};
-
-export template <typename T>
-struct BackwardBuilder {};
-
-export template <>
-struct BackwardBuilder<Create> {
-  static auto build(const Create& op, Inst& inst,
-                    const Storage<InstId, Inst>& storage) -> void {};
-};
-
-export template <>
-struct BackwardBuilder<Add> {
-  static auto build(const Add& op, Inst& inst,
-                    const Storage<InstId, Inst>& storage) -> void {
-    const auto& lhs = storage.get(op.lhs_id);
-    const auto& rhs = storage.get(op.rhs_id);
-
-    if (lhs.requires_grad() or rhs.requires_grad()) {
-      inst.grad_id = DataId::Pending;
-    }
-
-    if (lhs.requires_grad()) {
-      inst.deps.emplace_back(AddBackward(), op.lhs_id);
-    }
-    if (rhs.requires_grad()) {
-      inst.deps.emplace_back(AddBackward(), op.rhs_id);
-    }
-  };
-};
-
-export template <>
-struct BackwardBuilder<Mul> {
-  static auto build(const Mul& op, Inst& inst,
-                    const Storage<InstId, Inst>& storage) -> void {
-    const auto& lhs = storage.get(op.lhs_id);
-    const auto& rhs = storage.get(op.rhs_id);
-
-    if (lhs.requires_grad() or rhs.requires_grad()) {
-      inst.grad_id = DataId::Pending;
-    }
-
-    if (lhs.requires_grad()) {
-      inst.deps.emplace_back(MulBackward(rhs.data_id), op.lhs_id);
-    }
-
-    if (rhs.requires_grad()) {
-      inst.deps.emplace_back(MulBackward(lhs.data_id), op.rhs_id);
-    }
-  };
-};
-
-export template <>
-struct BackwardBuilder<MatMul> {
-  static auto build(const MatMul& op, Inst& inst,
-                    const Storage<InstId, Inst>& storage) -> void {
-    const auto& lhs = storage.get(op.lhs_id);
-    const auto& rhs = storage.get(op.rhs_id);
-
-    if (lhs.requires_grad() or rhs.requires_grad()) {
-      inst.grad_id = DataId::Pending;
-    }
-
-    if (lhs.requires_grad()) {
-      inst.deps.emplace_back(MatMulBackwardL(rhs.data_id), op.lhs_id);
-    }
-
-    if (rhs.requires_grad()) {
-      inst.deps.emplace_back(MatMulBackwardR(lhs.data_id), op.rhs_id);
-    }
   }
 };
 

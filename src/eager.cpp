@@ -34,12 +34,12 @@ export class EagerExecutor final : GraphExecutor {
       last_executed_id_ = inst_id;
 
       auto visitor = match{
-          [&](const Create& op) {
+          [&](const insts::Create& op) {
             if (graph_->requires_grad(inst_id)) {
               zero_grad(inst_id);
             }
           },
-          [&](const MatMul& op) {
+          [&](const insts::MatMul& op) {
             const auto& lhs = graph_->insts().get(op.lhs_id);
             const auto& rhs = graph_->insts().get(op.rhs_id);
 
@@ -51,7 +51,7 @@ export class EagerExecutor final : GraphExecutor {
             auto& inst = graph_->insts().get(inst_id);
             inst.data_id = graph_->create_data(result);
           },
-          [&](const Add& op) {
+          [&](const insts::Add& op) {
             const auto& lhs = graph_->insts().get(op.lhs_id);
             const auto& rhs = graph_->insts().get(op.rhs_id);
 
@@ -63,7 +63,7 @@ export class EagerExecutor final : GraphExecutor {
             auto& inst = graph_->insts().get(inst_id);
             inst.data_id = graph_->create_data(result);
           },
-          [&](const Mul& op) {
+          [&](const insts::Mul& op) {
             const auto& lhs = graph_->insts().get(op.lhs_id);
             const auto& rhs = graph_->insts().get(op.rhs_id);
 
@@ -87,7 +87,7 @@ export class EagerExecutor final : GraphExecutor {
     if (not graph_->requires_grad(inst_id)) {
       throw std::runtime_error(
           "Cannot zero the gradient of a tensor which does not require a "
-          "gradient");
+          "gradient.");
     }
 
     auto& inst = graph_->insts().get(inst_id);

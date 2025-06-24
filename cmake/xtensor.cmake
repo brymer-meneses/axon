@@ -1,5 +1,4 @@
-FetchContent_Declare(
-  xtensor 
+FetchContent_Declare(xtensor 
   GIT_REPOSITORY https://github.com/xtensor-stack/xtensor
   GIT_TAG        0.26.0
 )

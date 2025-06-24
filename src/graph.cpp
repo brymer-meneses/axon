@@ -17,83 +17,15 @@ import axon.storage;
 
 namespace axon {
 
-export template <typename T>
-struct BackwardBuilder {};
-
-export template <>
-struct BackwardBuilder<Create> {
-  static auto build(const Create& op, Inst& inst,
-                    const Storage<InstId, Inst>& storage) -> void {};
-};
-
-export template <>
-struct BackwardBuilder<Add> {
-  static auto build(const Add& op, Inst& inst,
-                    const Storage<InstId, Inst>& storage) -> void {
-    const auto& lhs = storage.get(op.lhs_id);
-    const auto& rhs = storage.get(op.rhs_id);
-
-    if (lhs.requires_grad() or rhs.requires_grad()) {
-      inst.grad_id = DataId::Pending;
-    }
-
-    if (lhs.requires_grad()) {
-      inst.deps.emplace_back(AddBackward(), op.lhs_id);
-    }
-    if (rhs.requires_grad()) {
-      inst.deps.emplace_back(AddBackward(), op.rhs_id);
-    }
-  };
-};
-
-export template <>
-struct BackwardBuilder<Mul> {
-  static auto build(const Mul& op, Inst& inst,
-                    const Storage<InstId, Inst>& storage) -> void {
-    const auto& lhs = storage.get(op.lhs_id);
-    const auto& rhs = storage.get(op.rhs_id);
-
-    if (lhs.requires_grad() or rhs.requires_grad()) {
-      inst.grad_id = DataId::Pending;
-    }
-
-    if (lhs.requires_grad()) {
-      inst.deps.emplace_back(MulBackward(rhs.data_id), op.lhs_id);
-    }
-
-    if (rhs.requires_grad()) {
-      inst.deps.emplace_back(MulBackward(lhs.data_id), op.rhs_id);
-    }
-  };
-};
-
-export template <>
-struct BackwardBuilder<MatMul> {
-  static auto build(const MatMul& op, Inst& inst,
-                    const Storage<InstId, Inst>& storage) -> void {
-    const auto& lhs = storage.get(op.lhs_id);
-    const auto& rhs = storage.get(op.rhs_id);
-
-    if (lhs.requires_grad() or rhs.requires_grad()) {
-      inst.grad_id = DataId::Pending;
-    }
-
-    if (lhs.requires_grad()) {
-      inst.deps.emplace_back(MatMulBackwardL(rhs.data_id), op.lhs_id);
-    }
-
-    if (rhs.requires_grad()) {
-      inst.deps.emplace_back(MatMulBackwardR(lhs.data_id), op.rhs_id);
-    }
-  }
-};
-
 export struct Data {
   using Storage = xt::xarray<float>;
   std::shared_ptr<Storage> storage;
 
   Data(Storage storage) : storage(std::make_shared<Storage>(storage)) {}
 };
+
+template <typename T>
+struct BackwardBuilder {};
 
 template <typename T>
 concept HasBackwardBuilder =
@@ -107,7 +39,7 @@ export class Graph {
     auto data_id = data_.emplace_back(data);
     auto grad_id = requires_grad ? DataId::Pending : DataId::Invalid;
 
-    return insts_.emplace_back(Create{}, data_id, grad_id);
+    return insts_.emplace_back(insts::Create{}, data_id, grad_id);
   }
 
   auto create_data(xt::xarray<float> data) -> DataId {
@@ -144,6 +76,74 @@ export class Graph {
 export struct GraphExecutor {
   virtual auto forward() -> void = 0;
   virtual auto backward(InstId inst_id) -> void = 0;
+};
+
+template <>
+struct BackwardBuilder<insts::Create> {
+  static auto build(const insts::Create& op, Inst& inst,
+                    const Storage<InstId, Inst>& storage) -> void {};
+};
+
+template <>
+struct BackwardBuilder<insts::Add> {
+  static auto build(const insts::Add& op, Inst& inst,
+                    const Storage<InstId, Inst>& storage) -> void {
+    const auto& lhs = storage.get(op.lhs_id);
+    const auto& rhs = storage.get(op.rhs_id);
+
+    if (lhs.requires_grad() or rhs.requires_grad()) {
+      inst.grad_id = DataId::Pending;
+    }
+
+    if (lhs.requires_grad()) {
+      inst.deps.emplace_back(insts::AddBackward(), op.lhs_id);
+    }
+    if (rhs.requires_grad()) {
+      inst.deps.emplace_back(insts::AddBackward(), op.rhs_id);
+    }
+  };
+};
+
+template <>
+struct BackwardBuilder<insts::Mul> {
+  static auto build(const insts::Mul& op, Inst& inst,
+                    const Storage<InstId, Inst>& storage) -> void {
+    const auto& lhs = storage.get(op.lhs_id);
+    const auto& rhs = storage.get(op.rhs_id);
+
+    if (lhs.requires_grad() or rhs.requires_grad()) {
+      inst.grad_id = DataId::Pending;
+    }
+
+    if (lhs.requires_grad()) {
+      inst.deps.emplace_back(insts::MulBackward(rhs.data_id), op.lhs_id);
+    }
+
+    if (rhs.requires_grad()) {
+      inst.deps.emplace_back(insts::MulBackward(lhs.data_id), op.rhs_id);
+    }
+  };
+};
+
+template <>
+struct BackwardBuilder<insts::MatMul> {
+  static auto build(const insts::MatMul& op, Inst& inst,
+                    const Storage<InstId, Inst>& storage) -> void {
+    const auto& lhs = storage.get(op.lhs_id);
+    const auto& rhs = storage.get(op.rhs_id);
+
+    if (lhs.requires_grad() or rhs.requires_grad()) {
+      inst.grad_id = DataId::Pending;
+    }
+
+    if (lhs.requires_grad()) {
+      inst.deps.emplace_back(insts::MatMulBackwardL(rhs.data_id), op.lhs_id);
+    }
+
+    if (rhs.requires_grad()) {
+      inst.deps.emplace_back(insts::MatMulBackwardR(lhs.data_id), op.rhs_id);
+    }
+  }
 };
 
 }  // namespace axon

@@ -46,8 +46,8 @@ NB_MODULE(_cpp, m) {
           [](std::shared_ptr<axon::Tensor> lhs,
              std::shared_ptr<axon::Tensor> rhs) {
             auto graph = context.graph();
-            auto inst_id = graph->apply_operation<axon::Add>(lhs->inst_id(),
-                                                             rhs->inst_id());
+            auto inst_id = graph->apply_operation<axon::insts::Add>(
+                lhs->inst_id(), rhs->inst_id());
             return std::make_shared<axon::Tensor>(inst_id, graph);
           },
           nb::is_operator())
@@ -56,8 +56,8 @@ NB_MODULE(_cpp, m) {
           [](std::shared_ptr<axon::Tensor> lhs,
              std::shared_ptr<axon::Tensor> rhs) {
             auto graph = context.graph();
-            auto inst_id = graph->apply_operation<axon::MatMul>(lhs->inst_id(),
-                                                                rhs->inst_id());
+            auto inst_id = graph->apply_operation<axon::insts::MatMul>(
+                lhs->inst_id(), rhs->inst_id());
             return std::make_shared<axon::Tensor>(inst_id, graph);
           },
           nb::is_operator())
@@ -66,8 +66,8 @@ NB_MODULE(_cpp, m) {
           [](std::shared_ptr<axon::Tensor> lhs,
              std::shared_ptr<axon::Tensor> rhs) {
             auto graph = context.graph();
-            auto inst_id = graph->apply_operation<axon::Mul>(lhs->inst_id(),
-                                                             rhs->inst_id());
+            auto inst_id = graph->apply_operation<axon::insts::Mul>(
+                lhs->inst_id(), rhs->inst_id());
             return std::make_shared<axon::Tensor>(inst_id, graph);
           },
           nb::is_operator())
