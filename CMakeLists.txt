@@ -1,20 +1,11 @@
 cmake_minimum_required(VERSION 3.22)
-
 project(axon)
 
-include(FetchContent)
-include(cmake/xtensor.cmake)
-include(cmake/nanobind.cmake)
-
-find_package(LLVM 20.1 REQUIRED CONFIG)
-find_package(Python 3.10 COMPONENTS Interpreter Development.Module REQUIRED)
-
-add_definitions(${LLVM_DEFINITIONS})
-llvm_map_components_to_libnames(llvm_libs support core irreader)
-include_directories(${LLVM_INCLUDE_DIRS})
+include(cmake/dependencies.cmake)
 
 nanobind_build_library(nanobind SHARED)
 nanobind_add_module(_cpp)
+
 target_sources(_cpp 
   PUBLIC FILE_SET CXX_MODULES FILES
   src/graph.cpp
@@ -26,15 +17,32 @@ target_sources(_cpp
   src/context.cpp
   src/eager.cpp
 )
-target_compile_features(_cpp PUBLIC cxx_std_23)
-target_link_libraries(_cpp PRIVATE nanobind xtensor xtensor-blas)
+
+target_compile_features(_cpp 
+  PRIVATE 
+  cxx_std_23
+)
+
+if (MSVC)
+  target_compile_options(_cpp PRIVATE /W4 /WX)
+else()
+  target_compile_options(_cpp PRIVATE -Wall -Wextra -Werror)
+endif()
+
+target_link_libraries(_cpp 
+  PRIVATE 
+  xtensor 
+  xtensor-blas
+
+  ${llvm_libs}
+
+  MLIRAnalysis
+  MLIRFunctionInterfaces
+)
+
 target_include_directories(_cpp PUBLIC ${xtensor_INCLUDE_DIRS})
 
 set_target_properties(_cpp
   PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/src/axon"
-)
-target_link_libraries(_cpp PUBLIC
-    Python::Module
-    ${llvm_libs}
 )

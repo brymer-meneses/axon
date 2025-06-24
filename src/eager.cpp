@@ -34,7 +34,7 @@ export class EagerExecutor final : GraphExecutor {
       last_executed_id_ = inst_id;
 
       auto visitor = match{
-          [&](const insts::Create& op) {
+          [&](const insts::Create& _) {
             if (graph_->requires_grad(inst_id)) {
               zero_grad(inst_id);
             }
@@ -81,7 +81,7 @@ export class EagerExecutor final : GraphExecutor {
     }
   }
 
-  auto backward(InstId inst_id) -> void {}
+  auto backward(InstId _) -> void {}
 
   auto zero_grad(InstId inst_id) -> void {
     if (not graph_->requires_grad(inst_id)) {

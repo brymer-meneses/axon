@@ -20,7 +20,7 @@ namespace nb = nanobind;
 static auto convert_to_xarray(nb::ndarray<nb::numpy, float> nb_array)
     -> xt::xarray<float> {
   std::vector<size_t> shape;
-  for (auto i = 0; i < nb_array.ndim(); ++i) {
+  for (auto i = 0u; i < nb_array.ndim(); ++i) {
     shape.push_back(nb_array.shape(i));
   }
 
@@ -35,10 +35,8 @@ NB_MODULE(_cpp, m) {
       .def("__repr__",
            [](std::shared_ptr<axon::Tensor> tensor) {
              std::stringstream stream;
-
              context.executor()->forward();
-
-             const auto& inst = stream << *tensor->data().storage;
+             stream << *tensor->data().storage;
              return stream.str();
            })
       .def(

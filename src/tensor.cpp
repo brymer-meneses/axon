@@ -30,11 +30,11 @@ export class Tensor {
   }
 
  private:
-  // The execution graph where this tensor lives.
-  std::shared_ptr<Graph> graph_;
-
   // The instruction that encodes how this tensor is constructed.
   InstId inst_id_;
+
+  // The execution graph where this tensor lives.
+  std::shared_ptr<Graph> graph_;
 };
 
 }  // namespace axon

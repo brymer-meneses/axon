@@ -80,8 +80,8 @@ export struct GraphExecutor {
 
 template <>
 struct BackwardBuilder<insts::Create> {
-  static auto build(const insts::Create& op, Inst& inst,
-                    const Storage<InstId, Inst>& storage) -> void {};
+  static auto build(const insts::Create&, Inst&, const Storage<InstId, Inst>&)
+      -> void {};
 };
 
 template <>
