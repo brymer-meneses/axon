@@ -35,7 +35,10 @@ NB_MODULE(_cpp, m) {
       .def("__repr__",
            [](std::shared_ptr<axon::Tensor> tensor) {
              std::stringstream stream;
-             stream << *tensor->data().data;
+
+             context.executor()->forward();
+
+             const auto& inst = stream << *tensor->data().storage;
              return stream.str();
            })
       .def(
@@ -44,6 +47,26 @@ NB_MODULE(_cpp, m) {
              std::shared_ptr<axon::Tensor> rhs) {
             auto graph = context.graph();
             auto inst_id = graph->apply_operation<axon::Add>(lhs->inst_id(),
+                                                             rhs->inst_id());
+            return std::make_shared<axon::Tensor>(inst_id, graph);
+          },
+          nb::is_operator())
+      .def(
+          "__matmul__",
+          [](std::shared_ptr<axon::Tensor> lhs,
+             std::shared_ptr<axon::Tensor> rhs) {
+            auto graph = context.graph();
+            auto inst_id = graph->apply_operation<axon::MatMul>(lhs->inst_id(),
+                                                                rhs->inst_id());
+            return std::make_shared<axon::Tensor>(inst_id, graph);
+          },
+          nb::is_operator())
+      .def(
+          "__mul__",
+          [](std::shared_ptr<axon::Tensor> lhs,
+             std::shared_ptr<axon::Tensor> rhs) {
+            auto graph = context.graph();
+            auto inst_id = graph->apply_operation<axon::Mul>(lhs->inst_id(),
                                                              rhs->inst_id());
             return std::make_shared<axon::Tensor>(inst_id, graph);
           },

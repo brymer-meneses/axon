@@ -24,9 +24,10 @@ target_sources(_cpp
   src/ids.cpp
   src/tensor.cpp
   src/context.cpp
+  src/eager.cpp
 )
 target_compile_features(_cpp PUBLIC cxx_std_23)
-target_link_libraries(_cpp PRIVATE nanobind xtensor)
+target_link_libraries(_cpp PRIVATE nanobind xtensor xtensor-blas)
 target_include_directories(_cpp PUBLIC ${xtensor_INCLUDE_DIRS})
 
 set_target_properties(_cpp

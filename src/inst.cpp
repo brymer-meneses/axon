@@ -52,16 +52,77 @@ export struct MatMul {
 };
 
 export struct Inst {
-  using Op = std::variant<Create, Add, MatMul>;
+  using Op = std::variant<Create, Add, MatMul, Mul>;
 
   Op op;
   DataId data_id;
   DataId grad_id = DataId::Invalid;
+  bool is_observed = false;
   llvm::SmallVector<Dependency, 2> deps{};
 
   auto requires_grad() const -> bool {
     return grad_id.has_value() or grad_id == DataId::Pending;
   }
+};
+
+export struct BackwardBuilder {
+  using InstStorage = Storage<InstId, Inst>;
+
+  static auto build(const Add& op, Inst& inst, const InstStorage& storage)
+      -> void {
+    const auto& lhs = storage.get(op.lhs_id);
+    const auto& rhs = storage.get(op.rhs_id);
+
+    if (lhs.requires_grad() or rhs.requires_grad()) {
+      inst.grad_id = DataId::Pending;
+    }
+
+    if (lhs.requires_grad()) {
+      inst.deps.emplace_back(AddBackward(), op.lhs_id);
+    }
+    if (rhs.requires_grad()) {
+      inst.deps.emplace_back(AddBackward(), op.rhs_id);
+    }
+  };
+
+  static auto build(const Mul& op, Inst& inst, const InstStorage& storage)
+      -> void {
+    const auto& lhs = storage.get(op.lhs_id);
+    const auto& rhs = storage.get(op.rhs_id);
+
+    if (lhs.requires_grad() or rhs.requires_grad()) {
+      inst.grad_id = DataId::Pending;
+    }
+
+    if (lhs.requires_grad()) {
+      inst.deps.emplace_back(MulBackward(rhs.data_id), op.lhs_id);
+    }
+
+    if (rhs.requires_grad()) {
+      inst.deps.emplace_back(MulBackward(lhs.data_id), op.rhs_id);
+    }
+  };
+
+  static auto build(const MatMul& op, Inst& inst, const InstStorage& storage)
+      -> void {
+    const auto& lhs = storage.get(op.lhs_id);
+    const auto& rhs = storage.get(op.rhs_id);
+
+    if (lhs.requires_grad() or rhs.requires_grad()) {
+      inst.grad_id = DataId::Pending;
+    }
+
+    if (lhs.requires_grad()) {
+      inst.deps.emplace_back(MatMulBackwardL(rhs.data_id), op.lhs_id);
+    }
+
+    if (rhs.requires_grad()) {
+      inst.deps.emplace_back(MatMulBackwardR(lhs.data_id), op.rhs_id);
+    }
+  };
+
+  static auto build(const Create& create, Inst& inst, InstStorage& storage)
+      -> void {};
 };
 
 }  // namespace axon

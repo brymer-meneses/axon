@@ -17,7 +17,7 @@ struct IndexBase {
     return value_;
   }
 
-  friend auto operator==(T lhs, T rhs) -> bool {
+  friend auto operator==(const T lhs, const T rhs) -> bool {
     return lhs.value_ == rhs.value_;
   }
 

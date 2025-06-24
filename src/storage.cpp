@@ -1,6 +1,7 @@
 module;
 
 #include <cassert>
+#include <ranges>
 #include <vector>
 
 export module axon.storage;
@@ -31,6 +32,11 @@ class Storage {
   auto get(IndexType index) const -> const ValueType& {
     assert(index.has_value());
     return values_[index.value()];
+  }
+
+  auto iter() {
+    return std::views::iota(0u, values_.size()) |
+           std::views::transform([](auto val) { return IndexType(val); });
   }
 
  private:
