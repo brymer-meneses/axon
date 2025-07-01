@@ -3,19 +3,21 @@ project(axon)
 
 include(cmake/dependencies.cmake)
 
-nanobind_build_library(nanobind SHARED)
 nanobind_add_module(_cpp)
 
 target_sources(_cpp 
   PUBLIC FILE_SET CXX_MODULES FILES
-  src/graph.cpp
-  src/axon.cpp
-  src/storage.cpp
-  src/inst.cpp
-  src/ids.cpp
-  src/tensor.cpp
-  src/context.cpp
-  src/eager.cpp
+  src/python/bindings.cpp
+  src/python/tensor.cpp
+
+  src/core/graph.cpp
+  src/core/inst.cpp
+  src/core/ids.cpp
+  src/core/eager.cpp
+
+  src/base/value_store.cpp
+  src/base/index_map.cpp
+  src/base/index_base.cpp
 )
 
 target_compile_features(_cpp 
@@ -44,5 +46,5 @@ target_include_directories(_cpp PUBLIC ${xtensor_INCLUDE_DIRS})
 
 set_target_properties(_cpp
   PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/src/axon"
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/src/python/axon"
 )
