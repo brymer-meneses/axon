@@ -10,8 +10,4 @@ module;
 
 export module axon.core.eager;
 
-import axon.core.graph;
-import axon.core.inst;
-import axon.core.ids;
-
 namespace axon {}  // namespace axon

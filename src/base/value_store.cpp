@@ -40,6 +40,27 @@ class ValueStore {
            std::views::transform([](auto val) { return IndexType(val); });
   }
 
+  auto iter_values() const -> auto {
+    return std::views::iota(0u, values_.size()) |
+           std::views::transform(
+               [this](auto val) -> std::pair<IndexType, const ValueType&> {
+                 return {IndexType(val), values_[val]};
+               });
+  }
+
+  auto iter_values() -> auto {
+    return std::views::iota(0u, values_.size()) |
+           std::views::transform(
+               [this](auto val) -> std::pair<IndexType, ValueType&> {
+                 return {IndexType(val), values_[val]};
+               });
+  }
+
+  auto contains(IndexType index) const -> bool {
+    assert(index.has_value());
+    return static_cast<uint32_t>(index.value()) < values_.size();
+  }
+
  private:
   std::vector<ValueType> values_;
 };

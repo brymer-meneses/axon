@@ -14,23 +14,49 @@ namespace axon {
 
 namespace insts {
 
-export struct Declare {};
+export struct Declare {
+  static constexpr bool Differentiable = false;
+};
 
 export struct DeclareParameter {
+  static constexpr bool Differentiable = false;
+
   ParamId param_id;
 };
 
+export struct InitialGradient {
+  static constexpr bool Differentiable = false;
+};
+
+export struct Write {
+  static constexpr bool Differentiable = false;
+
+  InstId inst_id;
+  IntermediaryValueId value_id;
+};
+
+export struct GetIntermediaryValue {
+  static constexpr bool Differentiable = false;
+  IntermediaryValueId value_id;
+};
+
 export struct Add {
+  static constexpr bool Differentiable = true;
+
   InstId lhs_id;
   InstId rhs_id;
 };
 
 export struct Mul {
+  static constexpr bool Differentiable = true;
+
   InstId lhs_id;
   InstId rhs_id;
 };
 
 export struct MatMul {
+  static constexpr bool Differentiable = false;
+
   InstId lhs_id;
   InstId rhs_id;
 };
@@ -44,17 +70,18 @@ struct match : Args... {
 
 export class Inst {
  public:
-  using Value = std::variant<insts::Declare, insts::Add, insts::Mul,
-                             insts::MatMul, insts::DeclareParameter>;
+  using Value =
+      std::variant<insts::Declare, insts::Add, insts::Mul, insts::MatMul,
+                   insts::DeclareParameter, insts::GetIntermediaryValue,
+                   insts::Write, insts::InitialGradient>;
 
   template <typename InstType>
     requires std::is_convertible_v<InstType, Value>
   Inst(InstType&& inst) : value_(inst) {}
 
   template <typename VisitorType>
-    requires std::is_invocable_v<VisitorType, Value>
   auto visit(VisitorType&& visitor) -> auto {
-    return visitor(value_);
+    return std::visit(visitor, value_);
   }
 
   template <typename InstType>

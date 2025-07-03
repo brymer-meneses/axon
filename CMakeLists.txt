@@ -10,13 +10,12 @@ target_sources(_cpp
   src/python/bindings.cpp
   src/python/tensor.cpp
 
-  src/core/graph.cpp
+  src/core/module.cpp
   src/core/inst.cpp
   src/core/ids.cpp
   src/core/eager.cpp
 
   src/base/value_store.cpp
-  src/base/index_map.cpp
   src/base/index_base.cpp
 )
 
