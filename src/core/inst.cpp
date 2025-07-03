@@ -14,25 +14,21 @@ namespace axon {
 
 namespace insts {
 
-export struct Declare {
-  static constexpr bool Differentiable = false;
-};
-
-export struct DeclareParameter {
-  static constexpr bool Differentiable = false;
-
-  ParamId param_id;
-};
-
-export struct InitialGradient {
-  static constexpr bool Differentiable = false;
-};
-
-export struct Write {
+export struct Copy {
   static constexpr bool Differentiable = false;
 
   InstId inst_id;
   IntermediaryValueId value_id;
+};
+
+export struct GetInitialGradient {
+  static constexpr bool Differentiable = false;
+};
+
+export struct GetParameter {
+  static constexpr bool Differentiable = false;
+
+  ParamId param_id;
 };
 
 export struct GetIntermediaryValue {
@@ -70,10 +66,9 @@ struct match : Args... {
 
 export class Inst {
  public:
-  using Value =
-      std::variant<insts::Declare, insts::Add, insts::Mul, insts::MatMul,
-                   insts::DeclareParameter, insts::GetIntermediaryValue,
-                   insts::Write, insts::InitialGradient>;
+  using Value = std::variant<insts::Add, insts::Mul, insts::MatMul,
+                             insts::GetParameter, insts::GetIntermediaryValue,
+                             insts::Copy, insts::GetInitialGradient>;
 
   template <typename InstType>
     requires std::is_convertible_v<InstType, Value>

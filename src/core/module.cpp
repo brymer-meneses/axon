@@ -33,7 +33,7 @@ export class Module {
  public:
   auto declare_parameter(ParameterInfo info) -> InstId {
     ParamId param_id = parameters_.emplace(info);
-    return forward_insts_.add(insts::DeclareParameter(param_id));
+    return forward_insts_.add(insts::GetParameter(param_id));
   }
 
   // Do we need to memoize this?
@@ -44,7 +44,7 @@ export class Module {
       InstId inst_id = stack.pop_back_val();
 
       auto& inst = forward_insts_.get(inst_id);
-      if (auto param = inst.try_get_as<insts::DeclareParameter>()) {
+      if (auto param = inst.try_get_as<insts::GetParameter>()) {
         ParameterInfo info = parameters_.get(param->param_id);
         return info.requires_grad;
       }
@@ -80,7 +80,7 @@ export class Module {
   }
 
   auto build_backward(InstId tensor_id) {
-    auto grad_id = backward_insts_.add(insts::InitialGradient());
+    auto grad_id = backward_insts_.add(insts::GetInitialGradient());
 
     llvm::SmallVector<Dependency> stack = {{tensor_id, grad_id}};
     while (not stack.empty()) {
@@ -99,7 +99,7 @@ export class Module {
 
     for (auto value_id : intermediary_values_.iter()) {
       auto value = intermediary_values_.get(value_id);
-      forward_insts_.emplace(insts::Write(value.forward_inst_id, value_id));
+      forward_insts_.emplace(insts::Copy(value.forward_inst_id, value_id));
     }
   }
 
