@@ -2,6 +2,7 @@ module;
 
 #include <cassert>
 #include <flat_map>
+#include <string>
 
 #include "llvm/ADT/SmallVector.h"
 
@@ -15,9 +16,10 @@ export import axon.core.inst;
 
 namespace axon {
 
-struct ParameterInfo {
+export struct Parameter {
+  std::string name;
+  llvm::SmallVector<int64_t, 3> shape;
   bool requires_grad;
-  llvm::SmallVector<int32_t, 3> shape;
 };
 
 struct IntermediaryValue {
@@ -31,11 +33,67 @@ struct Dependency {
 
 export class Module {
  public:
-  auto declare_parameter(ParameterInfo info) -> InstId {
-    ParamId param_id = parameters_.emplace(info);
+  auto declare_parameter(std::string name, llvm::SmallVector<int64_t, 3> shape,
+                         bool requires_grad) -> InstId {
+    ParamId param_id = parameters_.emplace(name, shape, requires_grad);
     return forward_insts_.add(insts::GetParameter(param_id));
   }
 
+  auto create_inst(Inst inst) -> InstId {
+    return forward_insts_.add(std::move(inst));
+  }
+
+  auto build_backward(InstId tensor_id) {
+    auto grad_id = backward_insts_.add(insts::GetInitialGradient());
+
+    llvm::SmallVector<Dependency> stack = {{tensor_id, grad_id}};
+    while (not stack.empty()) {
+      auto dep = stack.pop_back_val();
+      auto& inst = forward_insts_.get(dep.tensor_id);
+
+      accumulate_grad(dep.tensor_id, dep.grad_id);
+
+      inst.visit([&](const auto op) {
+        using InstType = decltype(op);
+        if constexpr (InstType::Differentiable) {
+          backward(op, dep.grad_id, stack);
+        }
+      });
+    }
+
+    for (auto value_id : intermediary_values_.iter()) {
+      auto value = intermediary_values_.get(value_id);
+      forward_insts_.emplace(insts::Copy(value.forward_inst_id, value_id));
+    }
+  }
+
+  auto parameters() const -> const ValueStore<ParamId, Parameter>& {
+    return parameters_;
+  }
+
+  auto parameters() -> ValueStore<ParamId, Parameter>& { return parameters_; }
+
+  auto forward_insts() -> ValueStore<InstId, Inst>& { return forward_insts_; }
+  auto forward_insts() const -> const ValueStore<InstId, Inst>& {
+    return forward_insts_;
+  }
+
+  auto backward_insts() -> ValueStore<InstId, Inst>& { return backward_insts_; }
+  auto backward_insts() const -> const ValueStore<InstId, Inst>& {
+    return backward_insts_;
+  }
+
+  auto intermediary_values() const
+      -> const ValueStore<IntermediaryValueId, IntermediaryValue>& {
+    return intermediary_values_;
+  }
+
+  auto intermediary_values()
+      -> ValueStore<IntermediaryValueId, IntermediaryValue>& {
+    return intermediary_values_;
+  }
+
+ private:
   // Do we need to memoize this?
   auto requires_grad(InstId inst_id) const -> bool {
     llvm::SmallVector<InstId> stack = {inst_id};
@@ -45,7 +103,7 @@ export class Module {
 
       auto& inst = forward_insts_.get(inst_id);
       if (auto param = inst.try_get_as<insts::GetParameter>()) {
-        ParameterInfo info = parameters_.get(param->param_id);
+        Parameter info = parameters_.get(param->param_id);
         return info.requires_grad;
       }
 
@@ -78,52 +136,6 @@ export class Module {
 
     gradients_.insert_or_assign(tensor_id, grad_id);
   }
-
-  auto build_backward(InstId tensor_id) {
-    auto grad_id = backward_insts_.add(insts::GetInitialGradient());
-
-    llvm::SmallVector<Dependency> stack = {{tensor_id, grad_id}};
-    while (not stack.empty()) {
-      auto dep = stack.pop_back_val();
-      auto& inst = forward_insts_.get(dep.tensor_id);
-
-      accumulate_grad(dep.tensor_id, dep.grad_id);
-
-      inst.visit([&](const auto op) {
-        using InstType = decltype(op);
-        if constexpr (InstType::Differentiable) {
-          backward(op, dep.grad_id, stack);
-        }
-      });
-    }
-
-    for (auto value_id : intermediary_values_.iter()) {
-      auto value = intermediary_values_.get(value_id);
-      forward_insts_.emplace(insts::Copy(value.forward_inst_id, value_id));
-    }
-  }
-
-  auto forward_insts() -> ValueStore<InstId, Inst>& { return forward_insts_; }
-  auto forward_insts() const -> const ValueStore<InstId, Inst>& {
-    return forward_insts_;
-  }
-
-  auto backward_insts() -> ValueStore<InstId, Inst>& { return backward_insts_; }
-  auto backward_insts() const -> const ValueStore<InstId, Inst>& {
-    return backward_insts_;
-  }
-
-  auto intermediary_values() const
-      -> const ValueStore<IntermediaryValueId, IntermediaryValue>& {
-    return intermediary_values_;
-  }
-
-  auto intermediary_values()
-      -> ValueStore<IntermediaryValueId, IntermediaryValue>& {
-    return intermediary_values_;
-  }
-
- private:
   // TODO: explore ways to extract this out of here.
   auto backward(const insts::Add add, const InstId grad_id,
                 llvm::SmallVector<Dependency>& deps) -> void {
@@ -162,7 +174,7 @@ export class Module {
   ValueStore<InstId, Inst> forward_insts_;
 
   // Parameters that are used by this module.
-  ValueStore<ParamId, ParameterInfo> parameters_;
+  ValueStore<ParamId, Parameter> parameters_;
 
   // Values that are implicitly passed to the backward function.
   ValueStore<IntermediaryValueId, IntermediaryValue> intermediary_values_;

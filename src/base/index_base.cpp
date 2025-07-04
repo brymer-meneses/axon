@@ -3,6 +3,8 @@ module;
 #include <cassert>
 #include <cstdint>
 
+#include "llvm/ADT/DenseMapInfo.h"
+
 export module axon.base.index;
 
 namespace axon {

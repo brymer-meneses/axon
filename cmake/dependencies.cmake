@@ -30,3 +30,5 @@ find_package(Python 3.10 COMPONENTS Interpreter Development.Module REQUIRED)
 add_definitions(${LLVM_DEFINITIONS})
 llvm_map_components_to_libnames(llvm_libs support)
 include_directories(${LLVM_INCLUDE_DIRS})
+
+set(NANOBIND_INCLUDE_DIRS ${NB_DIR}/include)
