@@ -59,10 +59,10 @@ class ParameterType : public mlir::Type::TypeBase<ParameterType, mlir::Type,
       -> ParameterType;
   static auto getDynamic(mlir::Type type) -> ParameterType;
 
-  auto isDynamic() const -> bool;
+  auto isDynamic() const -> bool { return getImpl()->shape.empty(); }
 
-  llvm::ArrayRef<int64_t> getShape() const;
-  mlir::Type getElementType() const;
+  auto getShape() const -> llvm::ArrayRef<int64_t> { return getImpl()->shape; }
+  auto getElementType() const -> mlir::Type { return getImpl()->type; }
 };
 
 }  // namespace axon

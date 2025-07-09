@@ -3,4 +3,6 @@ Diagnostics:
     Add: 
       - modernize*
       - bugprone-*
-      -  modernize-use-trailing-return-type
+      - modernize-use-trailing-return-type
+    Remove:
+      - modernize-use-nodiscard

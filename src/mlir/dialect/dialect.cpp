@@ -32,15 +32,24 @@ auto AxonDialect::parseType(mlir::DialectAsmParser& parser) const
   }
 
   llvm::SmallVector<int64_t, 3> shape;
+  auto is_dynamic = false;
   if (parser.parseDimensionList(shape)) {
-    return {};
+    if (parser.parseStar()) {
+      return {};
+    }
+    is_dynamic = true;
   }
 
   mlir::Type elementType;
   if (parser.parseType(elementType) || parser.parseGreater()) {
     return {};
   }
-  return ParameterType::get(shape, elementType);
+
+  if (is_dynamic) {
+    return ParameterType::getDynamic(elementType);
+  } else {
+    return ParameterType::get(shape, elementType);
+  }
 }
 
 auto ParameterTypeStorage::construct(mlir::TypeStorageAllocator& allocator,
@@ -61,18 +70,6 @@ auto ParameterType::get(llvm::ArrayRef<int64_t> shape, mlir::Type type)
 auto ParameterType::getDynamic(mlir::Type type) -> ParameterType {
   mlir::MLIRContext* context = type.getContext();
   return Base::get(context, llvm::ArrayRef<int64_t>{}, type);
-}
-
-auto ParameterType::getShape() const -> llvm::ArrayRef<int64_t> {
-  return getImpl()->shape;
-}
-
-auto ParameterType::getElementType() const -> mlir::Type {
-  return getImpl()->type;
-}
-
-auto ParameterType::isDynamic() const -> bool {
-  return getImpl()->shape.empty();
 }
 
 }  // namespace axon
