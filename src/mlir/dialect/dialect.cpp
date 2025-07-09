@@ -28,17 +28,17 @@ auto AxonDialect::printType(mlir::Type type,
 auto AxonDialect::parseType(mlir::DialectAsmParser& parser) const
     -> mlir::Type {
   if (parser.parseKeyword("param") || parser.parseGreater()) {
-    return mlir::Type();
+    return {};
   }
 
   llvm::SmallVector<int64_t, 3> shape;
   if (parser.parseDimensionList(shape)) {
-    return mlir::Type();
+    return {};
   }
 
   mlir::Type elementType;
   if (parser.parseType(elementType) || parser.parseGreater()) {
-    return mlir::Type();
+    return {};
   }
   return ParameterType::get(shape, elementType);
 }

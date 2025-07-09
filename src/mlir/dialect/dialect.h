@@ -55,8 +55,9 @@ class ParameterType : public mlir::Type::TypeBase<ParameterType, mlir::Type,
   /// The name of this struct type.
   static constexpr llvm::StringLiteral name = "toy.struct";
 
-  static ParameterType get(llvm::ArrayRef<int64_t> shape, mlir::Type type);
-  static ParameterType getDynamic(mlir::Type type);
+  static auto get(llvm::ArrayRef<int64_t> shape, mlir::Type type)
+      -> ParameterType;
+  static auto getDynamic(mlir::Type type) -> ParameterType;
 
   auto isDynamic() const -> bool;
 
