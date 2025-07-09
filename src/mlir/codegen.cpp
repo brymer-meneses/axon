@@ -31,7 +31,7 @@ class Context {
     builder_.setInsertionPointToEnd(mlir_module.getBody());
     codegen_forward();
 
-    if (failed(mlir::verify(mlir_module))) {
+    if (mlir::failed(mlir::verify(mlir_module))) {
       mlir_module.emitError("module verification error");
       return nullptr;
     }

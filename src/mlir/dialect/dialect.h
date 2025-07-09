@@ -25,6 +25,7 @@ namespace axon {
 struct ParameterTypeStorage : public mlir::TypeStorage {
   using KeyTy = std::pair<llvm::ArrayRef<int64_t>, mlir::Type>;
 
+  // TODO: maybe I should put the pointers here for the gradient and data?
   ParameterTypeStorage(llvm::ArrayRef<int64_t> shape, mlir::Type type)
       : shape(shape), type(type) {}
 
@@ -36,8 +37,8 @@ struct ParameterTypeStorage : public mlir::TypeStorage {
     return llvm::hash_value(key);
   }
 
-  static KeyTy getKey(llvm::ArrayRef<int64_t> shape, mlir::Type type) {
-    return KeyTy(std::make_pair(shape, type));
+  static auto getKey(llvm::ArrayRef<int64_t> shape, mlir::Type type) -> KeyTy {
+    return {shape, type};
   }
 
   static auto construct(mlir::TypeStorageAllocator& allocator, const KeyTy& key)
@@ -55,6 +56,9 @@ class ParameterType : public mlir::Type::TypeBase<ParameterType, mlir::Type,
   static constexpr llvm::StringLiteral name = "toy.struct";
 
   static ParameterType get(llvm::ArrayRef<int64_t> shape, mlir::Type type);
+  static ParameterType getDynamic(mlir::Type type);
+
+  auto isDynamic() const -> bool;
 
   llvm::ArrayRef<int64_t> getShape() const;
   mlir::Type getElementType() const;

@@ -12,10 +12,16 @@ auto AxonDialect::initialize() -> void { addTypes<ParameterType>(); }
 auto AxonDialect::printType(mlir::Type type,
                             mlir::DialectAsmPrinter& printer) const -> void {
   if (auto param_type = mlir::cast<ParameterType>(type)) {
-    // Print the struct type according to the parser format.
     printer << "param<";
-    llvm::interleave(param_type.getShape(), printer, "*");
-    printer << "*" << param_type.getElementType() << '>';
+
+    if (not param_type.isDynamic()) {
+      llvm::interleave(param_type.getShape(), printer, "x");
+      printer << "x";
+    } else {
+      printer << "*";
+    }
+
+    printer << param_type.getElementType() << '>';
   }
 }
 
@@ -26,13 +32,9 @@ auto AxonDialect::parseType(mlir::DialectAsmParser& parser) const
   }
 
   llvm::SmallVector<int64_t, 3> shape;
-  do {
-    int64_t dim;
-    if (parser.parseInteger(dim)) {
-      return nullptr;
-    }
-    shape.push_back(dim);
-  } while (succeeded(parser.parseOptionalStar()));
+  if (parser.parseDimensionList(shape)) {
+    return mlir::Type();
+  }
 
   mlir::Type elementType;
   if (parser.parseType(elementType) || parser.parseGreater()) {
@@ -56,12 +58,21 @@ auto ParameterType::get(llvm::ArrayRef<int64_t> shape, mlir::Type type)
   return Base::get(context, shape, type);
 }
 
+auto ParameterType::getDynamic(mlir::Type type) -> ParameterType {
+  mlir::MLIRContext* context = type.getContext();
+  return Base::get(context, llvm::ArrayRef<int64_t>{}, type);
+}
+
 auto ParameterType::getShape() const -> llvm::ArrayRef<int64_t> {
   return getImpl()->shape;
 }
 
 auto ParameterType::getElementType() const -> mlir::Type {
   return getImpl()->type;
+}
+
+auto ParameterType::isDynamic() const -> bool {
+  return getImpl()->shape.empty();
 }
 
 }  // namespace axon
