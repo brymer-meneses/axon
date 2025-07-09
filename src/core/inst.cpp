@@ -10,65 +10,61 @@ export module axon.core.inst;
 
 import axon.core.ids;
 
-namespace axon {
+export namespace axon {
 
 namespace insts {
 
-export struct Copy {
-  static constexpr bool Differentiable = false;
-
-  InstId inst_id;
-  IntermediaryValueId value_id;
-};
-
-export struct GetInitialGradient {
-  static constexpr bool Differentiable = false;
-};
-
-export struct GetParameter {
+struct GetParameter {
   static constexpr bool Differentiable = false;
 
   ParamId param_id;
 };
 
-export struct GetIntermediaryValue {
+struct GetCachedValue {
   static constexpr bool Differentiable = false;
-  IntermediaryValueId value_id;
+  CachedValueId value_id;
 };
 
-export struct Add {
+struct Add {
   static constexpr bool Differentiable = true;
 
   InstId lhs_id;
   InstId rhs_id;
 };
 
-export struct Mul {
+struct Mul {
   static constexpr bool Differentiable = true;
 
   InstId lhs_id;
   InstId rhs_id;
 };
 
-export struct MatMul {
+struct MatMul {
   static constexpr bool Differentiable = false;
 
   InstId lhs_id;
   InstId rhs_id;
+};
+
+struct Copy {
+  static constexpr bool Differentiable = false;
+
+  InstId inst_id;
+  CachedValueId value_id;
 };
 
 }  // namespace insts
 
-export template <typename... Args>
+template <typename... Args>
 struct match : Args... {
   using Args::operator()...;
 };
 
-export class Inst {
+class Inst {
  public:
-  using Value = std::variant<insts::Add, insts::Mul, insts::MatMul,
-                             insts::GetParameter, insts::GetIntermediaryValue,
-                             insts::Copy, insts::GetInitialGradient>;
+  using Value =
+      std::variant<insts::Add, insts::Mul, insts::MatMul, insts::GetParameter,
+                   insts::GetCachedValue, insts::Copy>;
 
   template <typename InstType>
     requires std::is_convertible_v<InstType, Value>
@@ -87,6 +83,8 @@ export class Inst {
     }
     return std::nullopt;
   }
+
+  auto index() const -> int32_t { return value_.index(); }
 
   // Returns the parents of an instruction.
   auto parents() const -> llvm::SmallVector<InstId> {

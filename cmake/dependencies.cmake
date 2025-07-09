@@ -31,4 +31,8 @@ add_definitions(${LLVM_DEFINITIONS})
 llvm_map_components_to_libnames(llvm_libs support)
 include_directories(${LLVM_INCLUDE_DIRS})
 
-set(NANOBIND_INCLUDE_DIRS ${NB_DIR}/include)
+list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
+include(TableGen)
+include(AddLLVM)
+include(AddMLIR)
+

@@ -18,11 +18,11 @@ namespace axon {
 
 export struct Parameter {
   std::string name;
-  llvm::SmallVector<int64_t, 3> shape;
+  llvm::SmallVector<int64_t> shape;
   bool requires_grad;
 };
 
-struct IntermediaryValue {
+struct CachedValue {
   InstId forward_inst_id;
 };
 
@@ -33,7 +33,7 @@ struct Dependency {
 
 export class Module {
  public:
-  auto declare_parameter(std::string name, llvm::SmallVector<int64_t, 3> shape,
+  auto declare_parameter(std::string name, llvm::SmallVector<int64_t> shape,
                          bool requires_grad) -> InstId {
     ParamId param_id = parameters_.emplace(name, shape, requires_grad);
     return forward_insts_.add(insts::GetParameter(param_id));
@@ -44,7 +44,7 @@ export class Module {
   }
 
   auto build_backward(InstId tensor_id) {
-    auto grad_id = backward_insts_.add(insts::GetInitialGradient());
+    auto grad_id = backward_insts_.add(insts::GetParameter(ParamId(0)));
 
     llvm::SmallVector<Dependency> stack = {{tensor_id, grad_id}};
     while (not stack.empty()) {
@@ -61,8 +61,8 @@ export class Module {
       });
     }
 
-    for (auto value_id : intermediary_values_.iter()) {
-      auto value = intermediary_values_.get(value_id);
+    for (auto value_id : cached_values_.iter()) {
+      auto value = cached_values_.get(value_id);
       forward_insts_.emplace(insts::Copy(value.forward_inst_id, value_id));
     }
   }
@@ -83,14 +83,12 @@ export class Module {
     return backward_insts_;
   }
 
-  auto intermediary_values() const
-      -> const ValueStore<IntermediaryValueId, IntermediaryValue>& {
-    return intermediary_values_;
+  auto cached_values() const -> const ValueStore<CachedValueId, CachedValue>& {
+    return cached_values_;
   }
 
-  auto intermediary_values()
-      -> ValueStore<IntermediaryValueId, IntermediaryValue>& {
-    return intermediary_values_;
+  auto cached_values() -> ValueStore<CachedValueId, CachedValue>& {
+    return cached_values_;
   }
 
  private:
@@ -114,17 +112,18 @@ export class Module {
     return false;
   }
 
-  auto get_intermediary_value(InstId source_id) -> InstId {
-    for (auto [value_id, value] : intermediary_values_.iter_values()) {
+  // Get the cached value for the corresponding `source_id`
+  auto get_cached_value(InstId source_id) -> InstId {
+    for (auto [value_id, value] : cached_values_.iter_values()) {
       if (value.forward_inst_id == source_id) {
-        return backward_insts_.add(insts::GetIntermediaryValue(value_id));
+        return backward_insts_.add(insts::GetCachedValue(value_id));
       }
     }
 
-    // If we can't find a corresponding IntermediaryValue for this `source_id`,
+    // If we can't find a corresponding cached value for this `source_id`,
     // then we create it.
-    auto value_id = intermediary_values_.emplace(source_id);
-    auto inst_id = backward_insts_.add(insts::GetIntermediaryValue(value_id));
+    auto value_id = cached_values_.emplace(source_id);
+    auto inst_id = backward_insts_.add(insts::GetCachedValue(value_id));
     return inst_id;
   }
 
@@ -150,12 +149,12 @@ export class Module {
   auto backward(const insts::Mul mul, const InstId grad_id,
                 llvm::SmallVector<Dependency>& deps) -> void {
     if (requires_grad(mul.lhs_id)) {
-      auto rhs_id = get_intermediary_value(mul.rhs_id);
+      auto rhs_id = get_cached_value(mul.rhs_id);
       auto prod_id = backward_insts_.emplace(insts::Mul(rhs_id, grad_id));
       deps.emplace_back(mul.lhs_id, prod_id);
     }
     if (requires_grad(mul.rhs_id)) {
-      auto lhs_id = get_intermediary_value(mul.lhs_id);
+      auto lhs_id = get_cached_value(mul.lhs_id);
       auto prod_id = backward_insts_.emplace(insts::Mul(lhs_id, grad_id));
       deps.emplace_back(mul.rhs_id, prod_id);
     }
@@ -177,7 +176,7 @@ export class Module {
   ValueStore<ParamId, Parameter> parameters_;
 
   // Values that are implicitly passed to the backward function.
-  ValueStore<IntermediaryValueId, IntermediaryValue> intermediary_values_;
+  ValueStore<CachedValueId, CachedValue> cached_values_;
 
   // Mapping from the inst_id from the forward function to its gradient.
   std::flat_map<InstId, InstId> gradients_;

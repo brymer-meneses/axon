@@ -7,9 +7,9 @@ export module axon.core.ids;
 
 import axon.base.index;
 
-namespace axon {
+export namespace axon {
 
-export struct InstId : IndexBase<InstId> {
+struct InstId : IndexBase<InstId> {
   using IndexBase::IndexBase;
 
   static const InstId Invalid;
@@ -19,18 +19,19 @@ export struct InstId : IndexBase<InstId> {
 inline constexpr auto InstId::Invalid = InstId(-1);
 inline constexpr auto InstId::Pending = InstId(-2);
 
-export struct ParamId : IndexBase<ParamId> {
+struct ParamId : IndexBase<ParamId> {
   using IndexBase::IndexBase;
 
   static const ParamId Invalid;
 };
 inline constexpr auto ParamId::Invalid = ParamId(-1);
 
-export struct IntermediaryValueId : IndexBase<IntermediaryValueId> {
+struct CachedValueId : IndexBase<CachedValueId> {
   using IndexBase::IndexBase;
 
-  static const IntermediaryValueId Invalid;
+  static const CachedValueId Invalid;
 };
-inline constexpr auto IntermediaryValueId::Invalid = IntermediaryValueId(-1);
+
+inline constexpr auto CachedValueId::Invalid = CachedValueId(-1);
 
 }  // namespace axon
