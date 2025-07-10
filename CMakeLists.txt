@@ -18,6 +18,8 @@ target_sources(libaxon
     src/mlir/codegen.cpp
   PRIVATE
     src/mlir/dialect/dialect.cpp
+    src/mlir/dialect/types.cpp
+    src/mlir/dialect/ops.cpp
 )
 
 target_compile_features(libaxon PUBLIC cxx_std_23)
@@ -54,6 +56,8 @@ mlir_tablegen(Dialect.h.inc -gen-dialect-decls)
 mlir_tablegen(Dialect.cpp.inc -gen-dialect-defs)
 mlir_tablegen(DialectTypeDefs.h.inc -gen-typedef-decls)
 mlir_tablegen(DialectTypeDefs.cpp.inc -gen-typedef-defs)
+mlir_tablegen(DialectOps.h.inc -gen-op-decls)
+mlir_tablegen(DialectOps.cpp.inc -gen-op-defs)
 add_public_tablegen_target(AxonDialectIncGen)
 add_dependencies(libaxon AxonDialectIncGen)
 

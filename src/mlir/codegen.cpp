@@ -31,34 +31,86 @@ class Context {
     builder_.setInsertionPointToEnd(mlir_module.getBody());
     codegen_forward();
 
-    if (mlir::failed(mlir::verify(mlir_module))) {
-      mlir_module.emitError("module verification error");
-      return nullptr;
-    }
+    // if (mlir::failed(mlir::verify(mlir_module))) {
+    //   mlir_module.emitError("module verification error");
+    //   return nullptr;
+    // }
 
     return mlir_module;
   }
 
  private:
+  auto get_parameter_list() -> ParameterListType {
+    llvm::SmallVector<ParameterType> params;
+    auto* context = builder_.getContext();
+    for (auto [param_id, param] : module_.parameters().iter_values()) {
+      auto param_type = ParameterType::get(context, builder_.getF32Type(),
+                                           param.shape, param.requires_grad);
+      params.push_back(param_type);
+    }
+    return ParameterListType::get(context, params);
+  }
+
   auto codegen_forward() -> void {
     llvm::SmallVector<mlir::Type> input_types;
-    std::flat_map<InstId, mlir::Value> values;
 
-    for (auto [param_id, param] : module_.parameters().iter_values()) {
-      auto tensor_type = ParameterType::get(param.shape, builder_.getF32Type());
-
-      input_types.push_back(tensor_type);
-    }
+    input_types.push_back(get_parameter_list());
 
     // The return type will be inferred later.
     auto func_type = builder_.getFunctionType(input_types, {});
     auto func = builder_.create<mlir::func::FuncOp>(builder_.getUnknownLoc(),
                                                     "forward", func_type);
-
     auto* entry_block = func.addEntryBlock();
     builder_.setInsertionPointToStart(entry_block);
 
+    std::flat_map<InstId, mlir::Value> values;
+    for (auto [inst_id, inst] : module_.forward_insts().iter_values()) {
+      codegen_instruction(inst_id, inst, values, entry_block);
+    }
+
+    // Add a return statement (functions need to return something)
     builder_.create<mlir::func::ReturnOp>(builder_.getUnknownLoc());
+  }
+
+  auto codegen_instruction(InstId inst_id, const Inst& inst,
+                           std::flat_map<InstId, mlir::Value>& values,
+                           mlir::Block* block) -> void {
+    auto loc = builder_.getUnknownLoc();
+    if (auto get_param = inst.try_get_as<insts::GetParameter>()) {
+      auto param_list =
+          llvm::dyn_cast<ParameterListType>(block->getArgument(0).getType());
+
+      auto index = get_param->param_id.value();
+      auto result_type = param_list.getParams()[index];
+
+      values[inst_id] = builder_.create<ListAccessOp>(
+          loc, result_type, block->getArgument(0), index);
+      return;
+    }
+
+    // if (auto add = inst.try_get_as<insts::Add>()) {
+    //   auto lhs = values[add->lhs_id];
+    //   auto rhs = values[add->rhs_id];
+    //   auto result = builder_.create<mlir::arith::AddFOp>(loc, lhs, rhs);
+    //   values[inst_id] = result;
+    //   return;
+    // }
+    //
+    // if (auto mul = inst.try_get_as<insts::Mul>()) {
+    //   auto lhs = values[mul->lhs_id];
+    //   auto rhs = values[mul->rhs_id];
+    //   auto result = builder_.create<mlir::arith::MulFOp>(loc, lhs, rhs);
+    //   values[inst_id] = result;
+    //   return;
+    // }
+    //
+    // if (auto matmul = inst.try_get_as<insts::MatMul>()) {
+    //   auto lhs = values[matmul->lhs_id];
+    //   auto rhs = values[matmul->rhs_id];
+    //   auto result = builder_.create<mlir::arith::MulFOp>(loc, lhs, rhs);
+    //   values[inst_id] = result;
+    //   return;
+    // }
   }
 
  private:

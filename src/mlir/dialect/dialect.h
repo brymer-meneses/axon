@@ -20,49 +20,5 @@
 #define GET_TYPEDEF_CLASSES
 #include "DialectTypeDefs.h.inc"
 
-namespace axon {
-
-struct ParameterTypeStorage : public mlir::TypeStorage {
-  using KeyTy = std::pair<llvm::ArrayRef<int64_t>, mlir::Type>;
-
-  // TODO: maybe I should put the pointers here for the gradient and data?
-  ParameterTypeStorage(llvm::ArrayRef<int64_t> shape, mlir::Type type)
-      : shape(shape), type(type) {}
-
-  auto operator==(const KeyTy& key) const -> bool {
-    return key == std::make_pair(shape, type);
-  }
-
-  static auto hashKey(const KeyTy& key) -> llvm::hash_code {
-    return llvm::hash_value(key);
-  }
-
-  static auto getKey(llvm::ArrayRef<int64_t> shape, mlir::Type type) -> KeyTy {
-    return {shape, type};
-  }
-
-  static auto construct(mlir::TypeStorageAllocator& allocator, const KeyTy& key)
-      -> ParameterTypeStorage*;
-
-  llvm::ArrayRef<int64_t> shape;
-  mlir::Type type;
-};
-
-class ParameterType : public mlir::Type::TypeBase<ParameterType, mlir::Type,
-                                                  ParameterTypeStorage> {
- public:
-  using Base::Base;
-  /// The name of this struct type.
-  static constexpr llvm::StringLiteral name = "toy.struct";
-
-  static auto get(llvm::ArrayRef<int64_t> shape, mlir::Type type)
-      -> ParameterType;
-  static auto getDynamic(mlir::Type type) -> ParameterType;
-
-  auto isDynamic() const -> bool { return getImpl()->shape.empty(); }
-
-  auto getShape() const -> llvm::ArrayRef<int64_t> { return getImpl()->shape; }
-  auto getElementType() const -> mlir::Type { return getImpl()->type; }
-};
-
-}  // namespace axon
+#define GET_OP_CLASSES
+#include "DialectOps.h.inc"
