@@ -1,23 +1,23 @@
 #include "dialect.h"
 
-#include "Dialect.cpp.inc"
+#include "generated/Dialect.cpp.inc"
 
 #define GET_TYPEDEF_CLASSES
-#include "DialectTypeDefs.cpp.inc"
+#include "generated/DialectTypeDefs.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "DialectOps.cpp.inc"
+#include "generated/DialectOps.cpp.inc"
 namespace axon {
 
 auto AxonDialect::initialize() -> void {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "DialectTypeDefs.cpp.inc"
+#include "generated/DialectTypeDefs.cpp.inc"
       >();
 
   addOperations<
 #define GET_OP_LIST
-#include "DialectOps.cpp.inc"
+#include "generated/DialectOps.cpp.inc"
       >();
 }
 

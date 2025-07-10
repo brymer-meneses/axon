@@ -15,10 +15,10 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 // Dialect
-#include "Dialect.h.inc"
+#include "generated/Dialect.h.inc"
 
 #define GET_TYPEDEF_CLASSES
-#include "DialectTypeDefs.h.inc"
+#include "generated/DialectTypeDefs.h.inc"
 
 #define GET_OP_CLASSES
-#include "DialectOps.h.inc"
+#include "generated/DialectOps.h.inc"
