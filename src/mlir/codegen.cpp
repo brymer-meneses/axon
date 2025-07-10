@@ -40,15 +40,15 @@ class Context {
   }
 
  private:
-  auto get_parameter_list() -> ParameterListType {
-    llvm::SmallVector<ParameterType> params;
+  auto get_parameter_list() -> TensorRefListType {
+    llvm::SmallVector<TensorRefType> params;
     auto* context = builder_.getContext();
     for (auto [param_id, param] : module_.parameters().iter_values()) {
-      auto param_type = ParameterType::get(context, builder_.getF32Type(),
+      auto param_type = TensorRefType::get(context, builder_.getF32Type(),
                                            param.shape, param.requires_grad);
       params.push_back(param_type);
     }
-    return ParameterListType::get(context, params);
+    return TensorRefListType::get(context, params);
   }
 
   auto codegen_forward() -> void {
@@ -68,7 +68,6 @@ class Context {
       codegen_instruction(inst_id, inst, values, entry_block);
     }
 
-    // Add a return statement (functions need to return something)
     builder_.create<mlir::func::ReturnOp>(builder_.getUnknownLoc());
   }
 
@@ -78,10 +77,10 @@ class Context {
     auto loc = builder_.getUnknownLoc();
     if (auto get_param = inst.try_get_as<insts::GetParameter>()) {
       auto param_list =
-          llvm::dyn_cast<ParameterListType>(block->getArgument(0).getType());
+          llvm::dyn_cast<TensorRefListType>(block->getArgument(0).getType());
 
       auto index = get_param->param_id.value();
-      auto result_type = param_list.getParams()[index];
+      auto result_type = param_list.getValues()[index];
 
       values[inst_id] = builder_.create<ListAccessOp>(
           loc, result_type, block->getArgument(0), index);

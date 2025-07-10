@@ -19,16 +19,16 @@ class AxonDialect_Type<string name, string typeMnemonic, list<Trait> traits = []
   let mnemonic = typeMnemonic;
 }
 
-def Shape : TypeParameter<"::llvm::ArrayRef<int64_t>", "Array of int"> {
+def ArrayRefInt64 : TypeParameter<"::llvm::ArrayRef<int64_t>", "Array of int"> {
   let allocator = "$_dst = $_allocator.copyInto($_self);";
 }
 
-def Params : TypeParameter<"::llvm::ArrayRef<ParameterType>", "Array of params"> {
+def ArrayRefTensorRefType : TypeParameter<"::llvm::ArrayRef<TensorRefType>", "Array of params"> {
   let allocator = "$_dst = $_allocator.copyInto($_self);";
 }
 
-def Axon_ParameterType : AxonDialect_Type<"Parameter", "param"> {
-  let parameters = (ins "mlir::Type":$elementType, Shape:$shape, "bool":$requires_grad);
+def Axon_TensorRefType : AxonDialect_Type<"TensorRef", "tensor_ref"> {
+  let parameters = (ins "mlir::Type":$elementType, ArrayRefInt64:$shape, "bool":$requires_grad);
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
@@ -36,39 +36,53 @@ def Axon_ParameterType : AxonDialect_Type<"Parameter", "param"> {
   }];
 }
 
-def Axon_ParameterListType : AxonDialect_Type<"ParameterList", "param_list"> {
-  let parameters = (ins Params:$params);
+def Axon_TensorRefListType : AxonDialect_Type<"TensorRefList", "tensor_ref_list"> {
+  let parameters = (ins ArrayRefTensorRefType:$values);
   let hasCustomAssemblyFormat = 1;
 }
 
 class AxonDialect_Op<string mnemonic, list<Trait> traits = []> : Op<AxonDialect, mnemonic, traits>;
 
-def Axon_GetDataOp : AxonDialect_Op<"data"> {
+def Axon_GetDataOp : AxonDialect_Op<"get_data"> {
   let summary = "Extract the data tensor from a parameter";
 
-  let arguments = (ins Axon_ParameterType:$param);
+  let arguments = (ins Axon_TensorRefType:$param);
   let results = (outs AnyTensor);
 }
 
-def Axon_GetGradOp : AxonDialect_Op<"grad"> {
+def Axon_GetGradOp : AxonDialect_Op<"get_grad"> {
   let summary = "Extract the gradient tensor from a parameter";
 
-  let arguments = (ins Axon_ParameterType:$param);
+  let arguments = (ins Axon_TensorRefType:$param);
   let results = (outs AnyTensor);
+}
+
+def Axon_SetDataOp : AxonDialect_Op<"set_data"> {
+  let summary = "Set the data tensor from a parameter";
+
+  let arguments = (ins Axon_TensorRefType:$param, AnyTensor:$value);
+}
+
+def Axon_SetGradOp : AxonDialect_Op<"set_grad"> {
+  let summary = "Set the gradient tensor from a parameter";
+
+  let arguments = (ins Axon_TensorRefType:$param, AnyTensor:$value);
 }
 
 def Axon_AccumulateGradOp : AxonDialect_Op<"accumulate_grad"> {
   let summary = "Add the corresponding tensor to the gradient of this parameter.";
 
-  let arguments = (ins Axon_ParameterType:$param, AnyTensor:$value);
+  let arguments = (ins Axon_TensorRefType:$param, AnyTensor:$value);
 }
 
 def Axon_ListAccessOp : AxonDialect_Op<"list_access"> {
   let summary = "Access parameter from a ParameterList";
-  let arguments = (ins Axon_ParameterListType:$input, I64Attr:$index);
-  let results = (outs Axon_ParameterType:$output);
+  let arguments = (ins Axon_TensorRefListType:$input, I64Attr:$index);
+  let results = (outs Axon_TensorRefType:$output);
 
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    $input `[` $index `]` attr-dict `:` type($input) `->` type($output)
+  }];
 }
 
 #endif // AXON_DIALECT

@@ -5,7 +5,7 @@
 
 namespace axon {
 
-auto ParameterType::print(mlir::AsmPrinter& printer) const -> void {
+auto TensorRefType::print(mlir::AsmPrinter& printer) const -> void {
   printer << "<";
   llvm::interleave(getShape(), printer, "x");
   printer << "x" << getElementType();
@@ -14,15 +14,15 @@ auto ParameterType::print(mlir::AsmPrinter& printer) const -> void {
   }
   printer << ">";
 }
-auto ParameterListType::print(mlir::AsmPrinter& printer) const -> void {
+auto TensorRefListType::print(mlir::AsmPrinter& printer) const -> void {
   printer << "<";
-  llvm::interleave(getParams(), printer, ", ");
+  llvm::interleave(getValues(), printer, ", ");
   printer << ">";
 }
 
 // TODO: implement this!
-auto ParameterType::parse(mlir::AsmParser&) -> mlir::Type { return nullptr; }
-auto ParameterListType::parse(mlir::AsmParser&) -> mlir::Type {
+auto TensorRefType::parse(mlir::AsmParser&) -> mlir::Type { return nullptr; }
+auto TensorRefListType::parse(mlir::AsmParser&) -> mlir::Type {
   return nullptr;
 }
 
