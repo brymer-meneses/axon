@@ -3,57 +3,16 @@ module;
 #include <optional>
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/FunctionExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
-export module axon.core.inst;
+export module axon.core:inst;
 
-import axon.core.ids;
+import :ids;
+import :inst_kinds;
 
 export namespace axon {
-
-namespace insts {
-
-struct GetParameter {
-  static constexpr bool Differentiable = false;
-
-  ParamId param_id;
-};
-
-struct GetCachedValue {
-  static constexpr bool Differentiable = false;
-  CachedValueId value_id;
-};
-
-struct Add {
-  static constexpr bool Differentiable = true;
-
-  InstId lhs_id;
-  InstId rhs_id;
-};
-
-struct Mul {
-  static constexpr bool Differentiable = true;
-
-  InstId lhs_id;
-  InstId rhs_id;
-};
-
-struct MatMul {
-  static constexpr bool Differentiable = false;
-
-  InstId lhs_id;
-  InstId rhs_id;
-};
-
-struct Copy {
-  static constexpr bool Differentiable = false;
-
-  InstId inst_id;
-  CachedValueId value_id;
-};
-
-}  // namespace insts
 
 template <typename... Args>
 struct match : Args... {
@@ -63,8 +22,9 @@ struct match : Args... {
 class Inst {
  public:
   using Value =
-      std::variant<insts::Add, insts::Mul, insts::MatMul, insts::GetParameter,
-                   insts::GetCachedValue, insts::Copy>;
+      std::variant<insts::MatMul, insts::Add, insts::Mul, insts::Transpose,
+                   insts::GetFunctionArgument, insts::GetCachedValue,
+                   insts::Write, insts::Constant>;
 
   template <typename InstType>
     requires std::is_convertible_v<InstType, Value>
@@ -86,17 +46,29 @@ class Inst {
 
   auto index() const -> int32_t { return value_.index(); }
 
+  auto is_expression() const -> bool {
+    static constexpr auto visitor = match{
+        [](const insts::Mul&) { return true; },
+        [](const insts::MatMul&) { return true; },
+        [](const insts::Add&) { return true; },
+        [](const insts::Constant&) { return true; },
+        [](const auto&) { return false; },
+    };
+
+    return std::visit(visitor, value_);
+  }
+
   // Returns the parents of an instruction.
   auto parents() const -> llvm::SmallVector<InstId> {
     static constexpr auto visitor = match{
-        [](const insts::Add& inst) {
-          return llvm::SmallVector<InstId>{inst.lhs_id, inst.rhs_id};
+        [](const insts::Add& inst) -> llvm::SmallVector<InstId> {
+          return {inst.lhs_id, inst.rhs_id};
         },
-        [](const insts::Mul& inst) {
-          return llvm::SmallVector<InstId>{inst.lhs_id, inst.rhs_id};
+        [](const insts::Mul& inst) -> llvm::SmallVector<InstId> {
+          return {inst.lhs_id, inst.rhs_id};
         },
         [](const insts::MatMul& inst) -> llvm::SmallVector<InstId> {
-          return llvm::SmallVector<InstId>{inst.lhs_id, inst.rhs_id};
+          return {inst.lhs_id, inst.rhs_id};
         },
         [](const auto&) { return llvm::SmallVector<InstId>{}; },
     };

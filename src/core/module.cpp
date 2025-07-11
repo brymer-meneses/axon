@@ -1,185 +1,164 @@
 module;
 
 #include <cassert>
-#include <flat_map>
 #include <string>
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
-export module axon.core;
+export module axon.core:mod;
 
-import axon.base.index;
-import axon.base.value_store;
+import axon.base;
 
-export import axon.core.ids;
-export import axon.core.inst;
+import :ids;
+import :inst;
+import :inst_rules;
 
-namespace axon {
+export namespace axon {
 
-export struct Parameter {
-  std::string name;
-  llvm::SmallVector<int64_t> shape;
-  bool requires_grad;
+struct TensorData {
+  auto requires_grad() const -> bool {
+    return grad_inst_id.has_value() or grad_inst_id == InstId::Pending;
+  }
+
+  InstId grad_inst_id;
+  std::string name = "unnamed";
+  llvm::SmallVector<int64_t> shape = {};
+  // TODO: this should optionally contain a reference to the Module when it is
+  // a foreign tensor.
 };
 
-struct CachedValue {
-  InstId forward_inst_id;
-};
-
-struct Dependency {
-  InstId tensor_id;
-  InstId grad_id;
-};
-
-export class Module {
+class Module {
  public:
-  auto declare_parameter(std::string name, llvm::SmallVector<int64_t> shape,
-                         bool requires_grad) -> InstId {
-    ParamId param_id = parameters_.emplace(name, shape, requires_grad);
-    return forward_insts_.add(insts::GetParameter(param_id));
-  }
+  auto finalize(InstId tensor_id) -> void {
+    auto grad_id = backward_insts_.add(insts::GetFunctionArgument(0));
 
-  auto create_inst(Inst inst) -> InstId {
-    return forward_insts_.add(std::move(inst));
-  }
+    llvm::SmallVector<Dependency> deps = {{tensor_id, grad_id}};
+    BackwardBuilder builder{*this, deps};
 
-  auto build_backward(InstId tensor_id) {
-    auto grad_id = backward_insts_.add(insts::GetParameter(ParamId(0)));
-
-    llvm::SmallVector<Dependency> stack = {{tensor_id, grad_id}};
-    while (not stack.empty()) {
-      auto dep = stack.pop_back_val();
+    while (not deps.empty()) {
+      auto dep = deps.pop_back_val();
       auto& inst = forward_insts_.get(dep.tensor_id);
 
       accumulate_grad(dep.tensor_id, dep.grad_id);
 
-      inst.visit([&](const auto op) {
-        using InstType = decltype(op);
-        if constexpr (InstType::Differentiable) {
-          backward(op, dep.grad_id, stack);
+      inst.visit([&](const auto& op) {
+        using InstType = std::decay_t<decltype(op)>;
+        if constexpr (HasBackward<InstType>) {
+          InstHandler<InstType>::backward(op, dep.grad_id, builder);
         }
       });
     }
 
-    for (auto value_id : cached_values_.iter()) {
-      auto value = cached_values_.get(value_id);
-      forward_insts_.emplace(insts::Copy(value.forward_inst_id, value_id));
-    }
+    // for (auto value_id : cached_values_.iter()) {
+    //   auto value = cached_values_.get(value_id);
+    //   forward_insts_.emplace(insts::Copy(value.forward_inst_id, value_id));
+    // }
   }
 
-  auto parameters() const -> const ValueStore<ParamId, Parameter>& {
-    return parameters_;
-  }
+  auto create_forward_inst(Inst inst) -> InstId {
+    auto inst_id = forward_insts_.emplace(inst);
 
-  auto parameters() -> ValueStore<ParamId, Parameter>& { return parameters_; }
-
-  auto forward_insts() -> ValueStore<InstId, Inst>& { return forward_insts_; }
-  auto forward_insts() const -> const ValueStore<InstId, Inst>& {
-    return forward_insts_;
-  }
-
-  auto backward_insts() -> ValueStore<InstId, Inst>& { return backward_insts_; }
-  auto backward_insts() const -> const ValueStore<InstId, Inst>& {
-    return backward_insts_;
-  }
-
-  auto cached_values() const -> const ValueStore<CachedValueId, CachedValue>& {
-    return cached_values_;
-  }
-
-  auto cached_values() -> ValueStore<CachedValueId, CachedValue>& {
-    return cached_values_;
-  }
-
- private:
-  // Do we need to memoize this?
-  auto requires_grad(InstId inst_id) const -> bool {
-    llvm::SmallVector<InstId> stack = {inst_id};
-
-    while (not stack.empty()) {
-      InstId inst_id = stack.pop_back_val();
-
-      auto& inst = forward_insts_.get(inst_id);
-      if (auto param = inst.try_get_as<insts::GetParameter>()) {
-        Parameter info = parameters_.get(param->param_id);
-        return info.requires_grad;
-      }
-
-      for (InstId parent_id : inst.parents()) {
-        stack.push_back(parent_id);
-      }
-    }
-    return false;
-  }
-
-  // Get the cached value for the corresponding `source_id`
-  auto get_cached_value(InstId source_id) -> InstId {
-    for (auto [value_id, value] : cached_values_.iter_values()) {
-      if (value.forward_inst_id == source_id) {
-        return backward_insts_.add(insts::GetCachedValue(value_id));
-      }
+    // If this inst materializes to an expression, then create a corresponding
+    // tensor for it.
+    if (inst.is_expression()) {
+      auto inst_requires_grad = llvm::any_of(
+          inst.parents(),
+          [this](InstId inst_id) { return requires_grad(inst_id); });
+      TensorData tensor{.grad_inst_id = inst_requires_grad ? InstId::Pending
+                                                           : InstId::Invalid};
+      auto tensor_id = tensors_.emplace(tensor);
+      forward_tensors_.create_relation(inst_id, tensor_id);
     }
 
-    // If we can't find a corresponding cached value for this `source_id`,
-    // then we create it.
-    auto value_id = cached_values_.emplace(source_id);
-    auto inst_id = backward_insts_.add(insts::GetCachedValue(value_id));
     return inst_id;
   }
 
-  auto accumulate_grad(InstId tensor_id, InstId grad_id) -> void {
-    if (gradients_.contains(tensor_id)) {
-      InstId prev_grad = gradients_.at(tensor_id);
-      grad_id = backward_insts_.add(insts::Add(prev_grad, grad_id));
+  auto create_backward_inst(Inst inst) -> InstId {
+    auto inst_id = backward_insts_.emplace(inst);
+
+    // If this inst materializes to an expression, then create a corresponding
+    // tensor for it.
+    if (inst.is_expression()) {
+      auto inst_requires_grad = llvm::any_of(
+          inst.parents(),
+          [this](InstId inst_id) { return requires_grad(inst_id); });
+      TensorData tensor{.grad_inst_id = inst_requires_grad ? InstId::Pending
+                                                           : InstId::Invalid};
+      auto tensor_id = tensors_.emplace(tensor);
+      backward_tensors_.create_relation(inst_id, tensor_id);
     }
 
-    gradients_.insert_or_assign(tensor_id, grad_id);
-  }
-  // TODO: explore ways to extract this out of here.
-  auto backward(const insts::Add add, const InstId grad_id,
-                llvm::SmallVector<Dependency>& deps) -> void {
-    if (requires_grad(add.lhs_id)) {
-      deps.emplace_back(add.lhs_id, grad_id);
-    }
-    if (requires_grad(add.rhs_id)) {
-      deps.emplace_back(add.rhs_id, grad_id);
-    }
+    return inst_id;
   }
 
-  auto backward(const insts::Mul mul, const InstId grad_id,
-                llvm::SmallVector<Dependency>& deps) -> void {
-    if (requires_grad(mul.lhs_id)) {
-      auto rhs_id = get_cached_value(mul.rhs_id);
-      auto prod_id = backward_insts_.emplace(insts::Mul(rhs_id, grad_id));
-      deps.emplace_back(mul.lhs_id, prod_id);
+  auto requires_grad(InstId inst_id) const -> bool {
+    // Check if there is a corresponding tensor_id for this inst_id.
+    auto tensor_id = forward_tensors_.get_right(inst_id);
+    if (tensor_id.has_value()) {
+      return tensors_.get(tensor_id).requires_grad();
     }
-    if (requires_grad(mul.rhs_id)) {
-      auto lhs_id = get_cached_value(mul.lhs_id);
-      auto prod_id = backward_insts_.emplace(insts::Mul(lhs_id, grad_id));
-      deps.emplace_back(mul.rhs_id, prod_id);
-    }
+
+    return false;
   }
 
-  auto backward(auto, const InstId, llvm::SmallVector<Dependency>&) -> void {
-    static_assert(false,
-                  "Operation was declared to be differentiable but has no "
-                  "`backward` method.");
+  auto get_cached_value(InstId tensor_inst_id) -> InstId {
+    auto cached_value_id = cached_values_.get_right(tensor_inst_id);
+    if (cached_value_id.has_value()) {
+      return cached_value_id;
+    }
+
+    auto index = static_cast<int32_t>(cached_values_.size());
+    cached_value_id = backward_insts_.add(insts::GetCachedValue(index));
+    return cached_value_id;
+  }
+
+  auto accumulate_grad(InstId tensor_inst_id, InstId grad_inst_id) -> void {
+    TensorId tensor_id = forward_tensors_.get_right(tensor_inst_id);
+    assert(tensor_id.has_value());
+
+    const auto& tensor_data = tensors_.get(tensor_id);
+    assert(tensor_data.grad_inst_id.has_value() or
+           tensor_data.grad_inst_id == InstId::Pending);
+
+    if (tensor_data.grad_inst_id.has_value()) {
+      auto inst = insts::Add(tensor_data.grad_inst_id, grad_inst_id);
+      grad_inst_id = create_backward_inst(inst);
+    }
+
+    // We can't make `tensor_data` a mutable ref since `create_inst` can
+    // invalidate `tensor_data`. Maybe explore creating a `Handle<T>` CRTP
+    // to do this automatically for us?
+    tensors_.get(tensor_id).grad_inst_id = grad_inst_id;
   }
 
  private:
-  // Instructions for the backward pass.
-  ValueStore<InstId, Inst> backward_insts_;
   // Instructions for the forward pass.
   ValueStore<InstId, Inst> forward_insts_;
+  RelationalStore<InstId, TensorId> forward_tensors_;
 
-  // Parameters that are used by this module.
-  ValueStore<ParamId, Parameter> parameters_;
+  // Instructions for the backward pass.
+  ValueStore<InstId, Inst> backward_insts_;
+  RelationalStore<InstId, TensorId> backward_tensors_;
 
-  // Values that are implicitly passed to the backward function.
-  ValueStore<CachedValueId, CachedValue> cached_values_;
+  ValueStore<TensorId, TensorData> tensors_;
 
-  // Mapping from the inst_id from the forward function to its gradient.
-  std::flat_map<InstId, InstId> gradients_;
+  llvm::SmallVector<TensorId> foreign_tensors_;
+
+  RelationalStore<InstId, InstId> cached_values_;
 };
+
+auto BackwardBuilder::get_cached_value(InstId inst_id) -> InstId {
+  return module_.get_cached_value(inst_id);
+}
+auto BackwardBuilder::check_requires_grad(InstId inst_id) const -> bool {
+  return module_.requires_grad(inst_id);
+}
+auto BackwardBuilder::track(InstId inst_id, InstId grad_id) -> void {
+  deps_.emplace_back(inst_id, grad_id);
+}
+auto BackwardBuilder::emit_inst(Inst inst) -> InstId {
+  return module_.create_backward_inst(inst);
+}
 
 }  // namespace axon

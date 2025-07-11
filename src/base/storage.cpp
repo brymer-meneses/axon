@@ -4,14 +4,14 @@ module;
 #include <ranges>
 #include <vector>
 
-export module axon.base.value_store;
+export module axon.base:storage;
 
-import axon.base.index;
+import :index_base;
 
 export namespace axon {
 
 template <typename IndexType, typename ValueType>
-  requires(std::is_base_of_v<IndexBase<IndexType>, IndexType>)
+  requires(IsIndex<IndexType>)
 class ValueStore {
  public:
   auto add(const ValueType& value) -> IndexType {
@@ -69,15 +69,15 @@ class ValueStore {
 
 template <typename LeftIndexType, typename RightIndexType>
   requires(IsIndex<LeftIndexType> and IsIndex<RightIndexType>)
-class RelationalIdStore {
+class RelationalStore {
  public:
-  auto relate(LeftIndexType lhs, RightIndexType rhs) -> void {
-    assert(not contains(lhs) and not contains(rhs));
-    values_.push_back({lhs, rhs});
+  auto create_relation(LeftIndexType lhs, RightIndexType rhs) -> void {
+    assert(not contains_left(lhs) and not contains_right(rhs));
+    relations_.push_back({lhs, rhs});
   }
 
-  auto contains(LeftIndexType lhs) const -> bool {
-    for (const auto& value : values_) {
+  auto contains_left(LeftIndexType lhs) const -> bool {
+    for (const auto& value : relations_) {
       if (value.first == lhs) {
         return true;
       }
@@ -85,8 +85,8 @@ class RelationalIdStore {
     return false;
   }
 
-  auto contains(RightIndexType rhs) const -> bool {
-    for (const auto& value : values_) {
+  auto contains_right(RightIndexType rhs) const -> bool {
+    for (const auto& value : relations_) {
       if (value.second == rhs) {
         return true;
       }
@@ -94,8 +94,8 @@ class RelationalIdStore {
     return false;
   }
 
-  auto get(LeftIndexType lhs) const -> RightIndexType {
-    for (const auto& value : values_) {
+  auto get_right(LeftIndexType lhs) const -> RightIndexType {
+    for (const auto& value : relations_) {
       if (value.first == lhs) {
         return value.second;
       }
@@ -103,8 +103,8 @@ class RelationalIdStore {
     return RightIndexType::Invalid;
   }
 
-  auto get(RightIndexType lhs) const -> LeftIndexType {
-    for (const auto& value : values_) {
+  auto get_left(RightIndexType lhs) const -> LeftIndexType {
+    for (const auto& value : relations_) {
       if (value.second == lhs) {
         return value.first;
       }
@@ -112,8 +112,13 @@ class RelationalIdStore {
     return LeftIndexType::Invalid;
   }
 
+  auto size() const -> size_t { return relations_.size(); }
+
+  auto relations() const -> const auto& { return relations_; }
+  auto relations() -> auto& { return relations_; }
+
  private:
-  std::vector<std::pair<LeftIndexType, RightIndexType>> values_;
+  std::vector<std::pair<LeftIndexType, RightIndexType>> relations_;
 };
 
 }  // namespace axon

@@ -13,8 +13,7 @@ module;
 export module axon.mlir;
 
 import axon.core;
-
-import axon.base.value_store;
+import axon.base;
 
 namespace axon {
 
@@ -40,21 +39,21 @@ class Context {
   }
 
  private:
-  auto get_parameter_list() -> TensorRefListType {
-    llvm::SmallVector<TensorRefType> params;
-    auto* context = builder_.getContext();
-    for (auto [param_id, param] : module_.parameters().iter_values()) {
-      auto param_type = TensorRefType::get(context, builder_.getF32Type(),
-                                           param.shape, param.requires_grad);
-      params.push_back(param_type);
-    }
-    return TensorRefListType::get(context, params);
-  }
+  // auto get_parameter_list() -> TensorRefListType {
+  //   llvm::SmallVector<TensorRefType> params;
+  //   auto* context = builder_.getContext();
+  //   for (auto [param_id, param] : module_.parameters().iter_values()) {
+  //     auto param_type = TensorRefType::get(context, builder_.getF32Type(),
+  //                                          param.shape, param.requires_grad);
+  //     params.push_back(param_type);
+  //   }
+  //   return TensorRefListType::get(context, params);
+  // }
 
   auto codegen_forward() -> void {
     llvm::SmallVector<mlir::Type> input_types;
 
-    input_types.push_back(get_parameter_list());
+    // input_types.push_back(get_parameter_list());
 
     // The return type will be inferred later.
     auto func_type = builder_.getFunctionType(input_types, {});
@@ -64,53 +63,29 @@ class Context {
     builder_.setInsertionPointToStart(entry_block);
 
     std::flat_map<InstId, mlir::Value> values;
-    for (auto [inst_id, inst] : module_.forward_insts().iter_values()) {
-      codegen_instruction(inst_id, inst, values, entry_block);
-    }
+    // for (auto [inst_id, inst] : module_.forward_insts().iter_values()) {
+    //   codegen_instruction(inst_id, inst, values, entry_block);
+    // }
 
     builder_.create<mlir::func::ReturnOp>(builder_.getUnknownLoc());
   }
 
-  auto codegen_instruction(InstId inst_id, const Inst& inst,
-                           std::flat_map<InstId, mlir::Value>& values,
-                           mlir::Block* block) -> void {
-    auto loc = builder_.getUnknownLoc();
-    if (auto get_param = inst.try_get_as<insts::GetParameter>()) {
-      auto param_list =
-          llvm::dyn_cast<TensorRefListType>(block->getArgument(0).getType());
-
-      auto index = get_param->param_id.value();
-      auto result_type = param_list.getValues()[index];
-
-      values[inst_id] = builder_.create<ListAccessOp>(
-          loc, result_type, block->getArgument(0), index);
-      return;
-    }
-
-    // if (auto add = inst.try_get_as<insts::Add>()) {
-    //   auto lhs = values[add->lhs_id];
-    //   auto rhs = values[add->rhs_id];
-    //   auto result = builder_.create<mlir::arith::AddFOp>(loc, lhs, rhs);
-    //   values[inst_id] = result;
-    //   return;
-    // }
-    //
-    // if (auto mul = inst.try_get_as<insts::Mul>()) {
-    //   auto lhs = values[mul->lhs_id];
-    //   auto rhs = values[mul->rhs_id];
-    //   auto result = builder_.create<mlir::arith::MulFOp>(loc, lhs, rhs);
-    //   values[inst_id] = result;
-    //   return;
-    // }
-    //
-    // if (auto matmul = inst.try_get_as<insts::MatMul>()) {
-    //   auto lhs = values[matmul->lhs_id];
-    //   auto rhs = values[matmul->rhs_id];
-    //   auto result = builder_.create<mlir::arith::MulFOp>(loc, lhs, rhs);
-    //   values[inst_id] = result;
-    //   return;
-    // }
-  }
+  // auto codegen_instruction(instid inst_id, const inst& inst,
+  //                          std::flat_map<instid, mlir::value>& values,
+  //                          mlir::block* block) -> void {
+  //   auto loc = builder_.getUnknownLoc();
+  //   // if (auto get_param = inst.try_get_as<insts::GetParameter>()) {
+  //   //   auto param_list =
+  //   // llvm::dyn_cast<TensorRefListType>(block->getArgument(0).getType());
+  //   //
+  //   //   auto index = get_param->param_id.value();
+  //   //   auto result_type = param_list.getValues()[index];
+  //   //
+  //   //   values[inst_id] = builder_.create<ListAccessOp>(
+  //   //       loc, result_type, block->getArgument(0), index);
+  //   //   return;
+  //   // }
+  // }
 
  private:
   mlir::OpBuilder builder_;

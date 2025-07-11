@@ -7,16 +7,21 @@ add_library(libaxon)
 
 target_sources(libaxon 
   PUBLIC FILE_SET CXX_MODULES FILES
-    src/base/value_store.cpp
+    src/base/storage.cpp
     src/base/index_base.cpp
+    src/base/base.cpp
 
-    src/core/module.cpp
+    src/core/core.cpp
     src/core/inst.cpp
+    src/core/inst_kinds.cpp
+    src/core/inst_rules.cpp
     src/core/ids.cpp
     src/core/eager.cpp
+    src/core/module.cpp
 
     src/mlir/codegen.cpp
   PRIVATE
+
     src/mlir/dialect/dialect.cpp
     src/mlir/dialect/types.cpp
     src/mlir/dialect/ops.cpp

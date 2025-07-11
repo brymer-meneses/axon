@@ -4,7 +4,7 @@ module;
 #include <cstdint>
 #include <type_traits>
 
-export module axon.base.index;
+export module axon.base:index_base;
 
 export namespace axon {
 
