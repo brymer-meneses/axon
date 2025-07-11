@@ -2,14 +2,13 @@ module;
 
 #include <cassert>
 #include <cstdint>
-
-#include "llvm/ADT/DenseMapInfo.h"
+#include <type_traits>
 
 export module axon.base.index;
 
-namespace axon {
+export namespace axon {
 
-export template <typename T>
+template <typename T>
 struct IndexBase {
   constexpr explicit IndexBase(int32_t value) : value_(value) {}
   constexpr auto has_value() const -> bool { return value_ >= 0; }
@@ -29,5 +28,8 @@ struct IndexBase {
  private:
   int32_t value_;
 };
+
+template <typename IndexType>
+concept IsIndex = std::is_base_of_v<IndexBase<IndexType>, IndexType>;
 
 }  // namespace axon

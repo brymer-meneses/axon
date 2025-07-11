@@ -8,9 +8,9 @@ export module axon.base.value_store;
 
 import axon.base.index;
 
-namespace axon {
+export namespace axon {
 
-export template <typename IndexType, typename ValueType>
+template <typename IndexType, typename ValueType>
   requires(std::is_base_of_v<IndexBase<IndexType>, IndexType>)
 class ValueStore {
  public:
@@ -65,6 +65,55 @@ class ValueStore {
 
  private:
   std::vector<ValueType> values_;
+};
+
+template <typename LeftIndexType, typename RightIndexType>
+  requires(IsIndex<LeftIndexType> and IsIndex<RightIndexType>)
+class RelationalIdStore {
+ public:
+  auto relate(LeftIndexType lhs, RightIndexType rhs) -> void {
+    assert(not contains(lhs) and not contains(rhs));
+    values_.push_back({lhs, rhs});
+  }
+
+  auto contains(LeftIndexType lhs) const -> bool {
+    for (const auto& value : values_) {
+      if (value.first == lhs) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  auto contains(RightIndexType rhs) const -> bool {
+    for (const auto& value : values_) {
+      if (value.second == rhs) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  auto get(LeftIndexType lhs) const -> RightIndexType {
+    for (const auto& value : values_) {
+      if (value.first == lhs) {
+        return value.second;
+      }
+    }
+    return RightIndexType::Invalid;
+  }
+
+  auto get(RightIndexType lhs) const -> LeftIndexType {
+    for (const auto& value : values_) {
+      if (value.second == lhs) {
+        return value.first;
+      }
+    }
+    return LeftIndexType::Invalid;
+  }
+
+ private:
+  std::vector<std::pair<LeftIndexType, RightIndexType>> values_;
 };
 
 }  // namespace axon
