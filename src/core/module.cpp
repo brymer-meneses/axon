@@ -60,6 +60,7 @@ class Module {
     }
   }
 
+ private:
   auto create_forward_inst(Inst inst) -> InstId {
     auto inst_id = forward_insts_.emplace(inst);
     // If this inst materializes to an expression, then create a corresponding
@@ -137,7 +138,6 @@ class Module {
     tensors_.get(tensor_id).grad_inst_id = grad_inst_id;
   }
 
- private:
   // Instructions for the forward pass.
   ValueStore<InstId, Inst> forward_insts_;
   RelationalStore<InstId, TensorId> forward_tensors_;
@@ -151,6 +151,8 @@ class Module {
   llvm::SmallVector<TensorId> foreign_tensors_;
 
   RelationalStore<InstId, InstId> cached_values_;
+
+  friend BackwardBuilder;
 };
 
 auto BackwardBuilder::get_cached_value(InstId inst_id) -> InstId {
@@ -161,7 +163,7 @@ auto BackwardBuilder::check_requires_grad(InstId inst_id) const -> bool {
   return module_.requires_grad(inst_id);
 }
 
-auto BackwardBuilder::track(InstId inst_id, InstId grad_id) -> void {
+auto BackwardBuilder::backward(InstId inst_id, InstId grad_id) -> void {
   deps_.emplace_back(inst_id, grad_id);
 }
 

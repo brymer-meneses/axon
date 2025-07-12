@@ -16,6 +16,8 @@ struct Dependency {
   InstId grad_id;
 };
 
+// BackwardBuilder is a proxy to the `Module`. It provides clean APIs for
+// building the backward graph.
 class BackwardBuilder {
  public:
   BackwardBuilder(Module& module, llvm::SmallVector<Dependency>& deps)
@@ -25,7 +27,7 @@ class BackwardBuilder {
   // These are defined in `module.cpp`.
   auto check_requires_grad(InstId inst_id) const -> bool;
   auto get_cached_value(InstId forward_inst_id) -> InstId;
-  auto track(InstId tensor_inst_id, InstId grad_id) -> void;
+  auto backward(InstId tensor_inst_id, InstId grad_id) -> void;
   auto emit_inst(Inst inst) -> InstId;
 
  private:
@@ -45,10 +47,10 @@ struct InstHandler<insts::Add> {
   auto backward(const insts::Add& op, InstId grad_id, BackwardBuilder& builder)
       -> void {
     if (builder.check_requires_grad(op.lhs_id)) {
-      builder.track(op.lhs_id, grad_id);
+      builder.backward(op.lhs_id, grad_id);
     }
     if (builder.check_requires_grad(op.rhs_id)) {
-      builder.track(op.rhs_id, grad_id);
+      builder.backward(op.rhs_id, grad_id);
     }
   }
 };
@@ -60,13 +62,13 @@ struct InstHandler<insts::Mul> {
     if (builder.check_requires_grad(op.lhs_id)) {
       auto cached_value_id = builder.get_cached_value(op.rhs_id);
       auto prod = builder.emit_inst(insts::Mul(grad_id, cached_value_id));
-      builder.track(op.lhs_id, prod);
+      builder.backward(op.lhs_id, prod);
     }
 
     if (builder.check_requires_grad(op.rhs_id)) {
       auto cached_value_id = builder.get_cached_value(op.lhs_id);
       auto prod = builder.emit_inst(insts::Mul(grad_id, cached_value_id));
-      builder.track(op.rhs_id, prod);
+      builder.backward(op.rhs_id, prod);
     }
   }
 };
