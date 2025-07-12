@@ -21,6 +21,8 @@ class BackwardBuilder {
   BackwardBuilder(Module& module, llvm::SmallVector<Dependency>& deps)
       : module_(module), deps_(deps) {}
 
+  // These functions need to be forward declared to break a cyclic dependency.
+  // These are defined in `module.cpp`.
   auto check_requires_grad(InstId inst_id) const -> bool;
   auto get_cached_value(InstId forward_inst_id) -> InstId;
   auto track(InstId tensor_inst_id, InstId grad_id) -> void;

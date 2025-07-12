@@ -21,7 +21,6 @@ target_sources(libaxon
 
     src/mlir/codegen.cpp
   PRIVATE
-
     src/mlir/dialect/dialect.cpp
     src/mlir/dialect/types.cpp
     src/mlir/dialect/ops.cpp

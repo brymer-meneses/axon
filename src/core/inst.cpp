@@ -19,12 +19,16 @@ struct match : Args... {
   using Args::operator()...;
 };
 
+template <typename T>
+constexpr bool IsExpressionInst =
+    llvm::is_one_of<T, insts::Add, insts::Mul, insts::MatMul>();
+
 class Inst {
  public:
   using Value =
       std::variant<insts::MatMul, insts::Add, insts::Mul, insts::Transpose,
                    insts::GetFunctionArgument, insts::GetCachedValue,
-                   insts::Write, insts::Constant>;
+                   insts::SetCachedValue, insts::Constant>;
 
   template <typename InstType>
     requires std::is_convertible_v<InstType, Value>
@@ -44,18 +48,23 @@ class Inst {
     return std::nullopt;
   }
 
+  template <typename InstType>
+    requires std::is_convertible_v<InstType, Value>
+  auto get_as_unchecked() const -> InstType {
+    auto* value = std::get_if<InstType>(&value_);
+    assert(value != nullptr);
+    return *value;
+  }
+
   auto index() const -> int32_t { return value_.index(); }
 
   auto is_expression() const -> bool {
-    static constexpr auto visitor = match{
-        [](const insts::Mul&) { return true; },
-        [](const insts::MatMul&) { return true; },
-        [](const insts::Add&) { return true; },
-        [](const insts::Constant&) { return true; },
-        [](const auto&) { return false; },
-    };
-
-    return std::visit(visitor, value_);
+    return std::visit(
+        [](const auto& op) {
+          using InstType = std::decay_t<decltype(op)>;
+          return IsExpressionInst<InstType>;
+        },
+        value_);
   }
 
   // Returns the parents of an instruction.

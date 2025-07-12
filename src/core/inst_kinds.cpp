@@ -8,7 +8,7 @@ export module axon.core:inst_kinds;
 
 import :ids;
 
-namespace axon::insts {
+export namespace axon::insts {
 
 struct MatMul {
   InstId lhs_id;
@@ -30,15 +30,15 @@ struct Mul {
 };
 
 struct GetFunctionArgument {
-  int32_t argument;
+  ArgumentId argument;
 };
 
 struct GetCachedValue {
-  int32_t value_id;
+  CachedValueId value_id;
 };
 
-struct Write {
-  InstId inst_id;
+struct SetCachedValue {
+  InstId value;
   CachedValueId value_id;
 };
 

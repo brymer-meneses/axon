@@ -31,7 +31,8 @@ struct TensorData {
 class Module {
  public:
   auto finalize(InstId tensor_id) -> void {
-    auto grad_id = backward_insts_.add(insts::GetFunctionArgument(0));
+    auto grad_id =
+        backward_insts_.add(insts::GetFunctionArgument(ArgumentId(0)));
 
     llvm::SmallVector<Dependency> deps = {{tensor_id, grad_id}};
     BackwardBuilder builder{*this, deps};
@@ -50,15 +51,17 @@ class Module {
       });
     }
 
-    // for (auto value_id : cached_values_.iter()) {
-    //   auto value = cached_values_.get(value_id);
-    //   forward_insts_.emplace(insts::Copy(value.forward_inst_id, value_id));
-    // }
+    for (auto [forward_inst_id, cached_value_inst_id] :
+         cached_values_.relations()) {
+      auto cached_value = backward_insts_.get(cached_value_inst_id)
+                              .get_as_unchecked<insts::GetCachedValue>();
+      forward_insts_.emplace(
+          insts::SetCachedValue(forward_inst_id, cached_value.value_id));
+    }
   }
 
   auto create_forward_inst(Inst inst) -> InstId {
     auto inst_id = forward_insts_.emplace(inst);
-
     // If this inst materializes to an expression, then create a corresponding
     // tensor for it.
     if (inst.is_expression()) {
@@ -109,7 +112,9 @@ class Module {
     }
 
     auto index = static_cast<int32_t>(cached_values_.size());
-    cached_value_id = backward_insts_.add(insts::GetCachedValue(index));
+    cached_value_id =
+        backward_insts_.add(insts::GetCachedValue(CachedValueId(index)));
+    cached_values_.create_relation(tensor_inst_id, cached_value_id);
     return cached_value_id;
   }
 
@@ -151,12 +156,15 @@ class Module {
 auto BackwardBuilder::get_cached_value(InstId inst_id) -> InstId {
   return module_.get_cached_value(inst_id);
 }
+
 auto BackwardBuilder::check_requires_grad(InstId inst_id) const -> bool {
   return module_.requires_grad(inst_id);
 }
+
 auto BackwardBuilder::track(InstId inst_id, InstId grad_id) -> void {
   deps_.emplace_back(inst_id, grad_id);
 }
+
 auto BackwardBuilder::emit_inst(Inst inst) -> InstId {
   return module_.create_backward_inst(inst);
 }
