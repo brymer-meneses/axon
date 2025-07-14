@@ -39,21 +39,23 @@ class Context {
   }
 
  private:
-  // auto get_parameter_list() -> TensorRefListType {
-  //   llvm::SmallVector<TensorRefType> params;
-  //   auto* context = builder_.getContext();
-  //   for (auto [param_id, param] : module_.parameters().iter_values()) {
-  //     auto param_type = TensorRefType::get(context, builder_.getF32Type(),
-  //                                          param.shape, param.requires_grad);
-  //     params.push_back(param_type);
-  //   }
-  //   return TensorRefListType::get(context, params);
-  // }
+  auto get_input_list() -> TensorRefListType {
+    llvm::SmallVector<TensorRefType> inputs;
+    auto* context = builder_.getContext();
+    for (TensorId tensor_id : module_.input_tensors()) {
+      const auto& tensor_data = module_.tensors().get(tensor_id);
+      auto input_type =
+          TensorRefType::get(context, builder_.getF32Type(),
+                             tensor_data.shape(), tensor_data.requires_grad());
+      inputs.push_back(input_type);
+    }
+    return TensorRefListType::get(context, inputs);
+  }
 
   auto codegen_forward() -> void {
     llvm::SmallVector<mlir::Type> input_types;
 
-    // input_types.push_back(get_parameter_list());
+    input_types.push_back(get_input_list());
 
     // The return type will be inferred later.
     auto func_type = builder_.getFunctionType(input_types, {});

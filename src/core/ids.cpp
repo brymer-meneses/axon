@@ -18,12 +18,12 @@ struct InstId : IndexBase<InstId> {
 inline constexpr auto InstId::Invalid = InstId(-1);
 inline constexpr auto InstId::Pending = InstId(-2);
 
-struct ArgumentId : IndexBase<ArgumentId> {
+struct InputId : IndexBase<InputId> {
   using IndexBase::IndexBase;
 
-  static const ArgumentId Invalid;
+  static const InputId Invalid;
 };
-inline constexpr auto ArgumentId::Invalid = ArgumentId(-1);
+inline constexpr auto InputId::Invalid = InputId(-1);
 
 struct TensorId : IndexBase<TensorId> {
   using IndexBase::IndexBase;
@@ -31,13 +31,6 @@ struct TensorId : IndexBase<TensorId> {
   static const TensorId Invalid;
 };
 inline constexpr auto TensorId::Invalid = TensorId(-1);
-
-struct ForeignTensorId : IndexBase<ForeignTensorId> {
-  using IndexBase::IndexBase;
-
-  static const ForeignTensorId Invalid;
-};
-inline constexpr auto ForeignTensorId::Invalid = ForeignTensorId(-1);
 
 struct CachedValueId : IndexBase<CachedValueId> {
   using IndexBase::IndexBase;

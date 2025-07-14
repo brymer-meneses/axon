@@ -12,26 +12,14 @@ export module axon.core:inst;
 import :ids;
 import :inst_kinds;
 
+import axon.base;
+
 export namespace axon {
-
-template <typename... Args>
-struct match : Args... {
-  using Args::operator()...;
-};
-
-template <typename T>
-constexpr bool IsExpressionInst =
-    llvm::is_one_of<T, insts::Add, insts::Mul, insts::MatMul>();
 
 class Inst {
  public:
-  using Value =
-      std::variant<insts::MatMul, insts::Add, insts::Mul, insts::Transpose,
-                   insts::GetFunctionArgument, insts::GetCachedValue,
-                   insts::SetCachedValue, insts::Constant>;
-
   template <typename InstType>
-    requires std::is_convertible_v<InstType, Value>
+    requires std::is_convertible_v<InstType, InstInternalType>
   Inst(InstType&& inst) : value_(inst) {}
 
   template <typename VisitorType>
@@ -40,7 +28,7 @@ class Inst {
   }
 
   template <typename InstType>
-    requires std::is_convertible_v<InstType, Value>
+    requires std::is_convertible_v<InstType, InstInternalType>
   auto try_get_as() const -> std::optional<InstType> {
     if (auto* value = std::get_if<InstType>(&value_)) {
       return std::make_optional<InstType>(*value);
@@ -49,8 +37,8 @@ class Inst {
   }
 
   template <typename InstType>
-    requires std::is_convertible_v<InstType, Value>
-  auto get_as_unchecked() const -> InstType {
+    requires std::is_convertible_v<InstType, InstInternalType>
+  auto get_as() const -> InstType {
     auto* value = std::get_if<InstType>(&value_);
     assert(value != nullptr);
     return *value;
@@ -85,7 +73,7 @@ class Inst {
   }
 
  private:
-  Value value_;
+  InstInternalType value_;
 };
 
 }  // namespace axon

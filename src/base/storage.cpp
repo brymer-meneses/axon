@@ -72,11 +72,11 @@ template <typename LeftIndexType, typename RightIndexType>
 class RelationalStore {
  public:
   auto create_relation(LeftIndexType lhs, RightIndexType rhs) -> void {
-    assert(not contains_left(lhs) and not contains_right(rhs));
+    assert(not contains_source(lhs) and not contains_target(rhs));
     relations_.push_back({lhs, rhs});
   }
 
-  auto contains_left(LeftIndexType lhs) const -> bool {
+  auto contains_source(LeftIndexType lhs) const -> bool {
     for (const auto& value : relations_) {
       if (value.first == lhs) {
         return true;
@@ -85,7 +85,7 @@ class RelationalStore {
     return false;
   }
 
-  auto contains_right(RightIndexType rhs) const -> bool {
+  auto contains_target(RightIndexType rhs) const -> bool {
     for (const auto& value : relations_) {
       if (value.second == rhs) {
         return true;
@@ -94,22 +94,22 @@ class RelationalStore {
     return false;
   }
 
-  auto get_right(LeftIndexType lhs) const -> RightIndexType {
-    for (const auto& value : relations_) {
-      if (value.first == lhs) {
-        return value.second;
-      }
-    }
-    return RightIndexType::Invalid;
-  }
-
-  auto get_left(RightIndexType lhs) const -> LeftIndexType {
+  auto get_source(RightIndexType lhs) const -> LeftIndexType {
     for (const auto& value : relations_) {
       if (value.second == lhs) {
         return value.first;
       }
     }
     return LeftIndexType::Invalid;
+  }
+
+  auto get_target(LeftIndexType lhs) const -> RightIndexType {
+    for (const auto& value : relations_) {
+      if (value.first == lhs) {
+        return value.second;
+      }
+    }
+    return RightIndexType::Invalid;
   }
 
   auto size() const -> size_t { return relations_.size(); }

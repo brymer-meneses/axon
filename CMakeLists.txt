@@ -18,6 +18,7 @@ target_sources(libaxon
     src/core/ids.cpp
     src/core/eager.cpp
     src/core/module.cpp
+    src/core/tensor.cpp
 
     src/mlir/codegen.cpp
   PRIVATE
