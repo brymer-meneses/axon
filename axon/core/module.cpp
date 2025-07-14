@@ -97,6 +97,12 @@ class Module {
   auto tensors() const -> const auto& { return tensors_; }
   auto tensors() -> auto& { return tensors_; }
 
+  auto forward_insts() const -> const auto& { return forward_insts_; }
+  auto forward_insts() -> auto& { return forward_insts_; }
+
+  auto backward_insts() const -> const auto& { return backward_insts_; }
+  auto backward_insts() -> auto& { return backward_insts_; }
+
  private:
   auto create_backward_inst(Inst inst) -> InstId {
     return backward_insts_.emplace(inst);

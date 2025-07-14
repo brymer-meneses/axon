@@ -39,6 +39,10 @@ def Axon_TensorRefType : AxonDialect_Type<"TensorRef", "tensor_ref"> {
 def Axon_TensorRefListType : AxonDialect_Type<"TensorRefList", "tensor_ref_list"> {
   let parameters = (ins ArrayRefTensorRefType:$values);
   let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    auto operator[](int32_t index) const -> const TensorRefType& { return getValues()[index]; }
+  }];
 }
 
 class AxonDialect_Op<string mnemonic, list<Trait> traits = []> : Op<AxonDialect, mnemonic, traits>;

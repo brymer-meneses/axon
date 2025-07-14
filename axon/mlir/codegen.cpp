@@ -65,29 +65,27 @@ class Context {
     builder_.setInsertionPointToStart(entry_block);
 
     std::flat_map<InstId, mlir::Value> values;
-    // for (auto [inst_id, inst] : module_.forward_insts().iter_values()) {
-    //   codegen_instruction(inst_id, inst, values, entry_block);
-    // }
+    for (auto [inst_id, inst] : module_.forward_insts().iter_values()) {
+      codegen_instruction(inst_id, inst, values, entry_block);
+    }
 
     builder_.create<mlir::func::ReturnOp>(builder_.getUnknownLoc());
   }
 
-  // auto codegen_instruction(instid inst_id, const inst& inst,
-  //                          std::flat_map<instid, mlir::value>& values,
-  //                          mlir::block* block) -> void {
-  //   auto loc = builder_.getUnknownLoc();
-  //   // if (auto get_param = inst.try_get_as<insts::GetParameter>()) {
-  //   //   auto param_list =
-  //   // llvm::dyn_cast<TensorRefListType>(block->getArgument(0).getType());
-  //   //
-  //   //   auto index = get_param->param_id.value();
-  //   //   auto result_type = param_list.getValues()[index];
-  //   //
-  //   //   values[inst_id] = builder_.create<ListAccessOp>(
-  //   //       loc, result_type, block->getArgument(0), index);
-  //   //   return;
-  //   // }
-  // }
+  auto codegen_instruction(InstId inst_id, const Inst& inst,
+                           std::flat_map<InstId, mlir::Value>& values,
+                           mlir::Block* block) -> void {
+    auto loc = builder_.getUnknownLoc();
+    if (auto get_input = inst.try_get_as<insts::GetInput>()) {
+      auto input_list =
+          llvm::dyn_cast<TensorRefListType>(block->getArgument(0).getType());
+      auto index = get_input->input_id.value();
+      auto result_type = input_list[index];
+      values[inst_id] = builder_.create<ListAccessOp>(
+          loc, result_type, block->getArgument(0), index);
+      return;
+    }
+  }
 
  private:
   mlir::OpBuilder builder_;
