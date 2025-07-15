@@ -30,10 +30,10 @@ class Context {
     builder_.setInsertionPointToEnd(mlir_module.getBody());
     codegen_forward();
 
-    // if (mlir::failed(mlir::verify(mlir_module))) {
-    //   mlir_module.emitError("module verification error");
-    //   return nullptr;
-    // }
+    if (mlir::failed(mlir::verify(mlir_module))) {
+      mlir_module.emitError("module verification error");
+      return nullptr;
+    }
 
     return mlir_module;
   }
@@ -81,8 +81,10 @@ class Context {
           llvm::dyn_cast<TensorRefListType>(block->getArgument(0).getType());
       auto index = get_input->input_id.value();
       auto result_type = input_list[index];
-      values[inst_id] = builder_.create<ListAccessOp>(
+      auto tensor_ref = builder_.create<ListAccessOp>(
           loc, result_type, block->getArgument(0), index);
+
+      values[inst_id] = builder_.create<GetDataOp>(loc, tensor_ref);
       return;
     }
   }

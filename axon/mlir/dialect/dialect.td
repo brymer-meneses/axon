@@ -48,39 +48,53 @@ def Axon_TensorRefListType : AxonDialect_Type<"TensorRefList", "tensor_ref_list"
 class AxonDialect_Op<string mnemonic, list<Trait> traits = []> : Op<AxonDialect, mnemonic, traits>;
 
 def Axon_GetDataOp : AxonDialect_Op<"get_data"> {
-  let summary = "Extract the data tensor from a parameter";
+  let summary = "Extract the data tensor from a tensor";
 
-  let arguments = (ins Axon_TensorRefType:$param);
-  let results = (outs AnyTensor);
+  let arguments = (ins Axon_TensorRefType:$input);
+  let results = (outs AnyTensor:$result);
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$input), [{
+      auto tensor_ref_type = input.getType().cast<axon::TensorRefType>();
+      auto shape = tensor_ref_type.getShape();
+      auto element_type = tensor_ref_type.getElementType();
+      auto result_type = mlir::RankedTensorType::get(shape, element_type);
+      build($_builder, $_state, result_type, input);
+    }]>,
+  ];
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
 }
 
 def Axon_GetGradOp : AxonDialect_Op<"get_grad"> {
-  let summary = "Extract the gradient tensor from a parameter";
+  let summary = "Extract the gradient tensor from a tensor";
 
-  let arguments = (ins Axon_TensorRefType:$param);
+  let arguments = (ins Axon_TensorRefType:$tensor);
   let results = (outs AnyTensor);
 }
 
 def Axon_SetDataOp : AxonDialect_Op<"set_data"> {
-  let summary = "Set the data tensor from a parameter";
+  let summary = "Set the data tensor from a tensor";
 
-  let arguments = (ins Axon_TensorRefType:$param, AnyTensor:$value);
+  let arguments = (ins Axon_TensorRefType:$tensor, AnyTensor:$value);
 }
 
 def Axon_SetGradOp : AxonDialect_Op<"set_grad"> {
-  let summary = "Set the gradient tensor from a parameter";
+  let summary = "Set the gradient tensor from a tensor";
 
-  let arguments = (ins Axon_TensorRefType:$param, AnyTensor:$value);
+  let arguments = (ins Axon_TensorRefType:$tensor, AnyTensor:$value);
 }
 
 def Axon_AccumulateGradOp : AxonDialect_Op<"accumulate_grad"> {
-  let summary = "Add the corresponding tensor to the gradient of this parameter.";
+  let summary = "Add the corresponding tensor to the gradient of this tensor.";
 
-  let arguments = (ins Axon_TensorRefType:$param, AnyTensor:$value);
+  let arguments = (ins Axon_TensorRefType:$tensor, AnyTensor:$value);
 }
 
 def Axon_ListAccessOp : AxonDialect_Op<"list_access"> {
-  let summary = "Access parameter from a ParameterList";
+  let summary = "Access the tensor from a TensorRefList";
   let arguments = (ins Axon_TensorRefListType:$input, I64Attr:$index);
   let results = (outs Axon_TensorRefType:$output);
 
