@@ -2,6 +2,7 @@ module;
 
 #include <optional>
 
+#include "axon/base/dcheck.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FunctionExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -40,7 +41,7 @@ class Inst {
     requires std::is_convertible_v<InstType, InstInternalType>
   auto get_as() const -> InstType {
     auto* value = std::get_if<InstType>(&value_);
-    assert(value != nullptr);
+    AXON_DCHECK(value != nullptr, "Invalid type.");
     return *value;
   }
 

@@ -4,6 +4,7 @@ module;
 #include <string>
 #include <variant>
 
+#include "axon/base/dcheck.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -87,7 +88,8 @@ class Module {
 
   auto get_tensor_data(InstId tensor_inst_id) const -> const TensorData& {
     TensorId tensor_id = forward_tensors_.get_target(tensor_inst_id);
-    assert(tensor_id.has_value());
+    AXON_DCHECK(tensor_id.has_value(),
+                "Passed `tensor_inst_id` is not a tensor");
     return tensors_.get(tensor_id);
   }
 
@@ -133,10 +135,11 @@ class Module {
 
   auto accumulate_grad(InstId tensor_inst_id, InstId grad_inst_id) -> void {
     TensorId tensor_id = forward_tensors_.get_target(tensor_inst_id);
-    assert(tensor_id.has_value());
+    AXON_DCHECK(tensor_id.has_value(), "`tensor_inst_id` must be a tensor.");
 
     const auto& tensor_data = tensors_.get(tensor_id);
-    assert(tensor_data.requires_grad());
+    AXON_DCHECK(tensor_data.requires_grad(),
+                "`tensor_inst_id` must be a tensor that requires gradient.");
 
     if (tensor_data.grad_inst_id.has_value()) {
       auto inst = insts::Add(tensor_data.grad_inst_id, grad_inst_id);
