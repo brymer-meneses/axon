@@ -1,7 +1,6 @@
 module;
 
 #include <cassert>
-#include <cstdint>
 
 export module axon.core:ids;
 

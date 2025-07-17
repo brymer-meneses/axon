@@ -61,7 +61,7 @@ class ValueStore {
 
   auto contains(IndexType index) const -> bool {
     AXON_DCHECK(index.has_value(), "Passed index has no value.");
-    return static_cast<uint32_t>(index.value()) < values_.size();
+    return static_cast<int32_t>(index.value()) < values_.size();
   }
 
  private:
@@ -74,7 +74,7 @@ class RelationalStore {
   auto create_relation(LeftIndexType lhs, RightIndexType rhs) -> void {
     AXON_DCHECK(not contains_source(lhs),
                 "Passed source has already an existing relation.");
-    AXON_DCHECK(not contains_target(rhs),
+    AXON_DCHECK(not contains_source(rhs),
                 "Passed target has already an existing relation.");
     relations_.push_back({lhs, rhs});
   }

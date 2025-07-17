@@ -19,8 +19,11 @@ target_sources(libaxon
     axon/core/eager.cpp
     axon/core/module.cpp
     axon/core/tensor.cpp
+    axon/core/storage.cpp
 
-    axon/mlir/codegen.cpp
+    axon/mlir/forward.cpp
+    axon/mlir/mlir.cpp
+    axon/mlir/context.cpp
   PRIVATE
     axon/mlir/dialect/dialect.cpp
     axon/mlir/dialect/types.cpp

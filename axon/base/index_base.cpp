@@ -4,7 +4,7 @@ module;
 #include <cstdint>
 #include <type_traits>
 
-#include "axon/base/dcheck.h"
+#include "llvm/ADT/DenseMapInfo.h"
 
 export module axon.base:index_base;
 
@@ -13,13 +13,10 @@ export namespace axon {
 template <typename T>
 struct IndexBase {
   constexpr explicit IndexBase(int32_t value) : value_(value) {}
+  constexpr explicit IndexBase() = default;
+
   constexpr auto has_value() const -> bool { return value_ >= 0; }
-  constexpr auto value() -> int32_t {
-    AXON_DCHECK(has_value(),
-                "Tried to call value() on an index that has a value of {}.",
-                value_);
-    return value_;
-  }
+  constexpr auto value() const -> int32_t { return value_; }
 
   friend auto operator<=>(const T lhs, const T rhs) -> auto {
     return lhs.value_ <=> rhs.value_;
@@ -30,10 +27,31 @@ struct IndexBase {
   }
 
  private:
-  int32_t value_;
+  int32_t value_ = -1;
 };
 
 template <typename IndexType>
 concept Index = std::is_base_of_v<IndexBase<IndexType>, IndexType>;
 
 }  // namespace axon
+
+namespace llvm {
+
+export template <axon::Index T>
+struct DenseMapInfo<T> {
+  static constexpr auto sentinel = std::numeric_limits<int32_t>::min();
+
+  static inline auto getEmptyKey() -> T { return T(sentinel); }
+
+  static inline auto getTombstoneKey() -> T { return T(sentinel + 1); }
+
+  static auto getHashValue(const T& value) -> unsigned {
+    return static_cast<unsigned>(value.value() * 37UL);
+  }
+
+  static auto isEqual(const T& lhs, const T& rhs) -> bool {
+    return lhs.value() == rhs.value();
+  }
+};
+
+}  // namespace llvm

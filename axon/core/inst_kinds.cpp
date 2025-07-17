@@ -1,9 +1,6 @@
 module;
 
-#include <cstdint>
-
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallVector.h"
 
 export module axon.core:inst_kinds;
 
@@ -45,14 +42,16 @@ struct SetCachedValue {
   CachedValueId value_id;
 };
 
-struct Constant {};
+struct LocalTensor {};
+
+struct ModuleCall {};
 
 }  // namespace insts
 
 using InstInternalType =
     std::variant<insts::MatMul, insts::Add, insts::Mul, insts::Transpose,
                  insts::GetInput, insts::GetCachedValue, insts::SetCachedValue,
-                 insts::Constant>;
+                 insts::LocalTensor>;
 
 template <typename T>
 constexpr bool IsExpressionInst =
