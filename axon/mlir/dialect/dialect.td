@@ -48,8 +48,8 @@ def Axon_TensorRefListType : AxonDialect_Type<"TensorRefList", "tensor_ref_list"
 class AxonDialect_Op<string mnemonic, list<Trait> traits = []> : Op<AxonDialect, mnemonic, traits>;
 
 def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure]> {
-  let arguments = (ins F64ElementsAttr:$value);
-  let results = (outs F64Tensor:$result);
+  let arguments = (ins ElementsAttr:$value);
+  let results = (outs AnyTensor:$result);
 
   let builders = [
     OpBuilder<(ins "mlir::DenseElementsAttr":$value), [{

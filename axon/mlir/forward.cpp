@@ -45,7 +45,7 @@ static auto codegen_function(Context& context) -> mlir::func::FuncOp {
   return func;
 }
 
-export auto codegen_inst(Context& context, InstId inst_id) -> void {
+static auto codegen_inst(Context& context, InstId inst_id) -> void {
   auto loc = context.builder().getUnknownLoc();
   auto* block = context.builder().getInsertionBlock();
   auto& values = context.forward_values();
@@ -70,15 +70,21 @@ export auto codegen_inst(Context& context, InstId inst_id) -> void {
 
     auto data_attribute = mlir::DenseElementsAttr::get(result_type, data.ref());
 
-    values[inst_id] =
-        context.builder().create<ConstantOp>(loc, result_type, data_attribute);
+    values[inst_id] = context.builder().create<ConstantOp>(loc, data_attribute);
   }
 
   if (auto add = inst.try_get_as<insts::Add>()) {
     auto lhs = values[add->lhs_id];
     auto rhs = values[add->rhs_id];
-    auto result = context.builder().create<mlir::arith::AddFOp>(loc, lhs, rhs);
-    values[inst_id] = result;
+    values[inst_id] =
+        context.builder().create<mlir::arith::AddFOp>(loc, lhs, rhs);
+  }
+
+  if (auto mul = inst.try_get_as<insts::Mul>()) {
+    auto lhs = values[mul->lhs_id];
+    auto rhs = values[mul->rhs_id];
+    values[inst_id] =
+        context.builder().create<mlir::arith::MulFOp>(loc, lhs, rhs);
   }
 }
 

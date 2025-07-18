@@ -1,3 +1,4 @@
+
 #include "dialect.h"
 
 namespace axon {
@@ -16,7 +17,8 @@ auto ConstantOp::parse(mlir::OpAsmParser& parser, mlir::OperationState& result)
 
 auto ConstantOp::print(mlir::OpAsmPrinter& printer) -> void {
   printer << " ";
-  printer.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
+  printer.printOptionalAttrDict((*this)->getAttrs(),
+                                /*elidedAttrs=*/{"value"});
   printer << getValue();
 }
 
