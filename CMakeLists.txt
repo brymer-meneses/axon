@@ -18,8 +18,6 @@ target_sources(libaxon
     axon/core/ids.cpp
     axon/core/eager.cpp
     axon/core/module.cpp
-    axon/core/tensor.cpp
-    axon/core/storage.cpp
 
     axon/mlir/forward.cpp
     axon/mlir/mlir.cpp
@@ -62,12 +60,12 @@ else()
 endif()
 
 set(LLVM_TARGET_DEFINITIONS axon/mlir/dialect/dialect.td)
-mlir_tablegen(generated/Dialect.h.inc -gen-dialect-decls -dialect=axon)
-mlir_tablegen(generated/Dialect.cpp.inc -gen-dialect-defs -dialect=axon)
-mlir_tablegen(generated/DialectTypeDefs.h.inc -gen-typedef-decls -dialect=axon)
-mlir_tablegen(generated/DialectTypeDefs.cpp.inc -gen-typedef-defs -dialect=axon)
-mlir_tablegen(generated/DialectOps.h.inc -gen-op-decls -dialect=axon)
-mlir_tablegen(generated/DialectOps.cpp.inc -gen-op-defs -dialect=axon)
+mlir_tablegen(generated/Dialect.h.inc -gen-dialect-decls)
+mlir_tablegen(generated/Dialect.cpp.inc -gen-dialect-defs)
+mlir_tablegen(generated/DialectTypeDefs.h.inc -gen-typedef-decls)
+mlir_tablegen(generated/DialectTypeDefs.cpp.inc -gen-typedef-defs)
+mlir_tablegen(generated/DialectOps.h.inc -gen-op-decls)
+mlir_tablegen(generated/DialectOps.cpp.inc -gen-op-defs)
 add_public_tablegen_target(AxonDialectIncGen)
 add_dependencies(libaxon AxonDialectIncGen)
 
