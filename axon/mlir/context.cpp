@@ -16,13 +16,10 @@ namespace axon {
 
 export class Context {
  public:
-  Context(Module& module) : builder_(&context_), module_(module) {
-    context_.loadDialect<mlir::func::FuncDialect>();
-    context_.loadDialect<mlir::tensor::TensorDialect>();
-    context_.loadDialect<mlir::arith::ArithDialect>();
-    context_.loadDialect<AxonDialect>();
-
+  Context(Module& module, mlir::MLIRContext& ctx)
+      : builder_(&ctx), module_(module) {
     mlir_module_ = mlir::ModuleOp::create(builder_.getUnknownLoc());
+    builder_.setInsertionPointToEnd(mlir_module_.getBody());
   }
 
   auto builder() -> mlir::OpBuilder& { return builder_; }
@@ -31,8 +28,8 @@ export class Context {
   auto module() -> Module& { return module_; }
   auto module() const -> const Module& { return module_; }
 
-  auto mlir_module() -> mlir::ModuleOp& { return mlir_module_; }
-  auto mlir_module() const -> const mlir::ModuleOp& { return mlir_module_; }
+  auto result() -> mlir::ModuleOp& { return mlir_module_; }
+  auto result() const -> const mlir::ModuleOp& { return mlir_module_; }
 
   auto forward_values() -> llvm::DenseMap<InstId, mlir::Value>& {
     return forward_values_;
@@ -49,7 +46,6 @@ export class Context {
   }
 
  private:
-  mlir::MLIRContext context_;
   mlir::OpBuilder builder_;
   mlir::ModuleOp mlir_module_;
   Module& module_;

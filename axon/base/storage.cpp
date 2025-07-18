@@ -103,7 +103,7 @@ class RelationalStore {
         return value.first;
       }
     }
-    return LeftIndexType::Invalid;
+    return LeftIndexType::None;
   }
 
   auto get_target(LeftIndexType lhs) const -> RightIndexType {
@@ -112,7 +112,7 @@ class RelationalStore {
         return value.second;
       }
     }
-    return RightIndexType::Invalid;
+    return RightIndexType::None;
   }
 
   auto size() const -> size_t { return relations_.size(); }
@@ -122,6 +122,67 @@ class RelationalStore {
 
  private:
   std::vector<std::pair<LeftIndexType, RightIndexType>> relations_;
+};
+
+// TODO: use binary search here.
+template <Index KeyType, Index ValueType>
+class IdStore {
+  struct KeyValuePair {
+    KeyType key;
+    ValueType value;
+  };
+
+ public:
+  auto add(KeyType key, ValueType value) -> void {
+    pairs_.emplace_back(key, value);
+  }
+
+  auto operator[](KeyType key) const -> const ValueType& {
+    if (contains(key)) {
+      return pairs_[key.value()].value;
+    }
+
+    add(key, ValueType::None);
+    return pairs_[key.value()].value;
+  }
+
+  auto operator[](KeyType key) -> ValueType& {
+    if (contains(key)) {
+      return pairs_[key.value()].value;
+    }
+
+    add(key, ValueType::None);
+    return pairs_[key.value()].value;
+  }
+
+  auto contains(KeyType key) const -> bool {
+    AXON_DCHECK(key.has_value(), "Passed index has no value.");
+    return static_cast<size_t>(key.value()) < pairs_.size();
+  }
+
+  auto get(KeyType target_key) -> ValueType {
+    AXON_DCHECK(target_key.has_value(), "Passed key must have a value.");
+    return pairs_[target_key.value()].value;
+  }
+
+  auto get(KeyType target_key) const -> ValueType {
+    AXON_DCHECK(target_key.has_value(), "Passed key must have a value.");
+    return pairs_[target_key.value()].value;
+  }
+
+  auto size() const -> size_t { return pairs_.size(); }
+
+  auto keys() const -> auto {
+    return std::views::transform(pairs_,
+                                 [](KeyValuePair pair) { return pair.key; });
+  }
+  auto values() const -> auto {
+    return std::views::transform(pairs_,
+                                 [](KeyValuePair pair) { return pair.value; });
+  }
+
+ private:
+  std::vector<KeyValuePair> pairs_;
 };
 
 }  // namespace axon

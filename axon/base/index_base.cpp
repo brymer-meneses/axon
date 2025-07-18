@@ -26,12 +26,17 @@ struct IndexBase {
     return lhs.value_ == rhs.value_;
   }
 
+  static const T None;
+
  private:
   int32_t value_ = -1;
 };
 
 template <typename IndexType>
 concept Index = std::is_base_of_v<IndexBase<IndexType>, IndexType>;
+
+template <typename T>
+constexpr T IndexBase<T>::None = T(-1);
 
 }  // namespace axon
 

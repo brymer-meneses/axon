@@ -3,13 +3,9 @@ module;
 #include <print>
 
 #include "dialect/dialect.h"
-#include "llvm/ADT/DenseMap.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/Verifier.h"
 
 export module axon.mlir:forward;
 
@@ -20,14 +16,15 @@ import :context;
 
 namespace axon {
 
-auto get_input_list(Context& context) -> TensorRefListType {
+static auto get_input_list(Context& context) -> TensorRefListType {
   llvm::SmallVector<TensorRefType> inputs;
   auto* mlir_context = context.builder().getContext();
   auto& module = context.module();
   for (InstId tensor_id : module.input_tensors()) {
-    const auto& tensor_data = module.forward_tensors().at(tensor_id);
+    const auto& tensor_data =
+        module.get_tensor_data(tensor_id, /*is_forward=*/true);
     auto input_type = TensorRefType::get(
-        mlir_context, context.builder().getF32Type(), tensor_data.shape,
+        mlir_context, context.builder().getF32Type(), tensor_data.shape(),
         module.check_requires_grad(tensor_id));
     inputs.push_back(input_type);
   }
@@ -35,7 +32,7 @@ auto get_input_list(Context& context) -> TensorRefListType {
 }
 
 // Codegen function signature.
-auto codegen_function(Context& context) -> mlir::func::FuncOp {
+static auto codegen_function(Context& context) -> mlir::func::FuncOp {
   llvm::SmallVector<mlir::Type> input_types;
 
   input_types.push_back(get_input_list(context));
@@ -48,10 +45,11 @@ auto codegen_function(Context& context) -> mlir::func::FuncOp {
   return func;
 }
 
-auto codegen_inst(Context& context, InstId inst_id, const Inst& inst) -> void {
+export auto codegen_inst(Context& context, InstId inst_id) -> void {
   auto loc = context.builder().getUnknownLoc();
   auto* block = context.builder().getInsertionBlock();
   auto& values = context.forward_values();
+  const auto& inst = context.module().forward_insts().get(inst_id);
 
   if (auto get_input = inst.try_get_as<insts::GetInput>()) {
     auto input_list =
@@ -63,13 +61,18 @@ auto codegen_inst(Context& context, InstId inst_id, const Inst& inst) -> void {
     values[inst_id] = context.builder().create<GetDataOp>(loc, tensor_ref);
   }
 
-  // if (auto local_tensor = inst.try_get_as<insts::LocalTensor>()) {
-  //   const auto& tensor_data = context.module().forward_tensors().at(inst_id);
-  //   const auto& shape = tensor_data.shape;
-  //
-  //   values[inst_id] = context.builder().create<mlir::RankedTensorType>(
-  //       loc, shape, context.builder().getF32Type());
-  // }
+  if (auto local_tensor = inst.try_get_as<insts::LocalTensor>()) {
+    const auto& data =
+        context.module().get_tensor_data(inst_id, /*is_forward=*/true);
+
+    auto result_type = mlir::RankedTensorType::get(
+        data.shape(), context.builder().getF32Type());
+
+    auto data_attribute = mlir::DenseElementsAttr::get(result_type, data.ref());
+
+    values[inst_id] =
+        context.builder().create<ConstantOp>(loc, result_type, data_attribute);
+  }
 
   if (auto add = inst.try_get_as<insts::Add>()) {
     auto lhs = values[add->lhs_id];
@@ -84,9 +87,8 @@ export auto codegen_forward(Context& context) -> void {
   auto func = codegen_function(context);
   context.builder().setInsertionPointToStart(func.addEntryBlock());
 
-  llvm::DenseMap<InstId, mlir::Value> values;
-  for (auto [inst_id, inst] : context.module().forward_insts().iter_values()) {
-    codegen_inst(context, inst_id, inst);
+  for (auto inst_id : context.module().forward_insts().iter()) {
+    codegen_inst(context, inst_id);
   }
 
   context.builder().create<mlir::func::ReturnOp>(loc);

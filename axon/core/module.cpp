@@ -26,8 +26,25 @@ export namespace axon {
 
 class Module;
 
-struct TensorData {
-  llvm::SmallVector<int64_t> shape;
+struct Data {
+  Data(llvm::ArrayRef<int64_t> shape) : value(xt::empty<float>(shape)) {}
+  Data(xt::xarray<float> value) : value(std::move(value)) {}
+
+  // xt::xarray<float> internally uses uint64_t for the elements in its shape
+  // array. But MLIR tensors expect int64_t :<
+  auto shape() const -> llvm::SmallVector<int64_t> {
+    llvm::SmallVector<int64_t, 4> shape;
+    for (auto d : value.shape()) {
+      shape.push_back(d);
+    }
+    return shape;
+  }
+
+  auto ref() const -> llvm::ArrayRef<float> {
+    return {value.data(), value.size()};
+  }
+
+  xt::xarray<float> value;
 };
 
 class Module {
@@ -72,33 +89,41 @@ class Module {
           inst.parents(),
           [this](InstId parent_id) { return check_requires_grad(parent_id); });
 
-      gradients_[inst_id] = requires_grad ? InstId::Pending : InstId::Invalid;
+      gradients_[inst_id] = requires_grad ? InstId::Pending : InstId::None;
     }
     return inst_id;
   }
 
-  auto create_tensor(llvm::SmallVector<int64_t> shape, bool requires_grad)
-      -> InstId {
+  auto create_tensor(xt::xarray<float> value, bool requires_grad) -> InstId {
     auto inst_id = forward_insts_.add(insts::LocalTensor{});
-    gradients_[inst_id] = requires_grad ? InstId::Pending : InstId::Invalid;
-    forward_tensors_[inst_id] = TensorData(shape);
+    auto data_id = data_.add(Data(value));
+
+    gradients_[inst_id] = requires_grad ? InstId::Pending : InstId::None;
+    forward_data_[inst_id] = data_id;
     return inst_id;
   }
 
   auto declare_input_tensor(llvm::SmallVector<int64_t> shape,
                             bool requires_grad) -> InstId {
-    auto grad_inst_id = requires_grad ? InstId::Pending : InstId::Invalid;
+    auto grad_inst_id = requires_grad ? InstId::Pending : InstId::None;
     AXON_DCHECK(input_tensors_.size() < std::numeric_limits<int32_t>::max(),
                 "Overflow.");
 
     auto index = static_cast<int32_t>(input_tensors_.size());
     auto inst_id = forward_insts_.add(insts::GetInput(InputId(index)));
+    auto data_id = data_.add(Data(shape));
 
     gradients_[inst_id] = grad_inst_id;
-    forward_tensors_[inst_id] = TensorData(shape);
+    forward_data_[inst_id] = data_id;
     input_tensors_.push_back(inst_id);
 
     return inst_id;
+  }
+
+  auto get_tensor_data(InstId inst_id, bool is_forward) -> Data& {
+    auto data_id =
+        is_forward ? forward_data_[inst_id] : backward_data_[inst_id];
+    return data_.get(data_id);
   }
 
   auto forward_insts() const -> const auto& { return forward_insts_; }
@@ -109,12 +134,6 @@ class Module {
 
   auto input_tensors() const -> const auto& { return input_tensors_; }
   auto input_tensors() -> auto& { return input_tensors_; }
-
-  auto forward_tensors() const -> const auto& { return forward_tensors_; }
-  auto forward_tensors() -> auto& { return forward_tensors_; }
-
-  auto backward_tensors() const -> const auto& { return backward_tensors_; }
-  auto backward_tensors() -> auto& { return backward_tensors_; }
 
   auto cached_values() const -> const auto& { return cached_values_; }
   auto cached_values() -> auto& { return cached_values_; }
@@ -140,7 +159,7 @@ class Module {
   auto accumulate_grad(InstId tensor_id, InstId grad_inst_id) -> void {
     AXON_DCHECK(check_requires_grad(tensor_id),
                 "Passed `tensor_id` must require gradients");
-    InstId current_gradient_id = gradients_.at(tensor_id);
+    InstId current_gradient_id = gradients_[tensor_id];
     if (current_gradient_id == InstId::Pending) {
       grad_inst_id =
           create_backward_inst(insts::Add(current_gradient_id, grad_inst_id));
@@ -151,20 +170,20 @@ class Module {
 
   // Instructions for the forward pass.
   ValueStore<InstId, Inst> forward_insts_;
-  llvm::DenseMap<InstId, TensorData> forward_tensors_;
+  IdStore<InstId, DataId> forward_data_;
 
   // Instructions for the backward pass.
   ValueStore<InstId, Inst> backward_insts_;
-  llvm::DenseMap<InstId, TensorData> backward_tensors_;
+  IdStore<InstId, DataId> backward_data_;
 
-  llvm::DenseMap<InstId, InstId> gradients_;
+  IdStore<InstId, InstId> gradients_;
+  ValueStore<DataId, Data> data_;
 
   llvm::SmallVector<InstId> input_tensors_;
 
   RelationalStore<InstId, InstId> cached_values_;
 
   friend BackwardBuilder;
-  friend TensorData;
 };
 
 auto BackwardBuilder::get_cached_value(InstId inst_id) -> InstId {

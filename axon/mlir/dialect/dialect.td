@@ -47,6 +47,19 @@ def Axon_TensorRefListType : AxonDialect_Type<"TensorRefList", "tensor_ref_list"
 
 class AxonDialect_Op<string mnemonic, list<Trait> traits = []> : Op<AxonDialect, mnemonic, traits>;
 
+def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure]> {
+  let arguments = (ins F64ElementsAttr:$value);
+  let results = (outs F64Tensor:$result);
+
+  let builders = [
+    OpBuilder<(ins "mlir::DenseElementsAttr":$value), [{
+      build($_builder, $_state, value.getType(), value);
+    }]>,
+  ];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
 def Axon_GetDataOp : AxonDialect_Op<"get_data"> {
   let summary = "Extract the data tensor from a tensor";
 

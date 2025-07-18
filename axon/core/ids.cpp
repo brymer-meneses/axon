@@ -11,32 +11,23 @@ export namespace axon {
 struct InstId : IndexBase<InstId> {
   using IndexBase::IndexBase;
 
-  static const InstId Invalid;
   static const InstId Pending;
 };
-inline constexpr auto InstId::Invalid = InstId(-1);
 inline constexpr auto InstId::Pending = InstId(-2);
 
 struct InputId : IndexBase<InputId> {
   using IndexBase::IndexBase;
-
-  static const InputId Invalid;
 };
-inline constexpr auto InputId::Invalid = InputId(-1);
 
-struct TensorId : IndexBase<TensorId> {
+struct DataId : IndexBase<DataId> {
   using IndexBase::IndexBase;
 
-  static const TensorId Invalid;
+  static const DataId Pending;
 };
-inline constexpr auto TensorId::Invalid = TensorId(-1);
+inline constexpr auto DataId::Pending = DataId(-2);
 
 struct CachedValueId : IndexBase<CachedValueId> {
   using IndexBase::IndexBase;
-
-  static const CachedValueId Invalid;
 };
-
-inline constexpr auto CachedValueId::Invalid = CachedValueId(-1);
 
 }  // namespace axon
