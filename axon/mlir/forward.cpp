@@ -31,6 +31,21 @@ static auto get_input_list(Context& context) -> TensorRefListType {
   return TensorRefListType::get(mlir_context, inputs);
 }
 
+// static auto get_cached_values_list(Context& context) -> TensorRefListType {
+//   llvm::SmallVector<TensorRefType> inputs;
+//   auto* mlir_context = context.builder().getContext();
+//   auto& module = context.module();
+//   for (InstId : module.cached_values().values()) {
+//     const auto& tensor_data =
+//         module.get_tensor_data(tensor_id, /*is_forward=*/true);
+//     auto input_type = TensorRefType::get(
+//         mlir_context, context.builder().getF32Type(), tensor_data.shape(),
+//         module.check_requires_grad(tensor_id));
+//     inputs.push_back(input_type);
+//   }
+//   return TensorRefListType::get(mlir_context, inputs);
+// }
+
 // Codegen function signature.
 static auto codegen_function(Context& context) -> mlir::func::FuncOp {
   llvm::SmallVector<mlir::Type> input_types;
@@ -42,6 +57,7 @@ static auto codegen_function(Context& context) -> mlir::func::FuncOp {
   auto func_type = context.builder().getFunctionType(input_types, {});
   auto func = context.builder().create<mlir::func::FuncOp>(
       unknown_loc, "forward", func_type);
+
   return func;
 }
 
@@ -64,12 +80,9 @@ static auto codegen_inst(Context& context, InstId inst_id) -> void {
   if (auto local_tensor = inst.try_get_as<insts::LocalTensor>()) {
     const auto& data =
         context.module().get_tensor_data(inst_id, /*is_forward=*/true);
-
     auto result_type = mlir::RankedTensorType::get(
         data.shape(), context.builder().getF32Type());
-
     auto data_attribute = mlir::DenseElementsAttr::get(result_type, data.ref());
-
     values[inst_id] = context.builder().create<ConstantOp>(loc, data_attribute);
   }
 

@@ -2,9 +2,11 @@ module;
 
 #include <cassert>
 #include <ranges>
+#include <utility>
 #include <vector>
 
 #include "axon/base/dcheck.h"
+#include "llvm/ADT/STLExtras.h"
 
 export module axon.base:storage;
 
@@ -120,6 +122,15 @@ class RelationalStore {
   auto relations() const -> const auto& { return relations_; }
   auto relations() -> auto& { return relations_; }
 
+  auto keys() const -> auto {
+    return std::views::transform(relations_,
+                                 [](auto relation) { return relation.first; });
+  }
+  auto values() const -> auto {
+    return std::views::transform(relations_,
+                                 [](auto relation) { return relation.second; });
+  }
+
  private:
   std::vector<std::pair<LeftIndexType, RightIndexType>> relations_;
 };
@@ -134,43 +145,60 @@ class IdStore {
 
  public:
   auto add(KeyType key, ValueType value) -> void {
+    AXON_DCHECK(not contains(key), "Passed key must used.");
     pairs_.emplace_back(key, value);
   }
 
-  auto operator[](KeyType key) const -> const ValueType& {
-    if (contains(key)) {
-      return pairs_[key.value()].value;
+  auto contains(KeyType target_key) const -> bool {
+    for (auto key : keys()) {
+      if (target_key == key) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  auto operator[](KeyType key) const -> const ValueType& { return get(key); }
+  auto operator[](KeyType key) -> ValueType& { return get(key); }
+
+  auto get(KeyType target_key) -> ValueType& {
+    AXON_DCHECK(target_key.has_value(), "Passed key must have a value.");
+    for (auto& [key, value] : pairs_) {
+      if (target_key == key) {
+        return value;
+      }
     }
 
-    add(key, ValueType::None);
-    return pairs_[key.value()].value;
+    add(target_key, ValueType::None);
+    return pairs_.back().value;
   }
 
-  auto operator[](KeyType key) -> ValueType& {
-    if (contains(key)) {
-      return pairs_[key.value()].value;
+  auto get(KeyType target_key) const -> const ValueType& {
+    AXON_DCHECK(target_key.has_value(), "Passed key must have a value.");
+    for (const auto& [key, value] : pairs_) {
+      if (target_key == key) {
+        return value;
+      }
     }
 
-    add(key, ValueType::None);
-    return pairs_[key.value()].value;
+    add(target_key, ValueType::None);
+    return pairs_.back().value;
   }
 
-  auto contains(KeyType key) const -> bool {
-    AXON_DCHECK(key.has_value(), "Passed index has no value.");
-    return static_cast<size_t>(key.value()) < pairs_.size();
-  }
-
-  auto get(KeyType target_key) -> ValueType {
+  auto set(KeyType target_key, ValueType target_value) {
     AXON_DCHECK(target_key.has_value(), "Passed key must have a value.");
-    return pairs_[target_key.value()].value;
-  }
-
-  auto get(KeyType target_key) const -> ValueType {
-    AXON_DCHECK(target_key.has_value(), "Passed key must have a value.");
-    return pairs_[target_key.value()].value;
+    for (auto& [i, pair] : llvm::enumerate(pairs_)) {
+      if (pair[i].key == target_key) {
+        pairs_[i].value = target_value;
+      }
+    }
+    add(target_key, target_value);
   }
 
   auto size() const -> size_t { return pairs_.size(); }
+
+  auto pairs() const -> const auto& { return pairs_; }
+  auto pairs() -> auto& { return pairs_; }
 
   auto keys() const -> auto {
     return std::views::transform(pairs_,

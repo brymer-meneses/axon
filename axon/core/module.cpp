@@ -20,31 +20,33 @@ import axon.base;
 import :ids;
 import :inst;
 import :inst_rules;
-import :tensor;
 
 export namespace axon {
 
 class Module;
 
-struct Data {
-  Data(llvm::ArrayRef<int64_t> shape) : value(xt::empty<float>(shape)) {}
-  Data(xt::xarray<float> value) : value(std::move(value)) {}
+class Data {
+ public:
+  explicit Data(llvm::ArrayRef<int64_t> shape)
+      : value_(xt::empty<float>(shape)) {}
+  explicit Data(xt::xarray<float> value) : value_(std::move(value)) {}
 
   // xt::xarray<float> internally uses uint64_t for the elements in its shape
   // array. But MLIR tensors expect int64_t :<
   auto shape() const -> llvm::SmallVector<int64_t> {
     llvm::SmallVector<int64_t, 4> shape;
-    for (auto d : value.shape()) {
+    for (auto d : value_.shape()) {
       shape.push_back(d);
     }
     return shape;
   }
 
   auto ref() const -> llvm::ArrayRef<float> {
-    return {value.data(), value.size()};
+    return {value_.data(), value_.size()};
   }
 
-  xt::xarray<float> value;
+ private:
+  xt::xarray<float> value_;
 };
 
 class Module {
@@ -96,7 +98,7 @@ class Module {
 
   auto create_tensor(xt::xarray<float> value, bool requires_grad) -> InstId {
     auto inst_id = forward_insts_.add(insts::LocalTensor{});
-    auto data_id = data_.add(Data(value));
+    auto data_id = data_.add(Data(std::move(value)));
 
     gradients_[inst_id] = requires_grad ? InstId::Pending : InstId::None;
     forward_data_[inst_id] = data_id;
@@ -105,15 +107,13 @@ class Module {
 
   auto declare_input_tensor(llvm::SmallVector<int64_t> shape,
                             bool requires_grad) -> InstId {
-    auto grad_inst_id = requires_grad ? InstId::Pending : InstId::None;
     AXON_DCHECK(input_tensors_.size() < std::numeric_limits<int32_t>::max(),
                 "Overflow.");
-
     auto index = static_cast<int32_t>(input_tensors_.size());
     auto inst_id = forward_insts_.add(insts::GetInput(InputId(index)));
     auto data_id = data_.add(Data(shape));
 
-    gradients_[inst_id] = grad_inst_id;
+    gradients_[inst_id] = requires_grad ? InstId::Pending : InstId::None;
     forward_data_[inst_id] = data_id;
     input_tensors_.push_back(inst_id);
 
