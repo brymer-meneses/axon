@@ -1,16 +1,10 @@
 module;
 
-#include <cassert>
-#include <flat_map>
-#include <map>
-#include <ranges>
-#include <string>
-#include <variant>
-
 #include "axon/base/dcheck.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/TypeName.h"
 #include "xtensor/containers/xarray.hpp"
 
 export module axon.core:mod;
@@ -31,8 +25,9 @@ class Data {
       : value_(xt::empty<float>(shape)) {}
   explicit Data(xt::xarray<float> value) : value_(std::move(value)) {}
 
-  // xt::xarray<float> internally uses uint64_t for the elements in its shape
-  // array. But MLIR tensors expect int64_t :<
+  // We can't use `value_.shape()` since xt::xarray<float> internally uses
+  // uint64_t for the elements in its shape array. But MLIR tensors expect
+  // int64_t :<
   auto shape() const -> llvm::SmallVector<int64_t> {
     llvm::SmallVector<int64_t, 4> shape;
     for (auto d : value_.shape()) {
@@ -51,8 +46,9 @@ class Data {
 
 class Module {
  public:
-  auto check_requires_grad(InstId tensor_inst_id) const -> bool {
-    return gradients_.contains(tensor_inst_id);
+  auto check_requires_grad(InstId tensor_id) const -> bool {
+    InstId grad_id = gradients_.get(tensor_id);
+    return grad_id.is_pending() or grad_id.has_value();
   }
   // Finalizes the module and constructs the backward graph.
   auto create_return(InstId tensor_id) -> void {
@@ -91,17 +87,18 @@ class Module {
           inst.parents(),
           [this](InstId parent_id) { return check_requires_grad(parent_id); });
 
-      gradients_[inst_id] = requires_grad ? InstId::Pending : InstId::None;
+      gradients_.set(inst_id, requires_grad ? InstId::Pending : InstId::None);
     }
     return inst_id;
   }
 
   auto create_tensor(xt::xarray<float> value, bool requires_grad) -> InstId {
     auto inst_id = forward_insts_.add(insts::LocalTensor{});
-    auto data_id = data_.add(Data(std::move(value)));
+    auto data_id = data_.emplace(std::move(value));
 
-    gradients_[inst_id] = requires_grad ? InstId::Pending : InstId::None;
-    forward_data_[inst_id] = data_id;
+    gradients_.set(inst_id, requires_grad ? InstId::Pending : InstId::None);
+    forward_data_.set(inst_id, data_id);
+
     return inst_id;
   }
 
@@ -111,32 +108,25 @@ class Module {
                 "Overflow.");
     auto index = static_cast<int32_t>(input_tensors_.size());
     auto inst_id = forward_insts_.add(insts::GetInput(InputId(index)));
-    auto data_id = data_.add(Data(shape));
+    auto data_id = data_.emplace(shape);
 
-    gradients_[inst_id] = requires_grad ? InstId::Pending : InstId::None;
-    forward_data_[inst_id] = data_id;
+    gradients_.set(inst_id, requires_grad ? InstId::Pending : InstId::None);
+    forward_data_.set(inst_id, data_id);
     input_tensors_.push_back(inst_id);
 
     return inst_id;
   }
 
-  auto get_tensor_data(InstId inst_id, bool is_forward) -> Data& {
+  auto get_data(InstId inst_id, bool is_forward) -> Data& {
     auto data_id =
-        is_forward ? forward_data_[inst_id] : backward_data_[inst_id];
+        is_forward ? forward_data_.get(inst_id) : backward_data_.get(inst_id);
     return data_.get(data_id);
   }
 
   auto forward_insts() const -> const auto& { return forward_insts_; }
-  auto forward_insts() -> auto& { return forward_insts_; }
-
   auto backward_insts() const -> const auto& { return backward_insts_; }
-  auto backward_insts() -> auto& { return backward_insts_; }
-
   auto input_tensors() const -> const auto& { return input_tensors_; }
-  auto input_tensors() -> auto& { return input_tensors_; }
-
   auto cached_values() const -> const auto& { return cached_values_; }
-  auto cached_values() -> auto& { return cached_values_; }
 
  private:
   auto create_backward_inst(Inst inst) -> InstId {
@@ -159,13 +149,13 @@ class Module {
   auto accumulate_grad(InstId tensor_id, InstId grad_inst_id) -> void {
     AXON_DCHECK(check_requires_grad(tensor_id),
                 "Passed `tensor_id` must require gradients");
-    InstId current_gradient_id = gradients_[tensor_id];
+    InstId current_gradient_id = gradients_.get(tensor_id);
     if (current_gradient_id == InstId::Pending) {
       grad_inst_id =
           create_backward_inst(insts::Add(current_gradient_id, grad_inst_id));
     }
 
-    gradients_[tensor_id] = grad_inst_id;
+    gradients_.set(tensor_id, grad_inst_id);
   }
 
   // Instructions for the forward pass.

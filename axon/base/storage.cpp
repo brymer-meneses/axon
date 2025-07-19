@@ -145,60 +145,45 @@ class IdStore {
 
  public:
   auto add(KeyType key, ValueType value) -> void {
-    AXON_DCHECK(not contains(key), "Passed key must used.");
+    AXON_DCHECK(not contains(key), "Passed key must not be used.");
     pairs_.emplace_back(key, value);
   }
 
   auto contains(KeyType target_key) const -> bool {
-    for (auto key : keys()) {
-      if (target_key == key) {
+    for (auto pair : pairs_) {
+      if (target_key == pair.key) {
         return true;
       }
     }
     return false;
   }
 
-  auto operator[](KeyType key) const -> const ValueType& { return get(key); }
-  auto operator[](KeyType key) -> ValueType& { return get(key); }
-
-  auto get(KeyType target_key) -> ValueType& {
+  auto get(KeyType target_key) const -> ValueType {
     AXON_DCHECK(target_key.has_value(), "Passed key must have a value.");
-    for (auto& [key, value] : pairs_) {
+    for (auto [key, value] : pairs_) {
       if (target_key == key) {
         return value;
       }
     }
 
-    add(target_key, ValueType::None);
-    return pairs_.back().value;
+    return ValueType::None;
   }
 
-  auto get(KeyType target_key) const -> const ValueType& {
+  auto set(KeyType target_key, ValueType target_value) -> void {
     AXON_DCHECK(target_key.has_value(), "Passed key must have a value.");
-    for (const auto& [key, value] : pairs_) {
-      if (target_key == key) {
-        return value;
+    for (auto& pair : pairs_) {
+      if (pair.key == target_key) {
+        pair.value = target_value;
+        return;
       }
     }
 
-    add(target_key, ValueType::None);
-    return pairs_.back().value;
-  }
-
-  auto set(KeyType target_key, ValueType target_value) {
-    AXON_DCHECK(target_key.has_value(), "Passed key must have a value.");
-    for (auto& [i, pair] : llvm::enumerate(pairs_)) {
-      if (pair[i].key == target_key) {
-        pairs_[i].value = target_value;
-      }
-    }
     add(target_key, target_value);
   }
 
   auto size() const -> size_t { return pairs_.size(); }
 
   auto pairs() const -> const auto& { return pairs_; }
-  auto pairs() -> auto& { return pairs_; }
 
   auto keys() const -> auto {
     return std::views::transform(pairs_,

@@ -12,7 +12,10 @@ struct InstId : IndexBase<InstId> {
   using IndexBase::IndexBase;
 
   static const InstId Pending;
+
+  auto is_pending() const -> bool { return *this == InstId::Pending; }
 };
+
 inline constexpr auto InstId::Pending = InstId(-2);
 
 struct InputId : IndexBase<InputId> {

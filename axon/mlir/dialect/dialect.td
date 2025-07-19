@@ -36,7 +36,7 @@ def Axon_TensorRefType : AxonDialect_Type<"TensorRef", "tensor_ref"> {
   }];
 }
 
-def Axon_TensorRefListType : AxonDialect_Type<"TensorRefList", "tensor_ref_list"> {
+def Axon_TensorRefListType : AxonDialect_Type<"TensorRefList", "list"> {
   let parameters = (ins ArrayRefTensorRefType:$values);
   let hasCustomAssemblyFormat = 1;
 

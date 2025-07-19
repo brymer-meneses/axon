@@ -1,5 +1,7 @@
 module;
 
+#include <print>
+
 #include "llvm/ADT/SmallVector.h"
 
 export module axon.core:inst_rules;
@@ -36,16 +38,12 @@ class BackwardBuilder {
 };
 
 template <typename T>
-struct InstHandler {
-  auto backward(const T&, InstId, BackwardBuilder&) -> void {
-    static_assert(false, "Base case");
-  }
-};
+struct InstHandler;
 
 template <>
 struct InstHandler<insts::Add> {
-  auto backward(const insts::Add& op, InstId grad_id, BackwardBuilder& builder)
-      -> void {
+  static auto backward(const insts::Add& op, InstId grad_id,
+                       BackwardBuilder& builder) -> void {
     if (builder.check_requires_grad(op.lhs_id)) {
       builder.backward(op.lhs_id, grad_id);
     }
@@ -57,8 +55,8 @@ struct InstHandler<insts::Add> {
 
 template <>
 struct InstHandler<insts::Mul> {
-  auto backward(const insts::Mul& op, InstId grad_id, BackwardBuilder& builder)
-      -> void {
+  static auto backward(const insts::Mul& op, InstId grad_id,
+                       BackwardBuilder& builder) -> void {
     if (builder.check_requires_grad(op.lhs_id)) {
       auto cached_value_id = builder.get_cached_value(op.rhs_id);
       auto prod = builder.emit_inst(insts::Mul(grad_id, cached_value_id));

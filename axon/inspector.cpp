@@ -1,6 +1,4 @@
 
-#include <iostream>
-#include <print>
 
 #include "llvm/Support/raw_ostream.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -14,13 +12,8 @@ auto main() -> int {
 
   auto x = module.create_tensor({{1, 2, 3}, {4, 5, 6}}, true);
   auto y = module.create_tensor({{1, 2, 3}, {1, 2, 3}}, true);
-  auto z = module.create_tensor({{1, 2, 3}, {1, 2, 3}}, true);
-
-  auto l0 = module.emit_inst(axon::insts::Add(x, y));
-  auto l1 = module.emit_inst(axon::insts::Mul(z, y));
-  auto l2 = module.emit_inst(axon::insts::Mul(l0, l1));
-
-  module.create_return(l2);
+  auto l = module.emit_inst(axon::insts::Mul(x, y));
+  module.create_return(l);
 
   mlir::OpPrintingFlags flags;
   mlir::MLIRContext ctx;
