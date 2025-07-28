@@ -5,4 +5,4 @@ module;
 export module axon.mlir;
 
 export import :context;
-export import :codegen;
+export import :codegen_module;

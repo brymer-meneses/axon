@@ -19,7 +19,8 @@ target_sources(libaxon
     axon/core/eager.cpp
     axon/core/module.cpp
 
-    axon/mlir/codegen.cpp
+    axon/mlir/codegen_module.cpp
+    axon/mlir/codegen_inst.cpp
     axon/mlir/mlir.cpp
     axon/mlir/context.cpp
   PRIVATE

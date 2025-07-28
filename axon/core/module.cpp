@@ -1,10 +1,8 @@
 module;
 
 #include "axon/base/dcheck.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/TypeName.h"
 #include "xtensor/containers/xarray.hpp"
 
 export module axon.core:mod;
