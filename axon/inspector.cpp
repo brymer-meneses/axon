@@ -10,9 +10,9 @@ import axon.mlir;
 auto main() -> int {
   axon::Module module;
 
-  auto x = module.create_tensor({{1, 2, 3}, {4, 5, 6}}, true);
-  auto y = module.create_tensor({{1, 2, 3}, {1, 2, 3}}, true);
-  auto l = module.emit_inst(axon::insts::Mul(x, y));
+  axon::InstId x = module.declare_input_tensor({2, 3}, true);
+  axon::InstId y = module.declare_input_tensor({2, 3}, true);
+  axon::InstId l = module.emit_inst(axon::insts::Mul(x, y));
   module.create_return(l);
 
   mlir::OpPrintingFlags flags;

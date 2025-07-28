@@ -1,16 +1,18 @@
-#include <print>
-#include <utility>
-
 #include "dialect.h"
 
 namespace axon {
 
 auto TensorRefType::print(mlir::AsmPrinter& printer) const -> void {
   printer << "<";
-  llvm::interleave(getShape(), printer, "x");
+  if (isDynamic()) {
+    printer << "*";
+  } else {
+    llvm::interleave(getShape(), printer, "x");
+  }
+
   printer << "x" << getElementType();
   if (getRequiresGrad()) {
-    printer << ", requires_grad";
+    printer << ", rg";
   }
   printer << ">";
 }

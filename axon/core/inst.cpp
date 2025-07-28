@@ -24,7 +24,7 @@ class Inst {
   Inst(InstType&& inst) : value_(inst) {}
 
   template <typename VisitorType>
-  auto visit(VisitorType&& visitor) -> auto {
+  auto visit(VisitorType&& visitor) const -> auto {
     return std::visit(visitor, value_);
   }
 

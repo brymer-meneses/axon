@@ -27,7 +27,7 @@ def ArrayRefTensorRefType : TypeParameter<"::llvm::ArrayRef<TensorRefType>", "Ar
   let allocator = "$_dst = $_allocator.copyInto($_self);";
 }
 
-def Axon_TensorRefType : AxonDialect_Type<"TensorRef", "tensor_ref"> {
+def Axon_TensorRefType : AxonDialect_Type<"TensorRef", "tref"> {
   let parameters = (ins "mlir::Type":$elementType, ArrayRefInt64:$shape, "bool":$requires_grad);
   let hasCustomAssemblyFormat = 1;
 
@@ -77,7 +77,7 @@ def Axon_GetDataOp : AxonDialect_Op<"get_data"> {
   ];
 
   let assemblyFormat = [{
-    $input attr-dict `:` type($input) `->` type($result)
+    $input attr-dict `:` qualified(type($input)) `->` type($result)
   }];
 }
 
@@ -112,7 +112,7 @@ def Axon_ListAccessOp : AxonDialect_Op<"list_access"> {
   let results = (outs Axon_TensorRefType:$output);
 
   let assemblyFormat = [{
-    $input `[` $index `]` attr-dict `:` type($input) `->` type($output)
+    $input `[` $index `]` attr-dict `:` type($input) `->` qualified(type($output))
   }];
 }
 

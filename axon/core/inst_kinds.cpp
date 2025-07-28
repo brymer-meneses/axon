@@ -34,13 +34,22 @@ struct GetInput {
 };
 
 struct GetCachedValue {
-  CachedValueId value_id;
+  CachedValueId cached_value_id;
 };
 
 struct SetCachedValue {
-  InstId value;
-  CachedValueId value_id;
+  CachedValueId cached_value_id;
+
+  // The value to set to the cached_value_id.
+  InstId new_value_id;
 };
+
+struct AccumulateGrad {
+  InputId input_id;
+  InstId value_id;
+};
+
+struct InitialGradient {};
 
 struct LocalTensor {};
 
@@ -49,9 +58,9 @@ struct ModuleCall {};
 }  // namespace insts
 
 using InstInternalType =
-    std::variant<insts::MatMul, insts::Add, insts::Mul, insts::Transpose,
-                 insts::GetInput, insts::GetCachedValue, insts::SetCachedValue,
-                 insts::LocalTensor>;
+    std::variant<insts::Add, insts::Mul, insts::GetInput, insts::GetCachedValue,
+                 insts::SetCachedValue, insts::LocalTensor,
+                 insts::InitialGradient, insts::AccumulateGrad>;
 
 template <typename T>
 constexpr bool IsExpressionInst =

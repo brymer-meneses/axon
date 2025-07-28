@@ -52,7 +52,7 @@ class Module {
   }
   // Finalizes the module and constructs the backward graph.
   auto create_return(InstId tensor_id) -> void {
-    auto grad_id = backward_insts_.add(insts::GetInput(InputId(0)));
+    auto grad_id = backward_insts_.add(insts::InitialGradient{});
 
     llvm::SmallVector<Dependency> deps = {{tensor_id, grad_id}};
     BackwardBuilder builder{*this, deps};
@@ -76,7 +76,15 @@ class Module {
       auto cached_value = backward_insts_.get(cached_value_inst_id)
                               .get_as<insts::GetCachedValue>();
       forward_insts_.emplace(
-          insts::SetCachedValue(forward_inst_id, cached_value.value_id));
+          insts::SetCachedValue(cached_value.cached_value_id, forward_inst_id));
+    }
+
+    for (auto [i, input_inst_id] : llvm::enumerate(input_tensors_)) {
+      if (not check_requires_grad(input_inst_id)) {
+        continue;
+      }
+      auto grad_id = gradients_.get(input_inst_id);
+      backward_insts_.emplace(insts::AccumulateGrad(InputId(i), grad_id));
     }
   }
 
@@ -123,6 +131,11 @@ class Module {
     return data_.get(data_id);
   }
 
+  auto get_inst(InstId inst_id, bool is_forward) -> const Inst& {
+    return is_forward ? forward_insts_.get(inst_id)
+                      : backward_insts_.get(inst_id);
+  }
+
   auto forward_insts() const -> const auto& { return forward_insts_; }
   auto backward_insts() const -> const auto& { return backward_insts_; }
   auto input_tensors() const -> const auto& { return input_tensors_; }
@@ -150,7 +163,7 @@ class Module {
     AXON_DCHECK(check_requires_grad(tensor_id),
                 "Passed `tensor_id` must require gradients");
     InstId current_gradient_id = gradients_.get(tensor_id);
-    if (current_gradient_id == InstId::Pending) {
+    if (current_gradient_id != InstId::Pending) {
       grad_inst_id =
           create_backward_inst(insts::Add(current_gradient_id, grad_inst_id));
     }

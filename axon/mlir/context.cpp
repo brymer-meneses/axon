@@ -19,7 +19,6 @@ export class Context {
   Context(Module& module, mlir::MLIRContext& ctx)
       : builder_(&ctx), module_(module) {
     mlir_module_ = mlir::ModuleOp::create(builder_.getUnknownLoc());
-    builder_.setInsertionPointToEnd(mlir_module_.getBody());
   }
 
   auto builder() -> mlir::OpBuilder& { return builder_; }
@@ -28,21 +27,15 @@ export class Context {
   auto module() -> Module& { return module_; }
   auto module() const -> const Module& { return module_; }
 
-  auto result() -> mlir::ModuleOp& { return mlir_module_; }
-  auto result() const -> const mlir::ModuleOp& { return mlir_module_; }
+  auto mlir_module() -> mlir::ModuleOp& { return mlir_module_; }
+  auto mlir_module() const -> const mlir::ModuleOp& { return mlir_module_; }
 
-  auto forward_values() -> llvm::DenseMap<InstId, mlir::Value>& {
-    return forward_values_;
-  }
-  auto forward_values() const -> const llvm::DenseMap<InstId, mlir::Value>& {
-    return forward_values_;
+  auto tensors(bool is_forward) -> llvm::DenseMap<InstId, mlir::Value>& {
+    return is_forward ? forward_tensors_ : backward_tensors_;
   }
 
-  auto backward_values() -> llvm::DenseMap<InstId, mlir::Value>& {
-    return backward_values_;
-  }
-  auto backward_values() const -> const llvm::DenseMap<InstId, mlir::Value>& {
-    return backward_values_;
+  auto inputs(bool is_forward) -> llvm::DenseMap<InputId, mlir::Value>& {
+    return is_forward ? forward_inputs_ : backward_inputs_;
   }
 
  private:
@@ -50,8 +43,11 @@ export class Context {
   mlir::ModuleOp mlir_module_;
   Module& module_;
 
-  llvm::DenseMap<InstId, mlir::Value> forward_values_;
-  llvm::DenseMap<InstId, mlir::Value> backward_values_;
+  llvm::DenseMap<InstId, mlir::Value> forward_tensors_;
+  llvm::DenseMap<InstId, mlir::Value> backward_tensors_;
+
+  llvm::DenseMap<InputId, mlir::Value> forward_inputs_;
+  llvm::DenseMap<InputId, mlir::Value> backward_inputs_;
 };
 
 }  // namespace axon
