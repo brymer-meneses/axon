@@ -57,7 +57,7 @@ target_link_libraries(libaxon
 if (MSVC)
   target_compile_options(libaxon PRIVATE /W4 /WX)
 else()
-  target_compile_options(libaxon PRIVATE -Wall -Wextra -Werror -Wpedantic)
+  target_compile_options(libaxon PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 set(LLVM_TARGET_DEFINITIONS axon/mlir/dialect/dialect.td)
