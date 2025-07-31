@@ -11,7 +11,7 @@ import axon.base;
 
 import :context;
 
-namespace axon {
+namespace axon::backend {
 
 template <Index T>
 static auto get_argument(Context& context, T id, bool is_forward)
@@ -126,4 +126,4 @@ export auto codegen_inst(Context& context, InstId inst_id, bool is_forward)
   inst.visit([&](const auto op) { codegen(context, op, inst_id, is_forward); });
 }
 
-}  // namespace axon
+}  // namespace axon::backend

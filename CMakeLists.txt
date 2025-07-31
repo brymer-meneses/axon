@@ -16,11 +16,12 @@ target_sources(libaxon
     axon/core/inst_kinds.cpp
     axon/core/inst_rules.cpp
     axon/core/ids.cpp
-    axon/core/eager.cpp
     axon/core/module.cpp
+    axon/core/context.cpp
+    axon/core/function.cpp
 
     axon/mlir/codegen_module.cpp
-    axon/mlir/codegen_inst.cpp
+    # axon/mlir/codegen_inst.cpp
     axon/mlir/mlir.cpp
     axon/mlir/context.cpp
   PRIVATE

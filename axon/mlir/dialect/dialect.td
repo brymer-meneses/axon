@@ -10,7 +10,7 @@ include "mlir/IR/AttrTypeBase.td"
 
 def AxonDialect : Dialect {
   let name = "axon";
-  let cppNamespace = "axon";
+  let cppNamespace = "axon::backend";
   let useDefaultTypePrinterParser = 1;
 }
 
@@ -68,7 +68,7 @@ def Axon_GetDataOp : AxonDialect_Op<"get_data"> {
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$input), [{
-      auto tensor_ref_type = input.getType().cast<axon::TensorRefType>();
+      auto tensor_ref_type = input.getType().cast<axon::backend::TensorRefType>();
       auto shape = tensor_ref_type.getShape();
       auto element_type = tensor_ref_type.getElementType();
       auto result_type = mlir::RankedTensorType::get(shape, element_type);

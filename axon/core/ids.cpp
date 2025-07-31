@@ -6,7 +6,7 @@ export module axon.core:ids;
 
 import axon.base;
 
-export namespace axon {
+export namespace axon::core {
 
 struct InstId : IndexBase<InstId> {
   using IndexBase::IndexBase;
@@ -33,4 +33,4 @@ struct CachedValueId : IndexBase<CachedValueId> {
   using IndexBase::IndexBase;
 };
 
-}  // namespace axon
+}  // namespace axon::core

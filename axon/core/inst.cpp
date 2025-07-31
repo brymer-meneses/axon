@@ -15,7 +15,7 @@ import :inst_kinds;
 
 import axon.base;
 
-export namespace axon {
+export namespace axon::core {
 
 class Inst {
  public:
@@ -77,4 +77,4 @@ class Inst {
   InstInternalType value_;
 };
 
-}  // namespace axon
+}  // namespace axon::core

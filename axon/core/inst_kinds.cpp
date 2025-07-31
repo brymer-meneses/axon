@@ -6,7 +6,7 @@ export module axon.core:inst_kinds;
 
 import :ids;
 
-export namespace axon {
+export namespace axon::core {
 
 namespace insts {
 
@@ -66,4 +66,4 @@ template <typename T>
 constexpr bool IsExpressionInst =
     llvm::is_one_of<T, insts::Add, insts::Mul, insts::MatMul>();
 
-}  // namespace axon
+}  // namespace axon::core

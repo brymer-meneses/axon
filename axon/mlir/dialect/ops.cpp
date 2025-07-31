@@ -1,7 +1,7 @@
 
 #include "dialect.h"
 
-namespace axon {
+namespace axon::backend {
 
 auto ConstantOp::parse(mlir::OpAsmParser& parser, mlir::OperationState& result)
     -> mlir::ParseResult {
@@ -22,4 +22,4 @@ auto ConstantOp::print(mlir::OpAsmPrinter& printer) -> void {
   printer << getValue();
 }
 
-}  // namespace axon
+}  // namespace axon::backend

@@ -1,7 +1,5 @@
 module;
 
-#include <print>
-
 #include "llvm/ADT/SmallVector.h"
 
 export module axon.core:inst_rules;
@@ -9,7 +7,7 @@ export module axon.core:inst_rules;
 import :inst_kinds;
 import :inst;
 
-export namespace axon {
+export namespace axon::core {
 
 class Module;
 
@@ -20,9 +18,9 @@ struct Dependency {
 
 // BackwardBuilder is a proxy to the `Module`. It provides clean APIs for
 // building the backward graph.
-class BackwardBuilder {
+class BackwardWriter {
  public:
-  BackwardBuilder(Module& module, llvm::SmallVector<Dependency>& deps)
+  BackwardWriter(Module& module, llvm::SmallVector<Dependency>& deps)
       : module_(module), deps_(deps) {}
 
   // These functions need to be forward declared to break a cyclic dependency.
@@ -43,7 +41,7 @@ struct InstHandler;
 template <>
 struct InstHandler<insts::Add> {
   static auto backward(const insts::Add& op, InstId grad_id,
-                       BackwardBuilder& builder) -> void {
+                       BackwardWriter& builder) -> void {
     if (builder.check_requires_grad(op.lhs_id)) {
       builder.backward(op.lhs_id, grad_id);
     }
@@ -56,7 +54,7 @@ struct InstHandler<insts::Add> {
 template <>
 struct InstHandler<insts::Mul> {
   static auto backward(const insts::Mul& op, InstId grad_id,
-                       BackwardBuilder& builder) -> void {
+                       BackwardWriter& builder) -> void {
     if (builder.check_requires_grad(op.lhs_id)) {
       auto cached_value_id = builder.get_cached_value(op.rhs_id);
       auto prod = builder.emit_inst(insts::Mul(grad_id, cached_value_id));
@@ -73,8 +71,8 @@ struct InstHandler<insts::Mul> {
 
 template <typename T>
 concept HasBackward =
-    requires(const T& op, InstId grad_id, BackwardBuilder& builder) {
+    requires(const T& op, InstId grad_id, BackwardWriter& builder) {
       { InstHandler<T>::backward(op, grad_id, builder) } -> std::same_as<void>;
     };
 
-}  // namespace axon
+}  // namespace axon::core

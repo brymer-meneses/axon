@@ -7,7 +7,7 @@
 
 #define GET_OP_CLASSES
 #include "generated/DialectOps.cpp.inc"
-namespace axon {
+namespace axon::backend {
 
 auto AxonDialect::initialize() -> void {
   addTypes<
@@ -21,4 +21,4 @@ auto AxonDialect::initialize() -> void {
       >();
 }
 
-}  // namespace axon
+}  // namespace axon::backend

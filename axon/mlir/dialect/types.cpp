@@ -1,6 +1,6 @@
 #include "dialect.h"
 
-namespace axon {
+namespace axon::backend {
 
 auto TensorRefType::print(mlir::AsmPrinter& printer) const -> void {
   printer << "<";
@@ -28,4 +28,4 @@ auto TensorRefListType::parse(mlir::AsmParser&) -> mlir::Type {
   return nullptr;
 }
 
-}  // namespace axon
+}  // namespace axon::backend
