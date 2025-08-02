@@ -1,80 +1,100 @@
 module;
 
-#include <print>
-
 #include "llvm/ADT/SmallVector.h"
 
 export module axon.core:inst_rules;
 
 import :inst_kinds;
 import :inst;
+import :graph;
+import :mod;
 
 export namespace axon {
 
-class Module;
-
-struct Dependency {
-  InstId tensor_id;
-  InstId grad_id;
-};
-
-// BackwardBuilder is a proxy to the `Module`. It provides clean APIs for
-// building the backward graph.
-class BackwardBuilder {
+class BackwardContext {
  public:
-  BackwardBuilder(Module& module, llvm::SmallVector<Dependency>& deps)
-      : module_(module), deps_(deps) {}
+  BackwardContext(Module& module) : module_(module) {}
 
-  // These functions need to be forward declared to break a cyclic dependency.
-  // These are defined in `module.cpp`.
-  auto check_requires_grad(InstId inst_id) const -> bool;
-  auto get_cached_value(InstId forward_inst_id) -> InstId;
-  auto backward(InstId tensor_inst_id, InstId grad_id) -> void;
-  auto emit_inst(Inst inst) -> InstId;
+  auto check_requires_grad(InstId inst_id) const -> bool {
+    return module_.check_requires_grad(inst_id);
+  }
+
+  auto get_cached_value(InstId forward_inst_id) -> InstId {
+    if (auto existing_id = cached_values_.get(forward_inst_id);
+        existing_id.has_value()) {
+      return existing_id;
+    }
+    auto cached_value_inst =
+        module_.forward().get_cached_value(forward_inst_id);
+    auto inst_id = module_.backward().emit(cached_value_inst);
+    cached_values_.set(forward_inst_id, inst_id);
+    return inst_id;
+  }
+
+  auto emit(Inst inst) -> InstId { return module_.backward().emit(inst); }
+
+  auto accumulate_grad(InstId forward_inst_id, InstId grad_id) -> void {
+    if (auto current_grad_id = module_.gradients().get(forward_inst_id);
+        current_grad_id.has_value()) {
+      grad_id = emit(insts::Add(current_grad_id, grad_id));
+    }
+
+    module_.gradients().set(forward_inst_id, grad_id);
+  }
 
  private:
   Module& module_;
-  llvm::SmallVector<Dependency>& deps_;
+  IdStore<InstId, InstId> cached_values_;
+};
+
+struct Dependency {
+  InstId inst_id;
+  InstId grad_id;
 };
 
 template <typename T>
-struct InstHandler;
+struct BackwardRule;
 
 template <>
-struct InstHandler<insts::Add> {
-  static auto backward(const insts::Add& op, InstId grad_id,
-                       BackwardBuilder& builder) -> void {
-    if (builder.check_requires_grad(op.lhs_id)) {
-      builder.backward(op.lhs_id, grad_id);
+struct BackwardRule<insts::Add> {
+  static auto apply(const insts::Add& op, InstId grad_id, BackwardContext& ctx)
+      -> llvm::SmallVector<Dependency> {
+    llvm::SmallVector<Dependency, 2> deps;
+    if (ctx.check_requires_grad(op.lhs_id)) {
+      deps.emplace_back(op.lhs_id, grad_id);
     }
-    if (builder.check_requires_grad(op.rhs_id)) {
-      builder.backward(op.rhs_id, grad_id);
+    if (ctx.check_requires_grad(op.rhs_id)) {
+      deps.emplace_back(op.rhs_id, grad_id);
     }
+    return deps;
   }
 };
 
 template <>
-struct InstHandler<insts::Mul> {
-  static auto backward(const insts::Mul& op, InstId grad_id,
-                       BackwardBuilder& builder) -> void {
-    if (builder.check_requires_grad(op.lhs_id)) {
-      auto cached_value_id = builder.get_cached_value(op.rhs_id);
-      auto prod = builder.emit_inst(insts::Mul(grad_id, cached_value_id));
-      builder.backward(op.lhs_id, prod);
+struct BackwardRule<insts::Mul> {
+  static auto apply(const insts::Mul& op, InstId grad_id, BackwardContext& ctx)
+      -> llvm::SmallVector<Dependency> {
+    llvm::SmallVector<Dependency, 2> deps;
+    if (ctx.check_requires_grad(op.lhs_id)) {
+      auto cached_value_id = ctx.get_cached_value(op.rhs_id);
+      auto prod = ctx.emit(insts::Mul(grad_id, cached_value_id));
+      deps.emplace_back(op.lhs_id, prod);
     }
-
-    if (builder.check_requires_grad(op.rhs_id)) {
-      auto cached_value_id = builder.get_cached_value(op.lhs_id);
-      auto prod = builder.emit_inst(insts::Mul(grad_id, cached_value_id));
-      builder.backward(op.rhs_id, prod);
+    if (ctx.check_requires_grad(op.rhs_id)) {
+      auto cached_value_id = ctx.get_cached_value(op.lhs_id);
+      auto prod = ctx.emit(insts::Mul(grad_id, cached_value_id));
+      deps.emplace_back(op.rhs_id, prod);
     }
+    return deps;
   }
 };
 
 template <typename T>
-concept HasBackward =
-    requires(const T& op, InstId grad_id, BackwardBuilder& builder) {
-      { InstHandler<T>::backward(op, grad_id, builder) } -> std::same_as<void>;
+concept HasBackwardRule =
+    requires(const T& op, InstId grad_id, BackwardContext& ctx) {
+      {
+        BackwardRule<T>::apply(op, grad_id, ctx)
+      } -> std::same_as<llvm::SmallVector<Dependency>>;
     };
 
 }  // namespace axon

@@ -1,25 +1,29 @@
 
-
 #include "llvm/Support/raw_ostream.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 
 import axon.core;
 import axon.mlir;
+import std;
 
 auto main() -> int {
-  axon::Module module;
+  auto ctx = std::make_shared<axon::Context>();
+  axon::Module mod{ctx};
 
-  axon::InstId x = module.declare_input_tensor({2, 3}, true);
-  axon::InstId y = module.declare_input_tensor({2, 3}, true);
-  axon::InstId l = module.emit_inst(axon::insts::Mul(x, y));
-  module.create_return(l);
+  auto x = mod.declare_input({2, 3}, true);
+  auto y = mod.declare_input({2, 3}, true);
+  auto l = mod.emit(axon::insts::Mul(x, y));
+  mod.set_output(l);
+
+  axon::finalize(mod);
 
   mlir::OpPrintingFlags flags;
-  mlir::MLIRContext ctx;
+  mlir::MLIRContext mlir_context;
+
   flags.printGenericOpForm(false);
 
-  if (auto mlir_module = axon::codegen(ctx, module)) {
-    mlir_module->print(llvm::outs(), flags);
+  if (auto module_op = axon::codegen(mod, mlir_context)) {
+    module_op->print(llvm::outs(), flags);
   }
 }

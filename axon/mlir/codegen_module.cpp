@@ -12,105 +12,72 @@ export module axon.mlir:codegen_module;
 import axon.core;
 import axon.base;
 
-import :context;
+import :compilation_context;
 import :codegen_inst;
 
 namespace axon {
 
-static auto inputs_type(Context& context) -> TensorRefListType {
-  llvm::SmallVector<TensorRefType> inputs;
-  auto* mlir_context = context.builder().getContext();
-  auto& module = context.module();
-  for (InstId tensor_id : module.input_tensors()) {
-    const auto& data = module.get_data(tensor_id, /*is_forward=*/true);
+static auto get_inputs_type(CompilationContext& ctx) -> TensorRefListType {
+  llvm::SmallVector<TensorRefType> types;
+  auto* mlir_ctx = ctx.builder().getContext();
+  auto& inputs = ctx.module().forward().inputs();
+  auto element_type = ctx.builder().getF32Type();
+
+  for (InputId input_id : inputs.iter()) {
+    auto& input_info = inputs.get(input_id);
+    auto input_type = TensorRefType::get(
+        mlir_ctx, element_type, input_info.shape, input_info.requires_grad);
+    types.push_back(input_type);
+  }
+
+  return TensorRefListType::get(mlir_ctx, types);
+}
+
+static auto get_cached_values_type(CompilationContext& ctx)
+    -> TensorRefListType {
+  llvm::SmallVector<TensorRefType> types;
+  auto* mlir_ctx = ctx.builder().getContext();
+  auto element_type = ctx.builder().getF32Type();
+  auto& forward = ctx.module().forward();
+
+  for (auto inst_id : forward.cached_values().keys()) {
+    auto shape = forward.get_shape(inst_id);
+    auto requires_grad = ctx.module().check_requires_grad(inst_id);
     auto input_type =
-        TensorRefType::get(mlir_context, context.builder().getF32Type(),
-                           data.shape(), module.check_requires_grad(tensor_id));
-    inputs.push_back(input_type);
+        TensorRefType::get(mlir_ctx, element_type, shape, requires_grad);
+    types.push_back(input_type);
   }
-  return TensorRefListType::get(mlir_context, inputs);
+  return TensorRefListType::get(mlir_ctx, types);
 }
 
-static auto cached_values_type(Context& context) -> TensorRefListType {
-  llvm::SmallVector<TensorRefType> cached_values;
-  auto* mlir_context = context.builder().getContext();
-  auto& module = context.module();
+static auto codegen_module(CompilationContext& ctx) -> void {
+  ctx.builder().setInsertionPointToEnd(ctx.module_op().getBody());
 
-  for (InstId tensor_id : module.cached_values().keys()) {
-    const auto& data = module.get_data(tensor_id, /*is_forward=*/true);
-    auto inst_type =
-        TensorRefType::get(mlir_context, context.builder().getF32Type(),
-                           data.shape(), module.check_requires_grad(tensor_id));
-    cached_values.push_back(inst_type);
-  }
-  return TensorRefListType::get(mlir_context, cached_values);
-}
+  auto loc = ctx.builder().getUnknownLoc();
 
-static auto codegen_function_proto(Context& context, std::string_view name,
-                                   bool is_forward) -> mlir::func::FuncOp {
   llvm::SmallVector<mlir::Type> args_type;
-  auto* mlir_context = context.builder().getContext();
 
-  args_type.emplace_back(inputs_type(context));
-  args_type.emplace_back(cached_values_type(context));
+  args_type.emplace_back(get_inputs_type(ctx));
+  args_type.emplace_back(get_cached_values_type(ctx));
 
-  if (not is_forward) {
-    // Hardcode for now, the return type should be inferred from module.
-    args_type.emplace_back(
-        TensorRefType::get(mlir_context, context.builder().getF32Type(),
-                           /*shape=*/{2, 3}, /*requires_grad=*/true));
-  }
-
-  auto unknown_loc = context.builder().getUnknownLoc();
-
-  // The return type will be inferred later.
-  auto func_type = context.builder().getFunctionType(args_type, {});
-  auto func = context.builder().create<mlir::func::FuncOp>(unknown_loc, name,
-                                                           func_type);
-
-  return func;
+  auto func_type = ctx.builder().getFunctionType(args_type, {});
+  auto func =
+      ctx.builder().create<mlir::func::FuncOp>(loc, "forward", func_type);
+  ctx.builder().setInsertionPointToStart(func.addEntryBlock());
+  ctx.builder().create<mlir::func::ReturnOp>(loc);
 }
 
-static auto codegen_forward(Context& context) -> void {
-  context.builder().setInsertionPointToEnd(context.mlir_module().getBody());
+export auto codegen(Module& module, mlir::MLIRContext& mlir_ctx)
+    -> mlir::ModuleOp {
+  mlir_ctx.loadDialect<mlir::func::FuncDialect>();
+  mlir_ctx.loadDialect<mlir::tensor::TensorDialect>();
+  mlir_ctx.loadDialect<mlir::arith::ArithDialect>();
+  mlir_ctx.loadDialect<AxonDialect>();
 
-  auto loc = context.builder().getUnknownLoc();
-  auto func = codegen_function_proto(context, "forward", /*is_forward=*/true);
-  context.builder().setInsertionPointToStart(func.addEntryBlock());
+  CompilationContext compilation_ctx{module, mlir_ctx};
+  codegen_module(compilation_ctx);
 
-  for (auto inst_id : context.module().forward_insts().iter()) {
-    codegen_inst(context, inst_id, /*is_forward=*/true);
-  }
-
-  context.builder().create<mlir::func::ReturnOp>(loc);
-}
-
-static auto codegen_backward(Context& context) -> void {
-  context.builder().setInsertionPointToEnd(context.mlir_module().getBody());
-
-  auto loc = context.builder().getUnknownLoc();
-  auto func = codegen_function_proto(context, "backward", /*is_forward=*/false);
-  context.builder().setInsertionPointToStart(func.addEntryBlock());
-
-  for (auto inst_id : context.module().backward_insts().iter()) {
-    codegen_inst(context, inst_id, /*is_forward=*/false);
-  }
-
-  context.builder().create<mlir::func::ReturnOp>(loc);
-}
-
-export auto codegen(mlir::MLIRContext& ctx, Module& module) -> mlir::ModuleOp {
-  ctx.loadDialect<mlir::func::FuncDialect>();
-  ctx.loadDialect<mlir::tensor::TensorDialect>();
-  ctx.loadDialect<mlir::arith::ArithDialect>();
-  ctx.loadDialect<AxonDialect>();
-
-  Context context{module, ctx};
-
-  codegen_forward(context);
-  codegen_backward(context);
-
-  return context.mlir_module();
+  return compilation_ctx.module_op();
 }
 
 }  // namespace axon

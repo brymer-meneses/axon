@@ -1,12 +1,10 @@
 module;
 
-#include <cassert>
-#include <cstdint>
-#include <type_traits>
-
 #include "llvm/ADT/DenseMapInfo.h"
 
 export module axon.base:index_base;
+
+import std;
 
 export namespace axon {
 

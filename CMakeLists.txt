@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 4.0.2)
+
+set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "a9e1cf81-9932-4810-974b-6eccaf14e457")
+set(CMAKE_CXX_MODULE_STD 1)
+
 project(axon)
 
 include(cmake/dependencies.cmake)
@@ -13,16 +17,18 @@ target_sources(libaxon
 
     axon/core/core.cpp
     axon/core/inst.cpp
+    axon/core/autodiff.cpp
     axon/core/inst_kinds.cpp
     axon/core/inst_rules.cpp
     axon/core/ids.cpp
-    axon/core/eager.cpp
+    axon/core/graph.cpp
+    axon/core/context.cpp
     axon/core/module.cpp
 
     axon/mlir/codegen_module.cpp
     axon/mlir/codegen_inst.cpp
     axon/mlir/mlir.cpp
-    axon/mlir/context.cpp
+    axon/mlir/compilation_context.cpp
   PRIVATE
     axon/mlir/dialect/dialect.cpp
     axon/mlir/dialect/types.cpp
