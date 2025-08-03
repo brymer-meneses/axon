@@ -30,6 +30,12 @@ class Inst {
 
   template <typename InstType>
     requires std::is_convertible_v<InstType, InstInternalType>
+  auto is() const -> bool {
+    return std::get_if<InstType>(&value_) != nullptr;
+  }
+
+  template <typename InstType>
+    requires std::is_convertible_v<InstType, InstInternalType>
   auto try_get_as() const -> std::optional<InstType> {
     if (auto* value = std::get_if<InstType>(&value_)) {
       return std::make_optional<InstType>(*value);

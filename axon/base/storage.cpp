@@ -37,6 +37,11 @@ class ValueStore {
 
   auto size() const -> size_t { return values_.size(); }
 
+  auto last() -> IndexType {
+    auto index = static_cast<int32_t>(values_.size() - 1);
+    return IndexType(index);
+  }
+
   auto iter() const -> auto {
     return std::views::iota(0u, values_.size()) |
            std::views::transform([](auto val) { return IndexType(val); });

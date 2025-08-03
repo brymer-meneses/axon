@@ -20,14 +20,23 @@ auto finalize(Module& module) -> void {
   BackwardContext ctx{module};
 
   llvm::SmallVector<Dependency> work_list;
-  work_list.emplace_back(module.forward().output(), grad_id);
+  auto& forward_insts = module.forward().insts();
+  auto output_id = forward_insts.last();
+
+  AXON_DCHECK(forward_insts.get(output_id).is<insts::Return>(),
+              "last inst is not a return.");
+
+  auto returned_id =
+      forward_insts.get(output_id).get_as<insts::Return>().returned_id;
+
+  work_list.emplace_back(returned_id, grad_id);
 
   while (not work_list.empty()) {
     auto dep = work_list.pop_back_val();
 
     ctx.accumulate_grad(dep.inst_id, dep.grad_id);
 
-    auto& inst = module.forward().insts().get(dep.inst_id);
+    auto& inst = forward_insts.get(dep.inst_id);
     inst.visit([&](const auto& op) {
       using InstType = std::decay_t<decltype(op)>;
       if constexpr (HasBackwardRule<InstType>) {

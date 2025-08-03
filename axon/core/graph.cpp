@@ -67,11 +67,6 @@ export class Graph {
     return inst_id;
   }
 
-  auto set_output(InstId output) -> void {
-    AXON_DCHECK(not output_.has_value(), "Set output called twice.");
-    output_ = output;
-  }
-
   auto insts() -> auto& { return insts_; }
   auto insts() const -> const auto& { return insts_; }
 
@@ -80,8 +75,6 @@ export class Graph {
 
   auto data() -> auto& { return data_; }
   auto data() const -> const auto& { return data_; }
-
-  auto output() const -> InstId { return output_; }
 
   auto cached_values() -> auto& { return cached_values_; }
   auto cached_values() const -> const auto& { return cached_values_; }
@@ -92,8 +85,6 @@ export class Graph {
 
   IdStore<InstId, DataId> data_;
   IdStore<InstId, CachedValueId> cached_values_;
-
-  InstId output_ = InstId::None;
 };
 
 }  // namespace axon

@@ -14,7 +14,7 @@ auto main() -> int {
   auto x = mod.declare_input({2, 3}, true);
   auto y = mod.declare_input({2, 3}, true);
   auto l = mod.emit(axon::insts::Mul(x, y));
-  mod.set_output(l);
+  mod.create_return(l);
 
   axon::finalize(mod);
 

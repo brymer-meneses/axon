@@ -49,6 +49,10 @@ struct AccumulateGrad {
   InstId value_id;
 };
 
+struct Return {
+  InstId returned_id;
+};
+
 struct InitialGradient {};
 
 struct LocalTensor {};
@@ -60,7 +64,7 @@ struct ModuleCall {};
 using InstInternalType =
     std::variant<insts::Add, insts::Mul, insts::GetInput, insts::GetCachedValue,
                  insts::SetCachedValue, insts::LocalTensor,
-                 insts::InitialGradient, insts::AccumulateGrad>;
+                 insts::InitialGradient, insts::AccumulateGrad, insts::Return>;
 
 template <typename T>
 constexpr bool IsExpressionInst =

@@ -31,7 +31,6 @@ target_sources(libaxon
     axon/mlir/compilation_context.cpp
   PRIVATE
     axon/mlir/dialect/dialect.cpp
-    axon/mlir/dialect/types.cpp
     axon/mlir/dialect/ops.cpp
 )
 
@@ -56,6 +55,7 @@ target_link_libraries(libaxon
   MLIRIR
   MLIRDialect
   MLIRFuncDialect
+  MLIRLinalgDialect
   MLIRTensorDialect
   MLIRArithDialect
 )
