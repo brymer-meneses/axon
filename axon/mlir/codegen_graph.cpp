@@ -17,24 +17,50 @@ import axon.base;
 
 import :compilation_context;
 
-static constexpr auto CachedValuesIndex = 0;
-static constexpr auto InputsIndex = 1;
-static constexpr auto BuffersIndex = 2;
-
 namespace axon {
 
-static auto get_argument(CompilationContext& ctx, int32_t argument_index,
-                         uint64_t tuple_index) -> mlir::Value {
-  AXON_DCHECK(ctx.func_op.getArgumentTypes().size() >
-                  static_cast<int32_t>(argument_index),
-              "{} < {}", ctx.func_op.getArgumentTypes().size(), argument_index);
+// `ArgumentIndex` is a helper to easily declare the argument index of a
+// function in the module. The forward pass contains the following arguments:
+//  - cached values
+//  - inputs
+//  - buffers
+//    - this is only present if the graph is a backward graph.
+//  These three arguments are passed as a tuple containing pointers to the
+//  buffer for these tensors.
+template <typename IndexType>
+struct ArgumentIndex;
+
+template <>
+struct ArgumentIndex<CachedValueId> {
+  static constexpr auto value = 0;
+};
+
+template <>
+struct ArgumentIndex<InputId> {
+  static constexpr auto value = 1;
+};
+
+template <>
+struct ArgumentIndex<BufferId> {
+  static constexpr auto value = 2;
+};
+
+template <Index IndexType>
+static auto get_argument(CompilationContext& ctx, IndexType index)
+    -> mlir::Value {
+  auto func_args_size = ctx.func_op.getArgumentTypes().size();
+  auto argument_index = ArgumentIndex<IndexType>::value;
+
+  AXON_DCHECK(static_cast<int32_t>(func_args_size) > argument_index, "{} < {}",
+              func_args_size, argument_index);
 
   auto argument = ctx.func_op.getArgument(argument_index);
   auto tuple = llvm::dyn_cast<mlir::TupleType>(argument.getType());
+  auto tuple_index = index.value();
   auto result_type = tuple.getType(tuple_index);
 
-  if (ctx.args.contains({argument_index, tuple_index})) {
-    return ctx.args[{argument_index, tuple_index}];
+  if (auto lookup = ctx.args.lookup({argument_index, tuple_index})) {
+    return lookup;
   }
 
   auto accessed = ctx.builder.create<TupleAccessOp>(
@@ -44,8 +70,7 @@ static auto get_argument(CompilationContext& ctx, int32_t argument_index,
 
 static auto codegen(insts::SetCachedValue op, CompilationContext& ctx)
     -> mlir::Value {
-  auto cached_value =
-      get_argument(ctx, CachedValuesIndex, op.cached_value_id.value());
+  auto cached_value = get_argument(ctx, op.cached_value_id);
   auto to_store = ctx.values[op.new_value_id];
   ctx.builder.create<StoreOp>(ctx.builder.getUnknownLoc(), cached_value,
                               to_store);
@@ -56,8 +81,7 @@ static auto codegen(insts::GetCachedValue op, CompilationContext& ctx)
     -> mlir::Value {
   AXON_DCHECK(op.cached_value_id.has_value(), "Invalid index");
   auto loc = ctx.builder.getUnknownLoc();
-  auto memref =
-      get_argument(ctx, CachedValuesIndex, op.cached_value_id.value());
+  auto memref = get_argument(ctx, op.cached_value_id);
   auto memref_type = llvm::dyn_cast<mlir::MemRefType>(memref.getType());
   auto tensor_type = mlir::RankedTensorType::get(memref_type.getShape(),
                                                  memref_type.getElementType());
@@ -69,7 +93,7 @@ static auto codegen(insts::GetCachedValue op, CompilationContext& ctx)
 static auto codegen(insts::AccumulateGrad op, CompilationContext& ctx)
     -> mlir::Value {
   auto value = ctx.values[op.value_id];
-  auto buffer = get_argument(ctx, BuffersIndex, op.buffer_id.value());
+  auto buffer = get_argument(ctx, op.buffer_id);
 
   ctx.builder.create<AccumulateOp>(ctx.builder.getUnknownLoc(), buffer, value);
   return {};
@@ -79,7 +103,7 @@ static auto codegen(insts::GetInput op, CompilationContext& ctx)
     -> mlir::Value {
   AXON_DCHECK(op.input_id.has_value(), "Invalid index");
   auto loc = ctx.builder.getUnknownLoc();
-  auto memref = get_argument(ctx, InputsIndex, op.input_id.value());
+  auto memref = get_argument(ctx, op.input_id);
   auto memref_type = llvm::dyn_cast<mlir::MemRefType>(memref.getType());
   auto tensor_type = mlir::RankedTensorType::get(memref_type.getShape(),
                                                  memref_type.getElementType());
