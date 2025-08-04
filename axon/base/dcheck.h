@@ -7,7 +7,7 @@
 #define AXON_DCHECK(condition, msg, ...)                                 \
   do {                                                                   \
     if (not(condition)) [[unlikely]] {                                   \
-      std::println(stderr, "{}:{} DCHECK failed: " #condition " - " msg, \
+      std::println(stderr, "{}:{} DCHECK failed `" #condition "`: " msg, \
                    __FILE_NAME__, __LINE__ __VA_OPT__(, ) __VA_ARGS__);  \
       std::terminate();                                                  \
     }                                                                    \

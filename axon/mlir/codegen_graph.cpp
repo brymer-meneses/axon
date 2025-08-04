@@ -25,8 +25,11 @@ namespace axon {
 
 static auto get_argument(CompilationContext& ctx, int32_t argument_index,
                          uint64_t tuple_index) -> mlir::Value {
-  auto* block = ctx.builder.getInsertionBlock();
-  auto argument = block->getArgument(argument_index);
+  AXON_DCHECK(ctx.func_op.getArgumentTypes().size() >
+                  static_cast<int32_t>(argument_index),
+              "{} < {}", ctx.func_op.getArgumentTypes().size(), argument_index);
+
+  auto argument = ctx.func_op.getArgument(argument_index);
   auto tuple = llvm::dyn_cast<mlir::TupleType>(argument.getType());
   auto result_type = tuple.getType(tuple_index);
 
@@ -60,7 +63,7 @@ static auto codegen(insts::GetCachedValue op, CompilationContext& ctx)
                                                  memref_type.getElementType());
   auto as_tensor = ctx.builder.create<mlir::bufferization::ToTensorOp>(
       loc, tensor_type, memref);
-  return {as_tensor};
+  return as_tensor;
 }
 
 static auto codegen(insts::AccumulateGrad op, CompilationContext& ctx)
@@ -82,7 +85,7 @@ static auto codegen(insts::GetInput op, CompilationContext& ctx)
                                                  memref_type.getElementType());
   auto as_tensor = ctx.builder.create<mlir::bufferization::ToTensorOp>(
       loc, tensor_type, memref);
-  return {as_tensor};
+  return as_tensor;
 }
 
 static auto codegen(insts::Return op, CompilationContext& ctx) -> mlir::Value {
@@ -104,21 +107,19 @@ static auto codegen(insts::LocalTensor op, CompilationContext& ctx)
 static auto codegen(insts::Add op, CompilationContext& ctx) -> mlir::Value {
   auto lhs = ctx.values[op.lhs_id];
   auto rhs = ctx.values[op.rhs_id];
-  return ctx.builder.create<AddOp>(ctx.builder.getUnknownLoc(), lhs, rhs);
+  return {ctx.builder.create<AddOp>(ctx.builder.getUnknownLoc(), lhs, rhs)};
 }
 
 static auto codegen(insts::Mul op, CompilationContext& ctx) -> mlir::Value {
   auto lhs = ctx.values[op.lhs_id];
   auto rhs = ctx.values[op.rhs_id];
-  return ctx.builder.create<MulOp>(ctx.builder.getUnknownLoc(), lhs, rhs);
+  return {ctx.builder.create<MulOp>(ctx.builder.getUnknownLoc(), lhs, rhs)};
 }
 
 export auto codegen_graph(Graph& graph, mlir::OpBuilder& builder,
                           mlir::ModuleOp& module_op, llvm::StringLiteral name,
                           llvm::SmallVector<mlir::Type> additional_args,
                           bool is_backward) -> void {
-  CompilationContext ctx(graph, builder);
-
   builder.setInsertionPointToEnd(module_op.getBody());
   auto loc = builder.getUnknownLoc();
 
@@ -131,8 +132,9 @@ export auto codegen_graph(Graph& graph, mlir::OpBuilder& builder,
   auto func_type = builder.getFunctionType(additional_args, return_types);
 
   auto func_op = builder.create<mlir::func::FuncOp>(loc, name, func_type);
-  auto* block = func_op.addEntryBlock();
-  builder.setInsertionPointToStart(block);
+  builder.setInsertionPointToStart(func_op.addEntryBlock());
+
+  CompilationContext ctx(graph, builder, func_op);
 
   for (auto inst_id : graph.insts().iter()) {
     const auto& inst = graph.insts().get(inst_id);

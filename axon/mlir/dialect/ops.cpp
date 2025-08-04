@@ -66,7 +66,7 @@ auto ConstantOp::parse(mlir::OpAsmParser& parser, mlir::OperationState& result)
 static auto print_binary_op(mlir::OpAsmPrinter& printer, mlir::Value lhs,
                             mlir::Value rhs, mlir::Type result) -> void {
   printer << " ";
-  printer << lhs << " , " << rhs;
+  printer << lhs << ", " << rhs;
   printer << " : " << result;
 }
 
