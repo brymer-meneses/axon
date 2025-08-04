@@ -2,7 +2,7 @@
 #define AXON_DIALECT
 
 include "mlir/IR/OpBase.td"
-include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
@@ -11,7 +11,6 @@ include "mlir/IR/AttrTypeBase.td"
 def AxonDialect : Dialect {
   let name = "axon";
   let cppNamespace = "axon";
-  // let useDefaultTypePrinterParser = 1;
 }
 
 class AxonDialect_Type<string name, string typeMnemonic, list<Trait> traits = []>
@@ -28,6 +27,42 @@ def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure]> {
   let builders = [
     OpBuilder<(ins "mlir::DenseElementsAttr":$value), [{
       build($_builder, $_state, value.getType(), value);
+    }]>,
+  ];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
+def Axon_AccumulateOp : AxonDialect_Op<"accumulate"> {
+  let arguments = (ins AnyMemRef:$lhs, AnyTensor:$rhs);
+  let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs)  attr-dict";
+}
+
+def Axon_StoreOp : AxonDialect_Op<"store"> {
+  let arguments = (ins AnyMemRef:$to, AnyTensor:$value);
+  let assemblyFormat = "$to `,` $value `:` type($to) `,` type($value)  attr-dict";
+}
+
+def Axon_AddOp : AxonDialect_Op<"add"> {
+  let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
+  let results = (outs AnyTensor:$result);
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs), [{
+      build($_builder, $_state, lhs.getType(), lhs, rhs);
+    }]>,
+  ];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
+def Axon_MulOp : AxonDialect_Op<"mul"> {
+  let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
+  let results = (outs AnyTensor:$result);
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs), [{
+      build($_builder, $_state, lhs.getType(), lhs, rhs);
     }]>,
   ];
 

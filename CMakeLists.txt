@@ -26,7 +26,7 @@ target_sources(libaxon
     axon/core/module.cpp
 
     axon/mlir/codegen_module.cpp
-    axon/mlir/codegen_inst.cpp
+    axon/mlir/codegen_graph.cpp
     axon/mlir/mlir.cpp
     axon/mlir/compilation_context.cpp
   PRIVATE

@@ -22,14 +22,9 @@ auto finalize(Module& module) -> void {
   llvm::SmallVector<Dependency> work_list;
   auto& forward_insts = module.forward().insts();
   auto output_id = forward_insts.last();
+  AXON_DCHECK(output_id.has_value(), "`output_id` has no value.");
 
-  AXON_DCHECK(forward_insts.get(output_id).is<insts::Return>(),
-              "last inst is not a return.");
-
-  auto returned_id =
-      forward_insts.get(output_id).get_as<insts::Return>().returned_id;
-
-  work_list.emplace_back(returned_id, grad_id);
+  work_list.emplace_back(output_id, grad_id);
 
   while (not work_list.empty()) {
     auto dep = work_list.pop_back_val();
@@ -50,8 +45,13 @@ auto finalize(Module& module) -> void {
 
   for (InputId input_id : module.forward().inputs().iter()) {
     auto input_info = module.forward().inputs().get(input_id);
-    module.backward().emit(insts::AccumulateGrad(input_id, input_info.inst_id));
+    auto buffer_id = BufferId(input_id.value());
+    module.backward().emit(
+        insts::AccumulateGrad(buffer_id, input_info.inst_id));
   }
+
+  module.forward().emit(insts::Return(output_id));
+  module.backward().emit(insts::Return(InstId::None));
 }
 
 }  // namespace axon

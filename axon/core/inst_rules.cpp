@@ -25,7 +25,7 @@ class BackwardContext {
       return existing_id;
     }
     auto cached_value_inst =
-        module_.forward().get_cached_value(forward_inst_id);
+        module_.forward().create_cached_value(forward_inst_id);
     auto inst_id = module_.backward().emit(cached_value_inst);
     cached_values_.set(forward_inst_id, inst_id);
     return inst_id;

@@ -33,7 +33,7 @@ export class Graph {
 
   // This method is called by the backward graph to generate an inst that
   // corresponds to the `inst_id` in the forward graph.
-  auto get_cached_value(InstId inst_id) -> insts::GetCachedValue {
+  auto create_cached_value(InstId inst_id) -> insts::GetCachedValue {
     // If there is an existing cached_value_id for this inst_id then just return
     // that instead.
     if (auto existing_id = cached_values_.get(inst_id);
@@ -49,7 +49,12 @@ export class Graph {
     return insts::GetCachedValue(cached_value_id);
   }
 
-  auto get_shape(InstId inst_id) -> llvm::ArrayRef<int64_t> {
+  auto set_output(InstId inst_id) -> void {
+    AXON_DCHECK(not output_.has_value(), "Cannot set output more than once.");
+    output_ = inst_id;
+  }
+
+  auto get_shape(InstId inst_id) const -> llvm::ArrayRef<int64_t> {
     if (auto get_input = insts_.get(inst_id).try_get_as<insts::GetInput>()) {
       auto& input_info = inputs_.get(get_input->input_id);
       return input_info.shape;
@@ -70,6 +75,8 @@ export class Graph {
   auto insts() -> auto& { return insts_; }
   auto insts() const -> const auto& { return insts_; }
 
+  auto output() const -> InstId { return output_; }
+
   auto inputs() -> auto& { return inputs_; }
   auto inputs() const -> const auto& { return inputs_; }
 
@@ -85,6 +92,8 @@ export class Graph {
 
   IdStore<InstId, DataId> data_;
   IdStore<InstId, CachedValueId> cached_values_;
+
+  InstId output_ = InstId::None;
 };
 
 }  // namespace axon

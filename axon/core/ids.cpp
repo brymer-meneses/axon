@@ -22,6 +22,10 @@ struct InputId : IndexBase<InputId> {
   using IndexBase::IndexBase;
 };
 
+struct BufferId : IndexBase<BufferId> {
+  using IndexBase::IndexBase;
+};
+
 struct DataId : IndexBase<DataId> {
   using IndexBase::IndexBase;
 

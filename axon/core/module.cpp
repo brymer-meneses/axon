@@ -34,7 +34,7 @@ class Module {
   }
 
   auto create_return(Tensor tensor) -> void {
-    forward_.emit(axon::insts::Return(tensor.inst_id));
+    forward_.set_output(tensor.inst_id);
   }
 
   auto emit(Inst inst) -> Tensor {

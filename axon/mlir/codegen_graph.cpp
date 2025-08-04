@@ -10,7 +10,7 @@ module;
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 
-export module axon.mlir:codegen_inst;
+export module axon.mlir:codegen_graph;
 
 import axon.core;
 import axon.base;
@@ -19,25 +19,9 @@ import :compilation_context;
 
 static constexpr auto CachedValuesIndex = 0;
 static constexpr auto InputsIndex = 1;
-static constexpr auto ForwardInputsIndex = 2;
+static constexpr auto BuffersIndex = 2;
 
 namespace axon {
-
-static auto get_inputs_type(Graph& graph, mlir::OpBuilder& builder)
-    -> mlir::TupleType {
-  llvm::SmallVector<mlir::Type> types;
-  auto* mlir_ctx = builder.getContext();
-  auto& inputs = graph.inputs();
-  auto element_type = builder.getF32Type();
-
-  for (auto input_id : inputs.iter()) {
-    auto& input_info = inputs.get(input_id);
-    auto input_type = mlir::MemRefType::get(input_info.shape, element_type);
-    types.push_back(input_type);
-  }
-
-  return mlir::TupleType::get(mlir_ctx, types);
-}
 
 static auto get_argument(CompilationContext& ctx, int32_t argument_index,
                          uint64_t tuple_index) -> mlir::Value {
@@ -45,18 +29,23 @@ static auto get_argument(CompilationContext& ctx, int32_t argument_index,
   auto argument = block->getArgument(argument_index);
   auto tuple = llvm::dyn_cast<mlir::TupleType>(argument.getType());
   auto result_type = tuple.getType(tuple_index);
+
+  if (ctx.args.contains({argument_index, tuple_index})) {
+    return ctx.args[{argument_index, tuple_index}];
+  }
+
   auto accessed = ctx.builder.create<TupleAccessOp>(
       ctx.builder.getUnknownLoc(), result_type, argument, tuple_index);
-  return {accessed};
-}
-
-static auto codegen(insts::InitialGradient op, CompilationContext& ctx)
-    -> mlir::Value {
-  return {};
+  return accessed;
 }
 
 static auto codegen(insts::SetCachedValue op, CompilationContext& ctx)
     -> mlir::Value {
+  auto cached_value =
+      get_argument(ctx, CachedValuesIndex, op.cached_value_id.value());
+  auto to_store = ctx.values[op.new_value_id];
+  ctx.builder.create<StoreOp>(ctx.builder.getUnknownLoc(), cached_value,
+                              to_store);
   return {};
 }
 
@@ -76,6 +65,10 @@ static auto codegen(insts::GetCachedValue op, CompilationContext& ctx)
 
 static auto codegen(insts::AccumulateGrad op, CompilationContext& ctx)
     -> mlir::Value {
+  auto value = ctx.values[op.value_id];
+  auto buffer = get_argument(ctx, BuffersIndex, op.buffer_id.value());
+
+  ctx.builder.create<AccumulateOp>(ctx.builder.getUnknownLoc(), buffer, value);
   return {};
 }
 
@@ -94,8 +87,12 @@ static auto codegen(insts::GetInput op, CompilationContext& ctx)
 
 static auto codegen(insts::Return op, CompilationContext& ctx) -> mlir::Value {
   auto loc = ctx.builder.getUnknownLoc();
-  auto returned = ctx.values[op.returned_id];
-  ctx.builder.create<mlir::func::ReturnOp>(loc, returned);
+  if (op.returned_id.has_value()) {
+    auto returned = ctx.values[op.returned_id];
+    ctx.builder.create<mlir::func::ReturnOp>(loc, returned);
+  } else {
+    ctx.builder.create<mlir::func::ReturnOp>(loc);
+  }
   return {};
 }
 
@@ -107,15 +104,13 @@ static auto codegen(insts::LocalTensor op, CompilationContext& ctx)
 static auto codegen(insts::Add op, CompilationContext& ctx) -> mlir::Value {
   auto lhs = ctx.values[op.lhs_id];
   auto rhs = ctx.values[op.rhs_id];
-  return ctx.builder.create<mlir::arith::AddFOp>(ctx.builder.getUnknownLoc(),
-                                                 lhs, rhs);
+  return ctx.builder.create<AddOp>(ctx.builder.getUnknownLoc(), lhs, rhs);
 }
 
 static auto codegen(insts::Mul op, CompilationContext& ctx) -> mlir::Value {
   auto lhs = ctx.values[op.lhs_id];
   auto rhs = ctx.values[op.rhs_id];
-  return ctx.builder.create<mlir::arith::MulFOp>(ctx.builder.getUnknownLoc(),
-                                                 lhs, rhs);
+  return ctx.builder.create<MulOp>(ctx.builder.getUnknownLoc(), lhs, rhs);
 }
 
 export auto codegen_graph(Graph& graph, mlir::OpBuilder& builder,
@@ -123,8 +118,6 @@ export auto codegen_graph(Graph& graph, mlir::OpBuilder& builder,
                           llvm::SmallVector<mlir::Type> additional_args,
                           bool is_backward) -> void {
   CompilationContext ctx(graph, builder);
-
-  additional_args.emplace_back(get_inputs_type(graph, builder));
 
   builder.setInsertionPointToEnd(module_op.getBody());
   auto loc = builder.getUnknownLoc();
