@@ -27,6 +27,7 @@ target_sources(libaxon
 
     axon/mlir/codegen_module.cpp
     axon/mlir/codegen_graph.cpp
+    axon/mlir/lowering.cpp
     axon/mlir/mlir.cpp
     axon/mlir/compilation_context.cpp
   PRIVATE
@@ -53,6 +54,9 @@ target_link_libraries(libaxon
   xtensor-blas
   ${llvm_libs}
   MLIRIR
+  MLIRPass
+  MLIRSupport
+  MLIRTransforms
   MLIRDialect
   MLIRFuncDialect
   MLIRLinalgDialect

@@ -3,6 +3,8 @@ module;
 #include "axon/base/dcheck.h"
 #include "dialect/dialect.h"
 #include "llvm/ADT/StringRef.h"
+
+// MLIR Imports
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"

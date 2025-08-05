@@ -9,6 +9,7 @@ module;
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/Pass/PassManager.h"
 
 export module axon.mlir:codegen_module;
 
@@ -17,6 +18,7 @@ import axon.base;
 
 import :compilation_context;
 import :codegen_graph;
+import :lowering;
 
 namespace axon {
 
@@ -77,6 +79,15 @@ export auto codegen(Module& module, mlir::MLIRContext& mlir_ctx)
   auto module_op = mlir::ModuleOp::create(builder.getUnknownLoc());
 
   codegenModule(module, builder, module_op);
+
+  mlir::PassManager pm(&mlir_ctx);
+
+  pm.addPass(createAxonLoweringPass());
+
+  auto result = pm.run(module_op);
+  if (result.failed()) {
+    return {};
+  }
 
   return module_op;
 }
