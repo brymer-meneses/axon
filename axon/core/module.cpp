@@ -19,22 +19,22 @@ class Module {
  public:
   Module(std::shared_ptr<Context> context) : context_(std::move(context)) {}
 
-  auto check_requires_grad(InstId inst_id) const -> bool {
+  auto checkRequiresGrad(InstId inst_id) const -> bool {
     if (auto get_input =
-            forward_.insts().get(inst_id).try_get_as<insts::GetInput>()) {
+            forward_.insts().get(inst_id).tryGetAs<insts::GetInput>()) {
       return forward_.inputs().get(get_input->input_id).requires_grad;
     }
     return gradients_.contains(inst_id);
   }
 
-  auto declare_input(llvm::SmallVector<int64_t> shape, bool requires_grad)
+  auto declareInput(llvm::SmallVector<int64_t> shape, bool requires_grad)
       -> Tensor {
-    auto inst_id = forward_.declare_input(shape, requires_grad);
+    auto inst_id = forward_.declareInput(shape, requires_grad);
     return {inst_id};
   }
 
-  auto create_return(Tensor tensor) -> void {
-    forward_.set_output(tensor.inst_id);
+  auto createReturn(Tensor tensor) -> void {
+    forward_.setOutput(tensor.inst_id);
   }
 
   auto emit(Inst inst) -> Tensor {
@@ -42,13 +42,13 @@ class Module {
     return {inst_id};
   }
 
-  auto is_finalized() const -> bool { return backward_.insts().size() > 0; }
-
-  auto gradients() -> auto& { return gradients_; }
-  auto gradients() const -> const auto& { return gradients_; }
+  auto isFinalized() const -> bool { return backward_.insts().size() > 0; }
 
   auto forward() -> auto& { return forward_; }
   auto forward() const -> const auto& { return forward_; }
+
+  auto gradients() -> auto& { return gradients_; }
+  auto gradients() const -> const auto& { return gradients_; }
 
   auto backward() -> auto& { return backward_; }
   auto backward() const -> const auto& { return backward_; }

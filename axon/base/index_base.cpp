@@ -13,7 +13,7 @@ struct IndexBase {
   constexpr explicit IndexBase(int32_t value) : value_(value) {}
   constexpr explicit IndexBase() = default;
 
-  constexpr auto has_value() const -> bool { return value_ >= 0; }
+  constexpr auto isValid() const -> bool { return value_ >= 0; }
   constexpr auto value() const -> int32_t { return value_; }
 
   friend auto operator<=>(const T lhs, const T rhs) -> auto {

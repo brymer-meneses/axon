@@ -18,7 +18,7 @@ struct Data {
 
 class Context {
  public:
-  auto create_empty(llvm::SmallVector<int64_t> shape) -> DataId {
+  auto createEmpty(llvm::SmallVector<int64_t> shape) -> DataId {
     size_t size = std::ranges::fold_left(shape, 1, std::multiplies<>{});
     auto buffer = std::unique_ptr<float>(new float[size]);
     auto data_id = data_.emplace(std::move(buffer), std::move(shape));

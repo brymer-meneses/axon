@@ -79,7 +79,7 @@ static auto codegen(insts::SetCachedValue op, CompilationContext& ctx)
 
 static auto codegen(insts::GetCachedValue op, CompilationContext& ctx)
     -> mlir::Value {
-  AXON_DCHECK(op.cached_value_id.has_value(), "Invalid index");
+  AXON_DCHECK(op.cached_value_id.isValid(), "Invalid index");
   auto loc = ctx.builder.getUnknownLoc();
   auto memref = get_argument(ctx, op.cached_value_id);
   auto memref_type = llvm::dyn_cast<mlir::MemRefType>(memref.getType());
@@ -101,7 +101,7 @@ static auto codegen(insts::AccumulateGrad op, CompilationContext& ctx)
 
 static auto codegen(insts::GetInput op, CompilationContext& ctx)
     -> mlir::Value {
-  AXON_DCHECK(op.input_id.has_value(), "Invalid index");
+  AXON_DCHECK(op.input_id.isValid(), "Invalid index");
   auto loc = ctx.builder.getUnknownLoc();
   auto memref = get_argument(ctx, op.input_id);
   auto memref_type = llvm::dyn_cast<mlir::MemRefType>(memref.getType());
@@ -114,7 +114,7 @@ static auto codegen(insts::GetInput op, CompilationContext& ctx)
 
 static auto codegen(insts::Return op, CompilationContext& ctx) -> mlir::Value {
   auto loc = ctx.builder.getUnknownLoc();
-  if (op.returned_id.has_value()) {
+  if (op.returned_id.isValid()) {
     auto returned = ctx.values[op.returned_id];
     ctx.builder.create<mlir::func::ReturnOp>(loc, returned);
   } else {
@@ -140,10 +140,10 @@ static auto codegen(insts::Mul op, CompilationContext& ctx) -> mlir::Value {
   return {ctx.builder.create<MulOp>(ctx.builder.getUnknownLoc(), lhs, rhs)};
 }
 
-export auto codegen_graph(Graph& graph, mlir::OpBuilder& builder,
-                          mlir::ModuleOp& module_op, llvm::StringLiteral name,
-                          llvm::SmallVector<mlir::Type> additional_args,
-                          bool is_backward) -> void {
+export auto codegenGraph(Graph& graph, mlir::OpBuilder& builder,
+                         mlir::ModuleOp& module_op, llvm::StringLiteral name,
+                         llvm::SmallVector<mlir::Type> additional_args,
+                         bool is_backward) -> void {
   builder.setInsertionPointToEnd(module_op.getBody());
   auto loc = builder.getUnknownLoc();
 
@@ -160,7 +160,7 @@ export auto codegen_graph(Graph& graph, mlir::OpBuilder& builder,
 
   CompilationContext ctx(graph, builder, func_op);
 
-  for (auto inst_id : graph.insts().iter()) {
+  for (auto inst_id : graph.insts().keys()) {
     const auto& inst = graph.insts().get(inst_id);
     inst.visit(
         [&](auto inst) { ctx.values.insert({inst_id, codegen(inst, ctx)}); });

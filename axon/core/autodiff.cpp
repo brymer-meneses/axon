@@ -13,25 +13,29 @@ import :mod;
 export namespace axon {
 
 auto finalize(Module& module) -> void {
-  AXON_DCHECK(not module.is_finalized(), "Module must not be finalized.");
+  AXON_DCHECK(not module.isFinalized(), "Module must not be finalized.");
 
-  auto grad_id = module.backward().declare_input({}, /*requires_grad=*/false);
+  auto& forward_graph = module.forward();
+  auto& backward_graph = module.backward();
+
+  auto grad_id = backward_graph.declareInput({}, /*requires_grad=*/false);
 
   BackwardContext ctx{module};
 
   llvm::SmallVector<Dependency> work_list;
-  auto& forward_insts = module.forward().insts();
-  auto output_id = forward_insts.last();
-  AXON_DCHECK(output_id.has_value(), "`output_id` has no value.");
+
+  auto output_id = forward_graph.output();
+
+  AXON_DCHECK(output_id.isValid(), "`output_id` has no value.");
 
   work_list.emplace_back(output_id, grad_id);
 
   while (not work_list.empty()) {
     auto dep = work_list.pop_back_val();
 
-    ctx.accumulate_grad(dep.inst_id, dep.grad_id);
+    ctx.accumulateGrad(dep.inst_id, dep.grad_id);
 
-    auto& inst = forward_insts.get(dep.inst_id);
+    auto& inst = forward_graph.insts().get(dep.inst_id);
     inst.visit([&](const auto& op) {
       using InstType = std::decay_t<decltype(op)>;
       if constexpr (HasBackwardRule<InstType>) {
@@ -43,15 +47,17 @@ auto finalize(Module& module) -> void {
     });
   }
 
-  for (InputId input_id : module.forward().inputs().iter()) {
-    auto input_info = module.forward().inputs().get(input_id);
+  for (InputId input_id : forward_graph.inputs().keys()) {
+    auto input_info = forward_graph.inputs().get(input_id);
     auto buffer_id = BufferId(input_id.value());
-    module.backward().emit(
-        insts::AccumulateGrad(buffer_id, input_info.inst_id));
+
+    if (module.checkRequiresGrad(input_info.inst_id)) {
+      backward_graph.emit(insts::AccumulateGrad(buffer_id, input_info.inst_id));
+    }
   }
 
-  module.forward().emit(insts::Return(output_id));
-  module.backward().emit(insts::Return(InstId::None));
+  forward_graph.emit(insts::Return(output_id));
+  backward_graph.emit(insts::Return(InstId::None));
 }
 
 }  // namespace axon

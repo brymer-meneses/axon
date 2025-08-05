@@ -11,10 +11,10 @@ auto main() -> int {
   auto ctx = std::make_shared<axon::Context>();
   axon::Module mod{ctx};
 
-  auto x = mod.declare_input({2, 3}, true);
-  auto y = mod.declare_input({2, 3}, true);
+  auto x = mod.declareInput({2, 3}, true);
+  auto y = mod.declareInput({2, 3}, true);
   auto l = mod.emit(axon::insts::Mul(x, y));
-  mod.create_return(l);
+  mod.createReturn(l);
 
   axon::finalize(mod);
 
