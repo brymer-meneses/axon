@@ -76,8 +76,10 @@ def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure]> {
 }
 
 def Axon_AccumulateGradOp : AxonDialect_Op<"accumulate_grad"> {
-  let arguments = (ins Axon_TensorRefType:$lhs, AnyTensor:$rhs);
-  let assemblyFormat = "$lhs `,` $rhs `:` qualified(type($lhs)) `,` type($rhs)  attr-dict";
+  let arguments = (ins Axon_TensorRefType:$accumulator, AnyTensor:$value);
+  let assemblyFormat = "$accumulator `,` $value `:` qualified(type($accumulator)) `,` type($value)  attr-dict";
+
+  let hasVerifier = 1;
 }
 
 def Axon_AddOp : AxonDialect_Op<"add"> {
@@ -85,11 +87,10 @@ def Axon_AddOp : AxonDialect_Op<"add"> {
   let results = (outs AnyTensor:$result);
 
   let builders = [
-    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs), [{
-      build($_builder, $_state, lhs.getType(), lhs, rhs);
-    }]>,
+    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs)>,
   ];
 
+  let hasVerifier = 1;
   let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs)  `->` type($result) attr-dict";
 }
 
@@ -98,11 +99,10 @@ def Axon_MulOp : AxonDialect_Op<"mul"> {
   let results = (outs AnyTensor:$result);
 
   let builders = [
-    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs), [{
-      build($_builder, $_state, lhs.getType(), lhs, rhs);
-    }]>,
+    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs)>
   ];
 
+  let hasVerifier = 1;
   let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs)  `->` type($result) attr-dict";
 }
 

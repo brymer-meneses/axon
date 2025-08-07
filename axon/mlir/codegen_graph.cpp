@@ -46,7 +46,6 @@ static auto codegen(insts::Constant op, CompilationContext& ctx, InstId inst_id)
 static auto codegen(insts::GetParameter op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto tensor_ref = ctx.func_op.getArgument(op.param_id.value());
-  auto tensor_ref_type = llvm::cast<TensorRefType>(tensor_ref.getType());
 
   ctx.tensor_refs[inst_id] = tensor_ref;
   ctx.values[inst_id] =
