@@ -29,40 +29,24 @@ struct Mul {
   InstId rhs_id;
 };
 
-struct GetInput {
-  InputId input_id;
-};
-
-struct GetCachedValue {
-  CachedValueId cached_value_id;
-};
-
-struct SetCachedValue {
-  CachedValueId cached_value_id;
-
-  // The value to set to the cached_value_id.
-  InstId new_value_id;
+struct Constant {
+  DataId data_id;
 };
 
 struct AccumulateGrad {
-  BufferId buffer_id;
+  InstId inst_id;
   InstId value_id;
 };
 
-struct Return {
-  InstId returned_id;
+struct GetParameter {
+  ParamId param_id;
 };
-
-struct LocalTensor {};
-
-struct ModuleCall {};
 
 }  // namespace insts
 
 using InstInternalType =
-    std::variant<insts::Add, insts::Mul, insts::GetInput, insts::GetCachedValue,
-                 insts::SetCachedValue, insts::LocalTensor,
-                 insts::AccumulateGrad, insts::Return>;
+    std::variant<insts::Add, insts::Mul, insts::AccumulateGrad, insts::Constant,
+                 insts::GetParameter>;
 
 template <typename T>
 constexpr bool IsExpressionInst =

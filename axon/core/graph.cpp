@@ -10,89 +10,94 @@ import std;
 
 import :ids;
 import :inst;
-import :context;
 
 namespace axon {
 
-struct Input {
+struct Parameter {
   llvm::SmallVector<int64_t> shape;
   bool requires_grad;
   InstId inst_id = InstId::None;
 };
 
+struct Data {
+  std::vector<float> data;
+  llvm::SmallVector<int64_t> shape;
+
+  Data(float value) : data({value}), shape({}) {}
+};
+
 export class Graph {
  public:
-  auto declareInput(llvm::SmallVector<int64_t> shape, bool requires_grad)
+  auto declareParam(llvm::SmallVector<int64_t> shape, bool requires_grad)
       -> InstId {
-    auto input_id = inputs_.emplace(Input(shape, requires_grad));
-    auto inst_id = insts_.emplace(insts::GetInput(input_id));
-    auto& input = inputs_.get(input_id);
-    input.inst_id = inst_id;
+    auto input_id = parameters_.emplace(Parameter(shape, requires_grad));
+    auto inst_id = insts_.emplace(insts::GetParameter(input_id));
+    auto& param = parameters_.get(input_id);
+    param.inst_id = inst_id;
+    if (requires_grad) {
+      gradients_.set(inst_id, InstId::Pending);
+    }
     return inst_id;
   }
 
-  // This method is called by the backward graph to generate an inst that
-  // corresponds to the `inst_id` in the forward graph.
-  auto createCachedValue(InstId inst_id) -> insts::GetCachedValue {
-    // If there is an existing cached_value_id for this inst_id then just return
-    // that instead.
-    if (auto existing_id = cached_values_.get(inst_id); existing_id.isValid()) {
-      return insts::GetCachedValue(existing_id);
-    }
-    // Otherwise create a new cached_value_id, for this inst.
-    auto cached_value_index = static_cast<int32_t>(cached_values_.size());
-    auto cached_value_id = CachedValueId(cached_value_index);
-    // Create an instruction that sets the value of this cached_value.
-    insts_.emplace(insts::SetCachedValue(cached_value_id, inst_id));
-    cached_values_.set(inst_id, cached_value_id);
-    return insts::GetCachedValue(cached_value_id);
+  auto createConstant(float value) -> InstId {
+    auto data_id = data_.emplace(value);
+    auto inst_id = insts_.emplace(insts::Constant{data_id});
+    inst_to_data_.set(inst_id, data_id);
+    return inst_id;
   }
 
-  auto setOutput(InstId inst_id) -> void {
-    AXON_DCHECK(not output_.isValid(), "Cannot set output more than once.");
-    output_ = inst_id;
-  }
-
-  auto getShape(InstId inst_id) const -> llvm::ArrayRef<int64_t> {
-    if (auto get_input = insts_.get(inst_id).tryGetAs<insts::GetInput>()) {
-      auto& input_info = inputs_.get(get_input->input_id);
-      return input_info.shape;
+  auto getShape(InstId inst_id) -> llvm::ArrayRef<int64_t> {
+    if (auto get_param = insts_.get(inst_id).tryGetAs<insts::GetParameter>()) {
+      const auto& param = parameters_.get(get_param->param_id);
+      return param.shape;
     }
     return {};
   }
 
-  auto emit(Inst inst) -> InstId {
-    auto inst_id = insts_.emplace(inst);
-    // If this is instruction corresponds to an expression, then we create a
-    // slot for it's data.
-    if (inst.isExpression()) {
-      data_.set(inst_id, DataId::Pending);
+  auto getData(InstId inst_id) -> std::optional<Data*> {
+    if (auto data_id = inst_to_data_.get(inst_id)) {
+      return &data_.get(data_id);
+    }
+    return std::nullopt;
+  }
+
+  auto checkRequiresGrad(InstId inst_id) const -> bool {
+    return gradients_.containsKey(inst_id);
+  }
+
+  auto emit(Inst inst) -> InstId { return insts_.emplace(inst); }
+
+  auto createOp(Inst inst) -> InstId {
+    auto inst_id = emit(inst);
+    auto requires_grad = std::ranges::any_of(
+        inst.parents(),
+        [this](InstId parent_id) { return checkRequiresGrad(parent_id); });
+    if (requires_grad) {
+      gradients_.set(inst_id, InstId::Pending);
     }
     return inst_id;
   }
 
+  auto gradients() -> auto& { return gradients_; }
+  auto gradients() const -> const auto& { return gradients_; }
+
   auto insts() -> auto& { return insts_; }
   auto insts() const -> const auto& { return insts_; }
-
-  auto output() const -> InstId { return output_; }
-
-  auto inputs() -> auto& { return inputs_; }
-  auto inputs() const -> const auto& { return inputs_; }
 
   auto data() -> auto& { return data_; }
   auto data() const -> const auto& { return data_; }
 
-  auto cached_values() -> auto& { return cached_values_; }
-  auto cached_values() const -> const auto& { return cached_values_; }
+  auto parameters() -> auto& { return parameters_; }
+  auto parameters() const -> const auto& { return parameters_; }
 
  private:
-  ValueStore<InputId, Input> inputs_;
+  ValueStore<ParamId, Parameter> parameters_;
   ValueStore<InstId, Inst> insts_;
+  IdStore<InstId, DataId> inst_to_data_;
+  ValueStore<DataId, Data> data_;
 
-  IdStore<InstId, DataId> data_;
-  IdStore<InstId, CachedValueId> cached_values_;
-
-  InstId output_ = InstId::None;
+  IdStore<InstId, InstId> gradients_;
 };
 
 }  // namespace axon

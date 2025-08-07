@@ -58,7 +58,10 @@ class ValueStore {
                });
   }
 
-  auto contains(KeyType index) const -> bool {
+  auto values() -> auto& { return values_; }
+  auto values() const -> const auto& { return values_; }
+
+  auto containsKey(KeyType index) const -> bool {
     AXON_DCHECK(index.isValid(), "Passed index has no value.");
     return static_cast<int32_t>(index.value()) < values_.size();
   }
@@ -142,11 +145,11 @@ class IdStore {
 
  public:
   auto add(KeyType key, ValueType value) -> void {
-    AXON_DCHECK(not contains(key), "Passed key must not be used.");
+    AXON_DCHECK(not containsKey(key), "Passed key must not be used.");
     pairs_.emplace_back(key, value);
   }
 
-  auto contains(KeyType target_key) const -> bool {
+  auto containsKey(KeyType target_key) const -> bool {
     for (auto pair : pairs_) {
       if (target_key == pair.key) {
         return true;

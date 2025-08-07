@@ -16,6 +16,8 @@ struct IndexBase {
   constexpr auto isValid() const -> bool { return value_ >= 0; }
   constexpr auto value() const -> int32_t { return value_; }
 
+  constexpr operator bool() const { return isValid(); }
+
   friend auto operator<=>(const T lhs, const T rhs) -> auto {
     return lhs.value_ <=> rhs.value_;
   }

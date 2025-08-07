@@ -22,16 +22,14 @@ target_sources(libaxon
     axon/core/inst_rules.cpp
     axon/core/ids.cpp
     axon/core/graph.cpp
-    axon/core/context.cpp
-    axon/core/module.cpp
 
-    axon/mlir/codegen_module.cpp
     axon/mlir/codegen_graph.cpp
-    axon/mlir/lowering.cpp
     axon/mlir/mlir.cpp
+    # axon/mlir/lowering.cpp
     axon/mlir/compilation_context.cpp
   PRIVATE
     axon/mlir/dialect/dialect.cpp
+    axon/mlir/dialect/types.cpp
     axon/mlir/dialect/ops.cpp
 )
 

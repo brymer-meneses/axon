@@ -16,8 +16,9 @@ struct CompilationContext {
   Graph& graph;
   mlir::OpBuilder& builder;
   mlir::func::FuncOp& func_op;
+
+  llvm::DenseMap<InstId, mlir::Value> tensor_refs{};
   llvm::DenseMap<InstId, mlir::Value> values{};
-  llvm::DenseMap<std::pair<int32_t, uint64_t>, mlir::Value> args{};
 };
 
 }  // namespace axon

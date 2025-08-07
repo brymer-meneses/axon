@@ -1,7 +1,5 @@
 module;
 
-#include <optional>
-
 #include "axon/base/dcheck.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FunctionExtras.h"
@@ -14,6 +12,7 @@ import :ids;
 import :inst_kinds;
 
 import axon.base;
+import std;
 
 export namespace axon {
 
@@ -51,8 +50,17 @@ class Inst {
     return *value;
   }
 
-  auto index() const -> int32_t { return value_.index(); }
-
+  auto parents() const -> llvm::SmallVector<InstId> {
+    constexpr auto visitor = [](const auto& op) -> llvm::SmallVector<InstId> {
+      using InstType = std::decay_t<decltype(op)>;
+      if constexpr (llvm::is_one_of<InstType, insts::Add, insts::Mul,
+                                    insts::MatMul>()) {
+        return {op.lhs_id, op.rhs_id};
+      }
+      return {};
+    };
+    return std::visit(visitor, value_);
+  }
   auto isExpression() const -> bool {
     return std::visit(
         [](const auto& op) {

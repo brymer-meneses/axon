@@ -8,38 +8,34 @@ export module axon.core:autodiff;
 import :inst_rules;
 import :graph;
 import :ids;
-import :mod;
 
 export namespace axon {
 
-auto finalize(Module& module) -> void {
-  AXON_DCHECK(not module.isFinalized(), "Module must not be finalized.");
-
-  auto& forward_graph = module.forward();
-  auto& backward_graph = module.backward();
-
-  auto grad_id = backward_graph.declareInput({}, /*requires_grad=*/false);
-
-  BackwardContext ctx{module};
-
-  llvm::SmallVector<Dependency> work_list;
-
-  auto output_id = forward_graph.output();
-
+auto backward(Graph& graph, InstId output_id, InstId grad_id = InstId::None)
+    -> void {
   AXON_DCHECK(output_id.isValid(), "`output_id` has no value.");
 
+  if (not grad_id.isValid()) {
+    grad_id = graph.createConstant(1.0);
+  }
+
+  llvm::SmallVector<Dependency> work_list;
   work_list.emplace_back(output_id, grad_id);
+
+  BackwardContext ctx{graph};
 
   while (not work_list.empty()) {
     auto dep = work_list.pop_back_val();
 
-    ctx.accumulateGrad(dep.inst_id, dep.grad_id);
+    ctx.accumulateGrad(dep);
 
-    auto& inst = forward_graph.insts().get(dep.inst_id);
-    inst.visit([&](const auto& op) {
+    // This should take by copy since `graph.insts` will grow.
+    auto inst = graph.insts().get(dep.inst_id);
+
+    inst.visit([&, dep](const auto op) {
       using InstType = std::decay_t<decltype(op)>;
       if constexpr (HasBackwardRule<InstType>) {
-        auto new_deps = BackwardRule<InstType>::apply(op, grad_id, ctx);
+        auto new_deps = BackwardRule<InstType>::apply(op, dep.grad_id, ctx);
         for (auto dep : new_deps) {
           work_list.emplace_back(dep);
         }
@@ -47,17 +43,13 @@ auto finalize(Module& module) -> void {
     });
   }
 
-  for (InputId input_id : forward_graph.inputs().keys()) {
-    auto input_info = forward_graph.inputs().get(input_id);
-    auto buffer_id = BufferId(input_id.value());
-
-    if (module.checkRequiresGrad(input_info.inst_id)) {
-      backward_graph.emit(insts::AccumulateGrad(buffer_id, input_info.inst_id));
+  for (auto& param : graph.parameters().values()) {
+    if (param.requires_grad) {
+      auto grad_id = graph.gradients().get(param.inst_id);
+      AXON_DCHECK(grad_id.isValid(), "{}", grad_id.value());
+      graph.insts().emplace(insts::AccumulateGrad(param.inst_id, grad_id));
     }
   }
-
-  forward_graph.emit(insts::Return(output_id));
-  backward_graph.emit(insts::Return(InstId::None));
 }
 
 }  // namespace axon

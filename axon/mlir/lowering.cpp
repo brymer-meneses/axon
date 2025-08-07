@@ -17,31 +17,32 @@ import std;
 
 namespace axon {
 
-struct AccumulateOpLowering : public mlir::OpConversionPattern<AccumulateOp> {
-  using OpConversionPattern<AccumulateOp>::OpConversionPattern;
-
-  auto matchAndRewrite(AccumulateOp op, OpAdaptor adaptor,
-                       mlir::ConversionPatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto tensor = llvm::dyn_cast<mlir::TensorType>(op.getRhs().getType());
-    if (!tensor) {
-      return mlir::failure();
-    }
-
-    auto memref_type =
-        mlir::MemRefType::get(tensor.getShape(), tensor.getElementType());
-
-    auto tensor_memref = rewriter.create<mlir::bufferization::ToMemrefOp>(
-        op.getLoc(), memref_type, op.getRhs());
-
-    rewriter.create<mlir::linalg::AddOp>(
-        op.getLoc(), mlir::ValueRange{op.getLhs(), tensor_memref},
-        mlir::ValueRange{op.getLhs()});
-
-    rewriter.eraseOp(op);
-    return mlir::success();
-  }
-};
+// struct AccumulateGradLowering
+//     : public mlir::OpConversionPattern<AccumulateGradOp> {
+//   using OpConversionPattern<AccumulateGradOp>::OpConversionPattern;
+//
+//   auto matchAndRewrite(AccumulateGradOp op, OpAdaptor adaptor,
+//                        mlir::ConversionPatternRewriter& rewriter) const
+//       -> mlir::LogicalResult final {
+//     auto tensor = llvm::dyn_cast<mlir::TensorType>(op.getRhs().getType());
+//     if (!tensor) {
+//       return mlir::failure();
+//     }
+//
+//     auto memref_type =
+//         mlir::MemRefType::get(tensor.getShape(), tensor.getElementType());
+//
+//     auto tensor_memref = rewriter.create<mlir::bufferization::ToMemrefOp>(
+//         op.getLoc(), memref_type, op.getRhs());
+//
+//     rewriter.create<mlir::linalg::AddOp>(
+//         op.getLoc(), mlir::ValueRange{op.getLhs(), tensor_memref},
+//         mlir::ValueRange{op.getLhs()});
+//
+//     rewriter.eraseOp(op);
+//     return mlir::success();
+//   }
+// };
 
 struct AxonLoweringPass
     : public mlir::PassWrapper<AxonLoweringPass,
@@ -69,11 +70,11 @@ struct AxonLoweringPass
                          mlir::memref::MemRefDialect, mlir::arith::ArithDialect,
                          mlir::bufferization::BufferizationDialect,
                          mlir::tensor::TensorDialect>();
-    target.addIllegalOp<AccumulateOp>();
+    target.addIllegalOp<AccumulateGrad>();
 
     mlir::RewritePatternSet patterns{&context};
 
-    patterns.add<AccumulateOpLowering>(&context);
+    // patterns.add<AccumulateGradLowering>(&context);
 
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns)))) {

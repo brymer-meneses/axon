@@ -16,22 +16,11 @@ struct InstId : IndexBase<InstId> {
 
 inline constexpr auto InstId::Pending = InstId(-2);
 
-struct InputId : IndexBase<InputId> {
-  using IndexBase::IndexBase;
-};
-
-struct BufferId : IndexBase<BufferId> {
+struct ParamId : IndexBase<ParamId> {
   using IndexBase::IndexBase;
 };
 
 struct DataId : IndexBase<DataId> {
-  using IndexBase::IndexBase;
-
-  static const DataId Pending;
-};
-inline constexpr auto DataId::Pending = DataId(-2);
-
-struct CachedValueId : IndexBase<CachedValueId> {
   using IndexBase::IndexBase;
 };
 

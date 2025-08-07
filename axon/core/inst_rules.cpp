@@ -1,5 +1,6 @@
 module;
 
+#include "axon/base/dcheck.h"
 #include "llvm/ADT/SmallVector.h"
 
 export module axon.core:inst_rules;
@@ -7,49 +8,34 @@ export module axon.core:inst_rules;
 import :inst_kinds;
 import :inst;
 import :graph;
-import :mod;
 
 export namespace axon {
-
-class BackwardContext {
- public:
-  BackwardContext(Module& module) : module_(module) {}
-
-  auto checkRequiresGrad(InstId inst_id) const -> bool {
-    return module_.checkRequiresGrad(inst_id);
-  }
-
-  auto getCachedValue(InstId forward_inst_id) -> InstId {
-    if (auto existing_id = cached_values_.get(forward_inst_id);
-        existing_id.isValid()) {
-      return existing_id;
-    }
-    auto cached_value_inst =
-        module_.forward().createCachedValue(forward_inst_id);
-    auto inst_id = module_.backward().emit(cached_value_inst);
-    cached_values_.set(forward_inst_id, inst_id);
-    return inst_id;
-  }
-
-  auto emit(Inst inst) -> InstId { return module_.backward().emit(inst); }
-
-  auto accumulateGrad(InstId forward_inst_id, InstId grad_id) -> void {
-    if (auto current_grad_id = module_.gradients().get(forward_inst_id);
-        current_grad_id.isValid()) {
-      grad_id = emit(insts::Add(current_grad_id, grad_id));
-    }
-
-    module_.gradients().set(forward_inst_id, grad_id);
-  }
-
- private:
-  Module& module_;
-  IdStore<InstId, InstId> cached_values_;
-};
 
 struct Dependency {
   InstId inst_id;
   InstId grad_id;
+};
+
+class BackwardContext {
+ public:
+  BackwardContext(Graph& graph) : graph_(graph) {}
+
+  auto checkRequiresGrad(InstId inst_id) const -> bool {
+    return graph_.checkRequiresGrad(inst_id);
+  }
+
+  auto emit(Inst inst) -> InstId { return graph_.emit(inst); }
+
+  auto accumulateGrad(Dependency dep) -> void {
+    if (auto current_grad_id = graph_.gradients().get(dep.inst_id)) {
+      dep.grad_id = graph_.emit(insts::Add(current_grad_id, dep.grad_id));
+    }
+    graph_.gradients().set(dep.inst_id, dep.grad_id);
+  }
+
+ private:
+  Graph& graph_;
+  IdStore<InstId, InstId> cached_values_;
 };
 
 template <typename T>
@@ -59,6 +45,8 @@ template <>
 struct BackwardRule<insts::Add> {
   static auto apply(const insts::Add& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
+    AXON_DCHECK(grad_id.isValid(), "{}", grad_id.value());
+
     llvm::SmallVector<Dependency, 2> deps;
     if (ctx.checkRequiresGrad(op.lhs_id)) {
       deps.emplace_back(op.lhs_id, grad_id);
@@ -66,6 +54,7 @@ struct BackwardRule<insts::Add> {
     if (ctx.checkRequiresGrad(op.rhs_id)) {
       deps.emplace_back(op.rhs_id, grad_id);
     }
+
     return deps;
   }
 };
@@ -74,17 +63,18 @@ template <>
 struct BackwardRule<insts::Mul> {
   static auto apply(const insts::Mul& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
+    AXON_DCHECK(grad_id.isValid(), "{}", grad_id.value());
+
     llvm::SmallVector<Dependency, 2> deps;
     if (ctx.checkRequiresGrad(op.lhs_id)) {
-      auto cached_value_id = ctx.getCachedValue(op.rhs_id);
-      auto prod = ctx.emit(insts::Mul(grad_id, cached_value_id));
+      auto prod = ctx.emit(insts::Mul(grad_id, op.rhs_id));
       deps.emplace_back(op.lhs_id, prod);
     }
     if (ctx.checkRequiresGrad(op.rhs_id)) {
-      auto cached_value_id = ctx.getCachedValue(op.lhs_id);
-      auto prod = ctx.emit(insts::Mul(grad_id, cached_value_id));
+      auto prod = ctx.emit(insts::Mul(grad_id, op.lhs_id));
       deps.emplace_back(op.rhs_id, prod);
     }
+
     return deps;
   }
 };

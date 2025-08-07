@@ -8,22 +8,20 @@ import axon.mlir;
 import std;
 
 auto main() -> int {
-  auto ctx = std::make_shared<axon::Context>();
-  axon::Module mod{ctx};
+  axon::Graph graph;
 
-  auto x = mod.declareInput({2, 3}, true);
-  auto y = mod.declareInput({2, 3}, true);
-  auto l = mod.emit(axon::insts::Mul(x, y));
-  mod.createReturn(l);
+  auto x = graph.declareParam({2, 3}, true);
+  auto y = graph.declareParam({2, 3}, true);
+  auto l = graph.createOp(axon::insts::Mul(x, y));
 
-  axon::finalize(mod);
+  axon::backward(graph, l);
 
   mlir::OpPrintingFlags flags;
   mlir::MLIRContext mlir_context;
 
   flags.printGenericOpForm(false);
 
-  if (auto module_op = axon::codegen(mod, mlir_context)) {
+  if (auto module_op = axon::codegen(graph, mlir_context)) {
     module_op->print(llvm::outs(), flags);
   }
 }
