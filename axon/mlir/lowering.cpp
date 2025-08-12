@@ -1,14 +1,23 @@
 module;
 
 #include "axon/mlir/dialect/dialect.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
+#include "mlir/Dialect/Func/Transforms/Passes.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/MemRef/Transforms/Transforms.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -42,7 +51,7 @@ struct BinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
   }
 };
 
-struct GetDataLowering : mlir::OpConversionPattern<GetDataOp> {
+struct GetDataOpLowering : mlir::OpConversionPattern<GetDataOp> {
   using mlir::OpConversionPattern<GetDataOp>::OpConversionPattern;
 
   auto matchAndRewrite(GetDataOp op, OpAdaptor adaptor,
@@ -59,13 +68,14 @@ struct GetDataLowering : mlir::OpConversionPattern<GetDataOp> {
     }
 
     auto memref = rewriter.create<TupleAccessOp>(loc, adaptor.getInput(), 0);
-    auto new_op = rewriter.create<mlir::bufferization::ToTensorOp>(loc, memref);
+    auto new_op = rewriter.create<mlir::bufferization::ToTensorOp>(
+        loc, memref, /*restrict=*/true);
     rewriter.replaceOp(op, new_op);
     return mlir::success();
   }
 };
 
-struct AccumulateGradLowering : mlir::OpConversionPattern<AccumulateGradOp> {
+struct AccumulateGradOpLowering : mlir::OpConversionPattern<AccumulateGradOp> {
   using mlir::OpConversionPattern<AccumulateGradOp>::OpConversionPattern;
 
   auto matchAndRewrite(AccumulateGradOp op, OpAdaptor adaptor,
@@ -75,9 +85,10 @@ struct AccumulateGradLowering : mlir::OpConversionPattern<AccumulateGradOp> {
 
     auto tensor_type =
         llvm::dyn_cast<TensorRefType>(op.getAccumulator().getType());
-    // We know that `adaptor.getAccumulator` must require a gradient. Since
-    // `TensorRefType` are lowered to tuple<memref, memref> then we need to
-    // access the second element.
+
+    // Since  `adaptor.getAccumulator` must require a gradient and because
+    // `TensorRefType` is lowered to tuple<memref, memref>, then to access the
+    // grad memref we need to invoke the tuple access op to access the gradient.
     auto grad_ref =
         rewriter.create<TupleAccessOp>(loc, adaptor.getAccumulator(), 1);
     auto memref_type = mlir::MemRefType::get(tensor_type.getShape(),
@@ -119,7 +130,7 @@ struct AxonToStandardLoweringPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AxonToStandardLoweringPass)
 
   auto getArgument() const -> llvm::StringRef override {
-    return "axon-lowering";
+    return "axon-to-standard-lowering";
   }
 
   auto getDependentDialects(mlir::DialectRegistry& registry) const
@@ -146,8 +157,8 @@ struct AxonToStandardLoweringPass
     AxonToStdTypeConverter type_converter{&context};
 
     mlir::RewritePatternSet patterns{&context};
-    patterns.add<AddOpLowering, MulOpLowering, GetDataLowering,
-                 AccumulateGradLowering>(type_converter, &context);
+    patterns.add<AddOpLowering, MulOpLowering, GetDataOpLowering,
+                 AccumulateGradOpLowering>(type_converter, &context);
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, type_converter);
@@ -168,7 +179,84 @@ struct AxonToStandardLoweringPass
   }
 };
 
-export auto createAxonToStandardLoweringPass() -> std::unique_ptr<mlir::Pass> {
+struct AxonToLlvmTypeConverter : mlir::LLVMTypeConverter {
+  AxonToLlvmTypeConverter(mlir::MLIRContext* ctx)
+      : mlir::LLVMTypeConverter(ctx) {
+    addConversion([](mlir::Type type) -> mlir::Type { return type; });
+
+    // convert tuples to
+    addConversion([ctx, this](mlir::TupleType tuple_type) -> mlir::Type {
+      llvm::SmallVector<mlir::Type> llvm_types;
+      for (mlir::Type elemType : tuple_type.getTypes()) {
+        mlir::Type convertedType = convertType(elemType);
+        if (!convertedType) {
+          return {};
+        }
+        if (!mlir::LLVM::isCompatibleType(convertedType)) {
+          return {};
+        }
+
+        llvm_types.push_back(convertedType);
+      }
+
+      return mlir::LLVM::LLVMStructType::getLiteral(ctx, llvm_types);
+    });
+  }
+};
+
+struct TupleAccessOpLowering : mlir::OpConversionPattern<TupleAccessOp> {
+  using mlir::OpConversionPattern<TupleAccessOp>::OpConversionPattern;
+
+  auto matchAndRewrite(TupleAccessOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+    adaptor.getInput();
+    return mlir::success();
+  }
+};
+
+struct AxonToLlvmLoweringPass
+    : mlir::PassWrapper<AxonToLlvmLoweringPass,
+                        mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AxonToLlvmLoweringPass)
+
+  auto getArgument() const -> llvm::StringRef override {
+    return "axon-to-llvm-lowering";
+  }
+
+  auto getDependentDialects(mlir::DialectRegistry& registry) const
+      -> void override {
+    registry.insert<mlir::LLVM::LLVMDialect>();
+  }
+
+  auto runOnOperation() -> void final {
+    auto& context = getContext();
+    mlir::ConversionTarget target(context);
+
+    target.addLegalDialect<mlir::LLVM::LLVMDialect>();
+    target.addLegalOp<mlir::ModuleOp>();
+
+    mlir::RewritePatternSet patterns{&context};
+
+    AxonToLlvmTypeConverter type_converter{&context};
+
+    mlir::populateFuncToLLVMConversionPatterns(type_converter, patterns);
+
+    patterns.add<TupleAccessOpLowering>(type_converter, &context);
+
+    if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
+                                                  std::move(patterns)))) {
+      signalPassFailure();
+    }
+  }
+};
+
+export auto createLlvmLoweringPass() -> std::unique_ptr<mlir::Pass> {
+  return std::make_unique<AxonToLlvmLoweringPass>();
+}
+
+export auto createStandardLoweringPass() -> std::unique_ptr<mlir::Pass> {
   return std::make_unique<AxonToStandardLoweringPass>();
 }
 

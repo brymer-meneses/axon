@@ -55,13 +55,23 @@ target_link_libraries(libaxon
   MLIRPass
   MLIRSupport
   MLIRTransforms
+
   MLIRDialect
-  MLIRFuncDialect
-  MLIRFuncTransforms
-  MLIRLinalgDialect
-  MLIRBufferizationDialect
+  MLIRLLVMDialect
   MLIRTensorDialect
   MLIRArithDialect
+  MLIRFuncDialect
+  MLIRLinalgDialect
+  MLIRBufferizationDialect
+
+  MLIRFuncToLLVM
+  MLIRMemRefToLLVM
+  MLIRArithToLLVM
+  MLIRTensorToLinalg
+  MLIRReconcileUnrealizedCasts
+
+  MLIRBufferizationPipelines
+  MLIRFuncTransforms
 )
 
 if (MSVC)

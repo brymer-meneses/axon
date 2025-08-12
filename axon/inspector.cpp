@@ -1,7 +1,6 @@
 
 #include "llvm/Support/raw_ostream.h"
-#include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Pass/PassManager.h"
 
 import axon.core;
 import axon.mlir;
@@ -21,7 +20,21 @@ auto main() -> int {
 
   flags.printGenericOpForm(false);
 
-  if (auto module_op = axon::codegen(graph, mlir_context)) {
-    module_op->print(llvm::outs(), flags);
+  auto module_op = axon::codegen(graph, mlir_context);
+  if (!module_op) {
+    std::println("Failed to compile module");
+    return 1;
   }
+
+  module_op->print(llvm::outs(), flags);
+  mlir::PassManager manager(&mlir_context);
+  axon::createLowerToLlvmPipeline(manager);
+
+  auto result = manager.run(module_op);
+  if (result.failed()) {
+    std::println("Pass pipeline failed");
+    return {};
+  }
+
+  module_op->print(llvm::outs(), flags);
 }
