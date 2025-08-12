@@ -17,36 +17,35 @@ import std;
 
 namespace axon {
 
-// struct AccumulateGradLowering
-//     : public mlir::OpConversionPattern<AccumulateGradOp> {
-//   using OpConversionPattern<AccumulateGradOp>::OpConversionPattern;
-//
-//   auto matchAndRewrite(AccumulateGradOp op, OpAdaptor adaptor,
-//                        mlir::ConversionPatternRewriter& rewriter) const
-//       -> mlir::LogicalResult final {
-//     auto tensor = llvm::dyn_cast<mlir::TensorType>(op.getRhs().getType());
-//     if (!tensor) {
-//       return mlir::failure();
-//     }
-//
-//     auto memref_type =
-//         mlir::MemRefType::get(tensor.getShape(), tensor.getElementType());
-//
-//     auto tensor_memref = rewriter.create<mlir::bufferization::ToMemrefOp>(
-//         op.getLoc(), memref_type, op.getRhs());
-//
-//     rewriter.create<mlir::linalg::AddOp>(
-//         op.getLoc(), mlir::ValueRange{op.getLhs(), tensor_memref},
-//         mlir::ValueRange{op.getLhs()});
-//
-//     rewriter.eraseOp(op);
-//     return mlir::success();
-//   }
-// };
+template <typename BinaryOp, typename LoweredBinaryOp>
+struct BinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
+  using mlir::OpConversionPattern<BinaryOp>::OpConversionPattern;
+  using OpAdaptor = typename mlir::OpConversionPattern<BinaryOp>::OpAdaptor;
+
+  auto matchAndRewrite(BinaryOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+
+    auto lhs_tensor = llvm::cast<mlir::TensorType>(adaptor.getLhs().getType());
+    auto rhs_tensor = llvm::cast<mlir::TensorType>(adaptor.getLhs().getType());
+
+    if (rhs_tensor.getShape().equals(lhs_tensor.getShape())) {
+      auto new_op = rewriter.create<LoweredBinaryOp>(loc, adaptor.getLhs(),
+                                                     adaptor.getRhs());
+      rewriter.replaceOp(op, new_op);
+      return mlir::success();
+    }
+
+    std::unreachable();
+  }
+};
+
+using AddOpLowering = BinaryOpLowering<AddOp, mlir::arith::AddFOp>;
+using MulOpLowering = BinaryOpLowering<MulOp, mlir::arith::MulFOp>;
 
 struct AxonLoweringPass
-    : public mlir::PassWrapper<AxonLoweringPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
+    : mlir::PassWrapper<AxonLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AxonLoweringPass)
 
   auto getArgument() const -> llvm::StringRef override {
@@ -70,11 +69,10 @@ struct AxonLoweringPass
                          mlir::memref::MemRefDialect, mlir::arith::ArithDialect,
                          mlir::bufferization::BufferizationDialect,
                          mlir::tensor::TensorDialect>();
-    target.addIllegalOp<AccumulateGrad>();
+    target.addIllegalOp<AddOp, MulOp>();
 
     mlir::RewritePatternSet patterns{&context};
-
-    // patterns.add<AccumulateGradLowering>(&context);
+    patterns.add<AddOpLowering, MulOpLowering>(&context);
 
     if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns)))) {

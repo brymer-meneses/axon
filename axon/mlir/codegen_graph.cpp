@@ -99,7 +99,6 @@ export auto codegenGraph(Graph& graph, mlir::OpBuilder& builder,
     const auto& inst = graph.insts().get(inst_id);
     inst.visit([&](auto inst) { codegen(inst, ctx, inst_id); });
   }
-
   ctx.builder.create<mlir::func::ReturnOp>(loc);
 }
 

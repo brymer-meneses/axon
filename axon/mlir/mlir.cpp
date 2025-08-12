@@ -6,6 +6,7 @@ module;
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Pass/PassManager.h"
 
 export module axon.mlir;
 
@@ -13,6 +14,7 @@ import axon.core;
 
 export import :compilation_context;
 export import :codegen_graph;
+export import :lowering;
 
 export namespace axon {
 
@@ -28,15 +30,15 @@ auto codegen(Graph& graph, mlir::MLIRContext& mlir_ctx) -> mlir::ModuleOp {
 
   codegenGraph(graph, builder, module_op);
 
-  // mlir::PassManager pm(&mlir_ctx);
-  //
-  // pm.addPass(createAxonLoweringPass());
-  //
-  // auto result = pm.run(module_op);
-  // if (result.failed()) {
-  //   return {};
-  // }
-  //
+  mlir::PassManager manager(&mlir_ctx);
+
+  manager.addPass(createAxonLoweringPass());
+
+  auto result = manager.run(module_op);
+  if (result.failed()) {
+    return {};
+  }
+
   return module_op;
 }
 

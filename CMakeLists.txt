@@ -25,7 +25,7 @@ target_sources(libaxon
 
     axon/mlir/codegen_graph.cpp
     axon/mlir/mlir.cpp
-    # axon/mlir/lowering.cpp
+    axon/mlir/lowering.cpp
     axon/mlir/compilation_context.cpp
   PRIVATE
     axon/mlir/dialect/dialect.cpp

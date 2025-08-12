@@ -16,7 +16,7 @@ auto backward(Graph& graph, InstId output_id, InstId grad_id = InstId::None)
   AXON_DCHECK(output_id.isValid(), "`output_id` has no value.");
 
   if (not grad_id.isValid()) {
-    grad_id = graph.createConstant(1.0);
+    grad_id = output_id;
   }
 
   llvm::SmallVector<Dependency> work_list;
