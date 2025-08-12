@@ -106,4 +106,19 @@ def Axon_MulOp : AxonDialect_Op<"mul"> {
   let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs)  `->` type($result) attr-dict";
 }
 
+def Axon_TupleAccessOp : AxonDialect_Op<"tuple_access"> {
+  let arguments = (ins AnyTuple:$input, I64Attr:$index);
+  let results = (outs AnyType:$output);
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$tuple, "int32_t":$index), [{
+      auto tuple_casted = llvm::cast<mlir::TupleType>(tuple.getType());
+      auto result_type = tuple_casted.getTypes()[index];
+      build($_builder, $_state, result_type, tuple, index);
+    }]>
+  ];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
 #endif // AXON_DIALECT

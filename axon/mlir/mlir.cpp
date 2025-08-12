@@ -32,7 +32,7 @@ auto codegen(Graph& graph, mlir::MLIRContext& mlir_ctx) -> mlir::ModuleOp {
 
   mlir::PassManager manager(&mlir_ctx);
 
-  manager.addPass(createAxonLoweringPass());
+  manager.addPass(createAxonToStandardLoweringPass());
 
   auto result = manager.run(module_op);
   if (result.failed()) {

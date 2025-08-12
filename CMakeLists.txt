@@ -57,6 +57,7 @@ target_link_libraries(libaxon
   MLIRTransforms
   MLIRDialect
   MLIRFuncDialect
+  MLIRFuncTransforms
   MLIRLinalgDialect
   MLIRBufferizationDialect
   MLIRTensorDialect
