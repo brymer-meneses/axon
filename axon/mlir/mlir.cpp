@@ -30,26 +30,6 @@ import :lowering;
 
 export namespace axon {
 
-void dumpIfHasBufferizable(mlir::Operation* op) {
-  if (auto iface =
-          llvm::dyn_cast<mlir::bufferization::BufferizableOpInterface>(op)) {
-    llvm::errs() << "✅ " << op->getName()
-                 << " implements BufferizableOpInterface\n";
-  } else {
-    llvm::errs() << "❌ " << op->getName()
-                 << " does NOT implement BufferizableOpInterface\n";
-  }
-}
-
-struct DebugBufferizablePass
-    : public mlir::PassWrapper<DebugBufferizablePass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  void runOnOperation() override {
-    getOperation().walk(
-        [&](mlir::Operation* op) { dumpIfHasBufferizable(op); });
-  }
-};
-
 auto codegen(Graph& graph, mlir::MLIRContext& mlir_ctx) -> mlir::ModuleOp {
   mlir_ctx.loadDialect<mlir::func::FuncDialect>();
   mlir_ctx.loadDialect<mlir::tensor::TensorDialect>();
@@ -68,17 +48,15 @@ auto codegen(Graph& graph, mlir::MLIRContext& mlir_ctx) -> mlir::ModuleOp {
 auto createLowerToLlvmPipeline(mlir::PassManager& manager) -> void {
   manager.addPass(axon::createStandardLoweringPass());
 
-  mlir::bufferization::OneShotBufferizationOptions bufferization_options;
-
   manager.addPass(mlir::createConvertElementwiseToLinalgPass());
-  manager.addPass(mlir::bufferization::createEmptyTensorToAllocTensorPass());
+
+  mlir::bufferization::OneShotBufferizationOptions bufferization_options;
+  manager.addPass(
+      mlir::bufferization::createOneShotBufferizePass(bufferization_options));
 
   mlir::bufferization::BufferDeallocationPipelineOptions deallocation_options;
   mlir::bufferization::buildBufferDeallocationPipeline(manager,
                                                        deallocation_options);
-
-  manager.addPass(
-      mlir::bufferization::createOneShotBufferizePass(bufferization_options));
 
   manager.addPass(mlir::createConvertLinalgToAffineLoopsPass());
   manager.addPass(mlir::affine::createLoopFusionPass());

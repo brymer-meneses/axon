@@ -47,5 +47,5 @@ auto main() -> int {
     return {};
   }
 
-  module_op->print(llvm::outs(), flags);
+  // module_op->print(llvm::outs(), flags);
 }
