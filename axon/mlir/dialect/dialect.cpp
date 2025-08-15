@@ -7,6 +7,9 @@
 
 #define GET_OP_CLASSES
 #include "generated/dialect_ops.cpp.inc"
+
+import std;
+
 namespace axon {
 
 auto AxonDialect::initialize() -> void {

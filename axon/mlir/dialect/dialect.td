@@ -8,6 +8,8 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 
+include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.td"
+
 def AxonDialect : Dialect {
   let name = "axon";
   let cppNamespace = "axon";
@@ -106,7 +108,10 @@ def Axon_MulOp : AxonDialect_Op<"mul"> {
   let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs)  `->` type($result) attr-dict";
 }
 
-def Axon_TupleAccessOp : AxonDialect_Op<"tuple_access"> {
+def Axon_TupleAccessOp : AxonDialect_Op<"tuple_access", [
+  Pure, 
+  MemoryEffectsOpInterface, 
+]> {
   let arguments = (ins AnyTuple:$input, I64Attr:$index);
   let results = (outs AnyType:$output);
 

@@ -17,6 +17,7 @@ auto main() -> int {
 
   mlir::OpPrintingFlags flags;
   mlir::MLIRContext mlir_context;
+  mlir_context.disableMultithreading();
 
   flags.printGenericOpForm(false);
 
@@ -28,6 +29,16 @@ auto main() -> int {
 
   module_op->print(llvm::outs(), flags);
   mlir::PassManager manager(&mlir_context);
+  manager.enableVerifier();
+  manager.enableIRPrinting([](mlir::Pass*, mlir::Operation*) { return true; },
+                           [](mlir::Pass*, mlir::Operation*) {
+                             return true;
+                           },            // shouldPrintAfterPass
+                           true,         // printModuleScope
+                           true,         // printAfterOnlyOnChange
+                           false,        // printAfterOnlyOnFailure
+                           llvm::errs()  // output stream
+  );
   axon::createLowerToLlvmPipeline(manager);
 
   auto result = manager.run(module_op);

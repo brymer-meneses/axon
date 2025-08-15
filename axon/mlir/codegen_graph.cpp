@@ -2,6 +2,7 @@ module;
 
 #include "axon/base/dcheck.h"
 #include "dialect/dialect.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
 
 // MLIR Imports
@@ -17,9 +18,16 @@ export module axon.mlir:codegen_graph;
 import axon.core;
 import axon.base;
 
-import :compilation_context;
-
 namespace axon {
+
+struct CompilationContext {
+  Graph& graph;
+  mlir::OpBuilder& builder;
+  mlir::func::FuncOp& func_op;
+
+  llvm::DenseMap<InstId, mlir::Value> tensor_refs{};
+  llvm::DenseMap<InstId, mlir::Value> values{};
+};
 
 static auto codegen(insts::AccumulateGrad op, CompilationContext& ctx,
                     InstId inst_id) -> void {
@@ -73,10 +81,10 @@ static auto codegen(insts::Mul op, CompilationContext& ctx, InstId inst_id)
 static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {
   llvm::SmallVector<mlir::Type> arg_types;
+  auto element_type = builder.getF32Type();
   for (auto& param : graph.parameters().values()) {
     auto requires_grad = param.requires_grad;
     auto shape = graph.getShape(param.inst_id);
-    auto element_type = builder.getF32Type();
     auto type = TensorRefType::get(builder.getContext(), element_type, shape,
                                    requires_grad);
     arg_types.emplace_back(type);

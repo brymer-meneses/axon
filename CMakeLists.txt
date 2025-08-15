@@ -26,7 +26,6 @@ target_sources(libaxon
     axon/mlir/codegen_graph.cpp
     axon/mlir/mlir.cpp
     axon/mlir/lowering.cpp
-    axon/mlir/compilation_context.cpp
   PRIVATE
     axon/mlir/dialect/dialect.cpp
     axon/mlir/dialect/types.cpp
@@ -64,13 +63,16 @@ target_link_libraries(libaxon
   MLIRLinalgDialect
   MLIRBufferizationDialect
 
+  MLIRAffineToStandard
+  MLIRSCFToControlFlow
+  MLIRTensorToLinalg
+
   MLIRFuncToLLVM
   MLIRMemRefToLLVM
   MLIRArithToLLVM
-  MLIRTensorToLinalg
-  MLIRReconcileUnrealizedCasts
 
   MLIRBufferizationPipelines
+  MLIRReconcileUnrealizedCasts
   MLIRFuncTransforms
 )
 

@@ -1,11 +1,13 @@
 module;
 
 #include "dialect/dialect.h"
+#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Conversion/TensorToLinalg/TensorToLinalgPass.h"
+#include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Bufferization/Pipelines/Passes.h"
@@ -22,12 +24,31 @@ export module axon.mlir;
 
 import axon.core;
 
-export import :compilation_context;
 export import :codegen_graph;
 
 import :lowering;
 
 export namespace axon {
+
+void dumpIfHasBufferizable(mlir::Operation* op) {
+  if (auto iface =
+          llvm::dyn_cast<mlir::bufferization::BufferizableOpInterface>(op)) {
+    llvm::errs() << "✅ " << op->getName()
+                 << " implements BufferizableOpInterface\n";
+  } else {
+    llvm::errs() << "❌ " << op->getName()
+                 << " does NOT implement BufferizableOpInterface\n";
+  }
+}
+
+struct DebugBufferizablePass
+    : public mlir::PassWrapper<DebugBufferizablePass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  void runOnOperation() override {
+    getOperation().walk(
+        [&](mlir::Operation* op) { dumpIfHasBufferizable(op); });
+  }
+};
 
 auto codegen(Graph& graph, mlir::MLIRContext& mlir_ctx) -> mlir::ModuleOp {
   mlir_ctx.loadDialect<mlir::func::FuncDialect>();
@@ -46,17 +67,25 @@ auto codegen(Graph& graph, mlir::MLIRContext& mlir_ctx) -> mlir::ModuleOp {
 
 auto createLowerToLlvmPipeline(mlir::PassManager& manager) -> void {
   manager.addPass(axon::createStandardLoweringPass());
-  manager.addPass(mlir::createCanonicalizerPass());
+
+  mlir::bufferization::OneShotBufferizationOptions bufferization_options;
 
   manager.addPass(mlir::createConvertElementwiseToLinalgPass());
-  manager.addPass(mlir::createConvertTensorToLinalgPass());
-  manager.addPass(mlir::createConvertLinalgToLoopsPass());
+  manager.addPass(mlir::bufferization::createEmptyTensorToAllocTensorPass());
 
-  // manager.addPass(axon::createLlvmLoweringPass());
-  // manager.addPass(mlir::createFinalizeMemRefToLLVMConversionPass());
-  // manager.addPass(mlir::createReconcileUnrealizedCastsPass());
-  // manager.addPass(mlir::createConvertFuncToLLVMPass());
-  // manager.addPass(mlir::createCanonicalizerPass());
+  mlir::bufferization::BufferDeallocationPipelineOptions deallocation_options;
+  mlir::bufferization::buildBufferDeallocationPipeline(manager,
+                                                       deallocation_options);
+
+  manager.addPass(
+      mlir::bufferization::createOneShotBufferizePass(bufferization_options));
+
+  manager.addPass(mlir::createConvertLinalgToAffineLoopsPass());
+  manager.addPass(mlir::affine::createLoopFusionPass());
+
+  manager.addPass(axon::createLlvmLoweringPass());
+
+  manager.addPass(mlir::createCanonicalizerPass());
 }
 
 }  // namespace axon

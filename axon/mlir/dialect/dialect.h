@@ -9,6 +9,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/HashBuilder.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
+#include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/SymbolTable.h"
