@@ -47,33 +47,34 @@ target_include_directories(libaxon
 )
 target_link_libraries(libaxon
   PRIVATE
-  xtensor 
-  xtensor-blas
-  ${llvm_libs}
-  MLIRIR
-  MLIRPass
-  MLIRSupport
-  MLIRTransforms
+    ${llvm_libs}
+    MLIRIR
+    MLIRPass
+    MLIRSupport
+    MLIRTransforms
 
-  MLIRDialect
-  MLIRLLVMDialect
-  MLIRTensorDialect
-  MLIRArithDialect
-  MLIRFuncDialect
-  MLIRLinalgDialect
-  MLIRBufferizationDialect
+    MLIRDialect
+    MLIRLLVMDialect
+    MLIRTensorDialect
+    MLIRArithDialect
+    MLIRFuncDialect
+    MLIRLinalgDialect
+    MLIRBufferizationDialect
 
-  MLIRAffineToStandard
-  MLIRSCFToControlFlow
-  MLIRTensorToLinalg
+    MLIRAffineToStandard
+    MLIRSCFToControlFlow
+    MLIRTensorToLinalg
 
-  MLIRFuncToLLVM
-  MLIRMemRefToLLVM
-  MLIRArithToLLVM
+    MLIRFuncToLLVM
+    MLIRMemRefToLLVM
+    MLIRArithToLLVM
 
-  MLIRBufferizationPipelines
-  MLIRReconcileUnrealizedCasts
-  MLIRFuncTransforms
+    MLIRBufferizationPipelines
+    MLIRReconcileUnrealizedCasts
+    MLIRFuncTransforms
+  SYSTEM PUBLIC
+    xtensor
+    xtensor-blas
 )
 
 if (MSVC)
@@ -95,8 +96,10 @@ add_dependencies(libaxon AxonDialectIncGen)
 nanobind_build_library(nanobind SHARED)
 add_library(_cpp)
 target_sources(_cpp 
-  PUBLIC
-  axon/python/bindings.cpp
+  PUBLIC FILE_SET CXX_MODULES FILES
+    axon/python/bindings.cpp
+    axon/python/tensor.cpp
+    axon/python/storage.cpp
 )
 set_target_properties(_cpp
   PROPERTIES
