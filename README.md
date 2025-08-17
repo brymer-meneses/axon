@@ -21,8 +21,8 @@ x = axon.tensor([...])
 y = axon.tensor([...])
 model = Model(512, 1024)
 
-# Having the `axon.Context` resource manager active, will make trace every tensor
-# operation.
+# Having the `axon.Context` resource manager active will trace every tensor
+# operation. And compile these operations in a MLIR Module.
 with axon.Context() as ctx:
     y_hat = model(x)
     l = mse_loss(y, y_hat)
