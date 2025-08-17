@@ -16,15 +16,16 @@ class Model(axon.Module):
 
     def forward(self, x):
         return x @ self.W + self.B
-        
-x = axon.tensor([...])
-y = axon.tensor([...])
-model = Model(512, 1024)
 
-# Having the `axon.Context` resource manager active will trace every tensor
-# operation. And compile these operations in a MLIR Module.
-with axon.Context() as ctx:
+@axon.training_step()
+def training_step(x, y, model):
     y_hat = model(x)
     l = mse_loss(y, y_hat)
-    l.backward()
+    return l
+
+optim = axon.SGD(lr=0.01)
+for (x, y) in dataset:
+    l = training_step(x, y, model)
+    optim.zero_grad()
+    optim.step()
 ```
