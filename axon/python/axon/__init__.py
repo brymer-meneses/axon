@@ -1,6 +1,11 @@
-from _cpp import Tensor
+from . import axon_bindings as bindings
 
-def tensor(obj, requires_grad=False) -> Tensor:
-    return None
+import numpy as np
+
+def tensor(ndarray, requires_grad=False) -> bindings.Tensor:
+    if not isinstance(ndarray, np.ndarray):
+        ndarray = np.array(ndarray)
+    return bindings.create_tensor(ndarray, requires_grad)
+
 
 

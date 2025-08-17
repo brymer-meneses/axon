@@ -1,12 +1,13 @@
 module;
 
+#include <vector>
+
 #include "axon/base/dcheck.h"
 #include "llvm/ADT/SmallVector.h"
 
 export module axon.core:graph;
 
 import axon.base;
-import std;
 
 import :ids;
 import :inst;

@@ -6,8 +6,6 @@ module;
 
 export module axon.python:storage;
 
-import std;
-
 namespace nb = nanobind;
 
 export namespace axon {

@@ -1,7 +1,5 @@
 #include "dialect.h"
 
-import std;
-
 namespace axon {
 
 auto TensorRefType::print(mlir::AsmPrinter& printer) const -> void {

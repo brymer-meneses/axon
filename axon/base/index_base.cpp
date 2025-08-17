@@ -1,10 +1,10 @@
 module;
 
+#include <limits>
+
 #include "llvm/ADT/DenseMapInfo.h"
 
 export module axon.base:index_base;
-
-import std;
 
 export namespace axon {
 

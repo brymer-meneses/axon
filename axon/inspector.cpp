@@ -4,7 +4,6 @@
 
 import axon.core;
 import axon.mlir;
-import std;
 
 auto main() -> int {
   axon::Graph graph;

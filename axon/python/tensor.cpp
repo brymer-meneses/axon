@@ -1,5 +1,7 @@
 module;
 
+#include <optional>
+
 #include "llvm/ADT/SmallVector.h"
 #include "xtensor/containers/xarray.hpp"
 
@@ -7,7 +9,6 @@ export module axon.python:tensor;
 
 import axon.base;
 import axon.core;
-import std;
 
 import :storage;
 

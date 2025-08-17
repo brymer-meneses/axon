@@ -1,5 +1,7 @@
 module;
 
+#include <memory>
+
 #include "axon/mlir/dialect/dialect.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
@@ -28,8 +30,6 @@ module;
 #include "mlir/Transforms/DialectConversion.h"
 
 export module axon.mlir:lowering;
-
-import std;
 
 namespace axon {
 

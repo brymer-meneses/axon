@@ -1,5 +1,7 @@
 module;
 
+#include <variant>
+
 #include "llvm/ADT/STLExtras.h"
 
 export module axon.core:inst_kinds;

@@ -12,7 +12,6 @@ import :ids;
 import :inst_kinds;
 
 import axon.base;
-import std;
 
 export namespace axon {
 

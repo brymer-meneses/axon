@@ -1,15 +1,12 @@
 cmake_minimum_required(VERSION 4.0.2)
 
-set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "a9e1cf81-9932-4810-974b-6eccaf14e457")
-set(CMAKE_CXX_MODULE_STD 1)
-
 project(axon)
 
 include(cmake/dependencies.cmake)
 
-add_library(libaxon)
+add_library(axon STATIC)
 
-target_sources(libaxon 
+target_sources(axon 
   PUBLIC FILE_SET CXX_MODULES FILES
     axon/base/storage.cpp
     axon/base/index_base.cpp
@@ -32,8 +29,8 @@ target_sources(libaxon
     axon/mlir/dialect/ops.cpp
 )
 
-target_compile_features(libaxon PUBLIC cxx_std_23)
-target_include_directories(libaxon
+target_compile_features(axon PUBLIC cxx_std_23)
+target_include_directories(axon
   SYSTEM PRIVATE 
   ${xtensor_INCLUDE_DIRS} 
   ${NANOBIND_INCLUDE_DIRS}
@@ -45,7 +42,7 @@ target_include_directories(libaxon
 
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(libaxon
+target_link_libraries(axon
   PRIVATE
     ${llvm_libs}
     MLIRIR
@@ -78,9 +75,9 @@ target_link_libraries(libaxon
 )
 
 if (MSVC)
-  target_compile_options(libaxon PRIVATE /W4 /WX)
+  target_compile_options(axon PRIVATE /W4 /WX)
 else()
-  target_compile_options(libaxon PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(axon PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 set(LLVM_TARGET_DEFINITIONS axon/mlir/dialect/dialect.td)
@@ -91,30 +88,39 @@ mlir_tablegen(generated/dialect_type_defs.cpp.inc -gen-typedef-defs)
 mlir_tablegen(generated/dialect_ops.h.inc -gen-op-decls)
 mlir_tablegen(generated/dialect_ops.cpp.inc -gen-op-defs)
 add_public_tablegen_target(AxonDialectIncGen)
-add_dependencies(libaxon AxonDialectIncGen)
+add_dependencies(axon AxonDialectIncGen)
 
-nanobind_build_library(nanobind SHARED)
-add_library(_cpp)
-target_sources(_cpp 
+# these options are needed for linking to nanobind
+target_compile_options(axon PRIVATE -fno-stack-protector)
+set_target_properties(axon PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+nanobind_build_library(nanobind shared)
+add_library(axon_bindings MODULE)
+target_sources(axon_bindings
   PUBLIC FILE_SET CXX_MODULES FILES
-    axon/python/bindings.cpp
     axon/python/tensor.cpp
     axon/python/storage.cpp
+    axon/python/python.cpp
+  PUBLIC
+    axon/python/bindings.cpp
 )
-set_target_properties(_cpp
+target_link_libraries(axon_bindings 
+  PRIVATE 
+    axon
+    nanobind
+    xtensor
+    xtensor-blas
+    Python::Module
+)
+
+target_compile_features(axon_bindings PUBLIC cxx_std_23)
+set_target_properties(axon_bindings
   PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/axon/python/axon"
 )
-target_link_libraries(_cpp PUBLIC libaxon nanobind)
 
-# Mainly for debugging for now.
-add_executable(inspector)
-target_sources(inspector 
-  PUBLIC
-  axon/inspector.cpp
-)
-target_compile_features(inspector PUBLIC cxx_std_23)
-target_link_libraries(inspector 
-  PUBLIC 
-  libaxon
-)
+nanobind_disable_stack_protector(axon_bindings)
+nanobind_lto(axon_bindings)
+nanobind_set_visibility(axon_bindings)
+nanobind_extension(axon_bindings)
+

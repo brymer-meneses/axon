@@ -1,4 +1,3 @@
-module;
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
@@ -6,20 +5,16 @@ module;
 #include "nanobind/ndarray.h"
 #include "nanobind/stl/string.h"
 
-export module axon.python;
-
 import axon.core;
-
-import :tensor;
-import :storage;
+import axon.python;
 
 namespace nb = nanobind;
 
 using namespace axon;
 
-NB_MODULE(_cpp, m) {
+NB_MODULE(axon_bindings, m) {
   nb::class_<Tensor>(m, "Tensor")
-      .def("__init__",
+      .def("__repr__",
            [](const Tensor& self) -> std::string { return "tensor"; });
 
   m.def(
