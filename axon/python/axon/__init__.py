@@ -7,5 +7,7 @@ def tensor(ndarray, requires_grad=False) -> bindings.Tensor:
         ndarray = np.array(ndarray)
     return bindings.create_tensor(ndarray, requires_grad)
 
+def rand(shape, requires_grad=False) -> bindings.Tensor:
+    return bindings.create_rand(shape, requires_grad)
 
 

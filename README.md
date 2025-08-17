@@ -11,19 +11,20 @@ def mse_loss(y, y_hat):
 class Model(axon.Module):
     def __init__(self, in_features, out_features):
         super().__init__()
-        self.W = axon.rand((in_features, out_features))
-        self.B = axon.rand((out_features, 1))
+        self.W = axon.rand((in_features, out_features), requires_grad=True)
+        self.B = axon.rand((out_features, 1), requires_grad=True)
 
     def forward(self, x):
-        return self.W @ x + self.B
+        return x @ self.W + self.B
         
-ctx = axon.Context()
-x = ctx.tensor([...], requires_grad=True)
-y = ctx.tensor([...])
+x = axon.tensor([...])
+y = axon.tensor([...])
+model = Model(512, 1024)
 
-model = Model()
-
-y_hat = model(x)
-l = mse_loss(y, y_hat)
-ctx.backward(l)
+# Having the `axon.Context` resource manager active, will make trace every tensor
+# operation.
+with axon.Context() as ctx:
+    y_hat = model(x)
+    l = mse_loss(y, y_hat)
+    l.backward()
 ```

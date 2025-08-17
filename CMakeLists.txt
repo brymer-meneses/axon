@@ -99,6 +99,7 @@ add_library(axon_bindings MODULE)
 target_sources(axon_bindings
   PUBLIC FILE_SET CXX_MODULES FILES
     axon/python/tensor.cpp
+    axon/python/context.cpp
     axon/python/storage.cpp
     axon/python/python.cpp
   PUBLIC

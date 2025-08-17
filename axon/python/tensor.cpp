@@ -19,7 +19,13 @@ struct Tensor {
   Tensor(Storage& data, Storage& grad)
       : data(std::move(data)), grad(std::move(grad)) {}
 
-  Storage data;
+  Tensor() = default;
+
+  auto isLazy() -> bool {
+    return not data.has_value() and not grad.has_value();
+  }
+
+  std::optional<Storage> data;
   std::optional<Storage> grad;
 };
 
