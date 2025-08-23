@@ -29,7 +29,6 @@ class CompiledFunction:
         # check if it matches the cached graph
         if graph != self._cached_graph:
             self._compiled = graph.compile()
-        print(self._compiled)
         return result
 
     def __repr__(self) -> str:
@@ -49,8 +48,4 @@ def _convert_params(graph, *args, **kwargs):
     return tuple(new_args), new_kwargs
 
 def compile(func: typing.Callable) -> typing.Callable:
-    @functools.wraps(func)
-    def decorated_func(*args, **kwargs) -> typing.Any:
-        compiled_func = CompiledFunction(func)
-        return compiled_func(*args, **kwargs)
-    return decorated_func
+    return CompiledFunction(func)
