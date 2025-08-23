@@ -18,21 +18,23 @@ class CompiledFunction:
     def __call__(self, *args, **kwargs) -> typing.Any:
         graph = bindings.Graph()
         for arg in itertools.chain(args, kwargs.values()):
-            if isinstance(bindings.Tensor, arg):
+            if isinstance(arg, bindings.Tensor):
                 graph.declare_parameter(arg.shape, arg.requires_grad)
 
         # trace the tensor operations
         bindings._set_current_graph(graph)
-        self._func(args, kwargs)
+        result = self._func(*args, **kwargs)
 
         # check if it matches the cached graph
         if graph == self._cached_graph:
             pass
 
+        return result
+
 
 def compile(func: typing.Callable) -> typing.Callable:
     @functools.wraps(func)
-    def decorated_func(func, *args, **kwargs) -> typing.Any:
+    def decorated_func(*args, **kwargs) -> typing.Any:
         compiled_func = CompiledFunction(func)
-        return compiled_func(args, kwargs)
+        return compiled_func(*args, **kwargs)
     return decorated_func

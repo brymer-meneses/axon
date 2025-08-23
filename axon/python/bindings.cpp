@@ -4,6 +4,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "nanobind/nanobind.h"
 #include "nanobind/ndarray.h"
+#include "nanobind/stl/shared_ptr.h"
 #include "nanobind/stl/string.h"
 #include "nanobind/stl/variant.h"
 
@@ -65,6 +66,6 @@ NB_MODULE(axon_bindings, m) {
         []() -> std::shared_ptr<Graph> { return current_graph; });
 
   m.def("_set_current_graph", [](std::shared_ptr<Graph> graph) -> void {
-    current_graph.swap(graph);
+    current_graph = std::move(graph);
   });
 }
