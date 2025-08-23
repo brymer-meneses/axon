@@ -34,6 +34,7 @@ NB_MODULE(axon_bindings, m) {
            });
 
   nb::class_<Graph>(m, "Graph")
+      .def(nb::init<>())
       .def(
           "declare_parameter",
           [](std::shared_ptr<Graph> self, std::vector<int64_t> shape,
@@ -45,7 +46,7 @@ NB_MODULE(axon_bindings, m) {
           nb::rv_policy::move);
 
   m.def(
-      "create_tensor",
+      "_create_tensor",
       [](nb::ndarray<>& array, bool requires_grad) -> Tensor {
         if (not requires_grad) {
           auto data = Storage::fromNanobind(array, ElementType::Float32);
@@ -57,4 +58,13 @@ NB_MODULE(axon_bindings, m) {
         return {data, grad};
       },
       nb::rv_policy::move);
+
+  static thread_local std::shared_ptr<Graph> current_graph{};
+
+  m.def("_get_current_graph",
+        []() -> std::shared_ptr<Graph> { return current_graph; });
+
+  m.def("_set_current_graph", [](std::shared_ptr<Graph> graph) -> void {
+    current_graph.swap(graph);
+  });
 }

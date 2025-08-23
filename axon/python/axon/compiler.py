@@ -7,8 +7,6 @@ import functools
 
 from . import axon_bindings as bindings
 
-_current_graph = contextvars.ContextVar('current_graph', default=None)
-
 class CompiledFunction:
     def __init__(self, func: typing.Callable) -> None:
         self._func = func
@@ -19,13 +17,12 @@ class CompiledFunction:
     # current graph.
     def __call__(self, *args, **kwargs) -> typing.Any:
         graph = bindings.Graph()
-        _current_graph.set(graph)
-
         for arg in itertools.chain(args, kwargs.values()):
             if isinstance(bindings.Tensor, arg):
                 graph.declare_parameter(arg.shape, arg.requires_grad)
 
         # trace the tensor operations
+        bindings._set_current_graph(graph)
         self._func(args, kwargs)
 
         # check if it matches the cached graph
