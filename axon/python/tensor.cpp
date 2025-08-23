@@ -1,5 +1,6 @@
 module;
 
+#include <memory>
 #include <optional>
 
 #include "llvm/ADT/SmallVector.h"
@@ -16,6 +17,9 @@ export namespace axon {
 
 struct LazyTensor {
   InstId inst_id;
+
+  // TODO: we should get rid of this and get the current graph from contextvar
+  std::shared_ptr<Graph> graph;
 };
 
 struct Tensor {

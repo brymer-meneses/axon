@@ -10,7 +10,6 @@ from . import axon_bindings as bindings
 _current_graph = contextvars.ContextVar('current_graph', default=None)
 
 class CompiledFunction:
-
     def __init__(self, func: typing.Callable) -> None:
         self._func = func
         self._cached_graph = None

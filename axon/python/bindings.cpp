@@ -14,36 +14,33 @@ namespace nb = nanobind;
 
 using namespace axon;
 
-enum class InstType { Add, Mul };
-
 NB_MODULE(axon_bindings, m) {
   nb::class_<Tensor>(m, "Tensor")
       .def("__repr__",
            [](const Tensor& self) -> std::string { return "tensor"; });
 
-  nb::class_<LazyTensor>(m, "LazyTensor");
+  nb::class_<LazyTensor>(m, "LazyTensor")
+      .def("__add__",
+           [](const LazyTensor& lhs, const LazyTensor& rhs) -> LazyTensor {
+             auto inst_id =
+                 lhs.graph->createOp(insts::Add(lhs.inst_id, rhs.inst_id));
+             return {inst_id, lhs.graph};
+           })
+      .def("__mul__",
+           [](const LazyTensor& lhs, const LazyTensor& rhs) -> LazyTensor {
+             auto inst_id =
+                 lhs.graph->createOp(insts::Mul(lhs.inst_id, rhs.inst_id));
+             return {inst_id, lhs.graph};
+           });
 
   nb::class_<Graph>(m, "Graph")
       .def(
-          "create_op",
-          [](Graph& self, InstType inst_type,
-             std::vector<LazyTensor> params) -> LazyTensor {
-            switch (inst_type) {
-              case InstType::Add:
-                return {self.createOp(
-                    insts::Add(params[0].inst_id, params[1].inst_id))};
-              case InstType::Mul:
-                return {self.createOp(
-                    insts::Mul(params[0].inst_id, params[1].inst_id))};
-            };
-          },
-          nb::rv_policy::move)
-      .def(
           "declare_parameter",
-          [](Graph& self, std::vector<int64_t> shape,
+          [](std::shared_ptr<Graph> self, std::vector<int64_t> shape,
              bool requires_grad) -> LazyTensor {
-            return {
-                self.declareParam({shape.begin(), shape.end()}, requires_grad)};
+            llvm::SmallVector<int64_t> shape_ = {shape.begin(), shape.end()};
+            auto inst_id = self->declareParam(shape_, requires_grad);
+            return {inst_id, self};
           },
           nb::rv_policy::move);
 
