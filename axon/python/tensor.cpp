@@ -14,18 +14,16 @@ import :storage;
 
 export namespace axon {
 
+struct LazyTensor {
+  InstId inst_id;
+};
+
 struct Tensor {
   Tensor(Storage& data) : data(std::move(data)), grad(std::nullopt) {}
   Tensor(Storage& data, Storage& grad)
       : data(std::move(data)), grad(std::move(grad)) {}
 
-  Tensor() = default;
-
-  auto isLazy() -> bool {
-    return not data.has_value() and not grad.has_value();
-  }
-
-  std::optional<Storage> data;
+  Storage data;
   std::optional<Storage> grad;
 };
 

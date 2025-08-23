@@ -43,13 +43,14 @@ target_include_directories(axon
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_link_libraries(axon
-  PRIVATE
+  SYSTEM 
     ${llvm_libs}
+    xtensor
+    xtensor-blas
     MLIRIR
     MLIRPass
     MLIRSupport
     MLIRTransforms
-
     MLIRDialect
     MLIRLLVMDialect
     MLIRTensorDialect
@@ -57,21 +58,15 @@ target_link_libraries(axon
     MLIRFuncDialect
     MLIRLinalgDialect
     MLIRBufferizationDialect
-
     MLIRAffineToStandard
     MLIRSCFToControlFlow
     MLIRTensorToLinalg
-
     MLIRFuncToLLVM
     MLIRMemRefToLLVM
     MLIRArithToLLVM
-
     MLIRBufferizationPipelines
     MLIRReconcileUnrealizedCasts
     MLIRFuncTransforms
-  SYSTEM PUBLIC
-    xtensor
-    xtensor-blas
 )
 
 if (MSVC)
@@ -99,7 +94,7 @@ add_library(axon_bindings MODULE)
 target_sources(axon_bindings
   PUBLIC FILE_SET CXX_MODULES FILES
     axon/python/tensor.cpp
-    axon/python/context.cpp
+    axon/python/compilation_unit.cpp
     axon/python/storage.cpp
     axon/python/python.cpp
   PUBLIC
@@ -124,4 +119,12 @@ nanobind_disable_stack_protector(axon_bindings)
 nanobind_lto(axon_bindings)
 nanobind_set_visibility(axon_bindings)
 nanobind_extension(axon_bindings)
+
+nanobind_add_stub(
+  axon_bindings_stub
+  MODULE axon_bindings
+  OUTPUT axon_bindings.pyi
+  PYTHON_PATH $<TARGET_FILE_DIR:axon_bindings>
+  DEPENDS axon_bindings
+)
 

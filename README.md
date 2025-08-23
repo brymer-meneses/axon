@@ -5,9 +5,6 @@ Axon is a tiny Deep Learning Library that uses MLIR to optimize tensor operation
 ```python
 import axon
 
-def mse_loss(y, y_hat):
-    return 0.5 * (y-y_hat) ** 2
-
 class Model(axon.Module):
     def __init__(self, in_features, out_features):
         super().__init__()
@@ -17,7 +14,10 @@ class Model(axon.Module):
     def forward(self, x):
         return x @ self.W + self.B
 
-@axon.training_step()
+def mse_loss(y, y_hat):
+    return 0.5 * (y-y_hat) ** 2
+
+@axon.compile
 def training_step(x, y, model):
     y_hat = model(x)
     l = mse_loss(y, y_hat)
