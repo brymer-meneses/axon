@@ -11,27 +11,42 @@ class CompiledFunction:
     def __init__(self, func: typing.Callable) -> None:
         self._func = func
         self._cached_graph = None
+        self._compiled = None
 
     # When `__call__` is invoked every tensor operation is recorded.
     # a new graph is created and checked if it is equal to the 
     # current graph.
     def __call__(self, *args, **kwargs) -> typing.Any:
         graph = bindings.Graph()
-        for arg in itertools.chain(args, kwargs.values()):
-            if isinstance(arg, bindings.Tensor):
-                graph.declare_parameter(arg.shape, arg.requires_grad)
+        args, kwargs = _convert_params(graph, *args, **kwargs)
 
         # trace the tensor operations
         bindings._set_current_graph(graph)
         result = self._func(*args, **kwargs)
-        graph.finalize(result)
+        if isinstance(result, bindings.LazyTensor):
+            graph.finalize(result)
 
         # check if it matches the cached graph
-        if graph == self._cached_graph:
-            pass
-
+        if graph != self._cached_graph:
+            self._compiled = graph.compile()
+        print(self._compiled)
         return result
 
+    def __repr__(self) -> str:
+        return self._compiled.__repr__()
+
+def _convert_params(graph, *args, **kwargs):
+    new_args = []
+    for arg in args:
+        if isinstance(arg, bindings.Tensor):
+            arg = graph.declare_parameter(arg.shape, arg.requires_grad)
+        new_args.append(arg)
+    new_kwargs = {}
+    for (key, value) in kwargs.items():
+        if isinstance(value, bindings.Tensor):
+            value = graph.declare_parameter(value.shape, value.requires_grad)
+        new_kwargs[key] = value
+    return tuple(new_args), new_kwargs
 
 def compile(func: typing.Callable) -> typing.Callable:
     @functools.wraps(func)

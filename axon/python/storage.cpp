@@ -90,6 +90,9 @@ class Storage {
             /*is_owned=*/true};
   }
 
+  auto shape() const -> llvm::ArrayRef<int64_t> { return shape_; }
+  auto stride() const -> llvm::ArrayRef<int64_t> { return strides_; }
+
  private:
   std::byte* data_;
   llvm::SmallVector<int64_t> shape_;

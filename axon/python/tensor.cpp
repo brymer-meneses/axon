@@ -24,6 +24,9 @@ struct Tensor {
   Tensor(Storage& data, Storage& grad)
       : data(std::move(data)), grad(std::move(grad)) {}
 
+  auto shape() const -> llvm::ArrayRef<int64_t> { return data.shape(); }
+  auto requiresGrad() const -> bool { return grad.has_value(); }
+
   Storage data;
   std::optional<Storage> grad;
 };

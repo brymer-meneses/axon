@@ -21,12 +21,10 @@ class CompilationUnit {
     module_op_ = mlir::ModuleOp::create(builder_.getUnknownLoc());
   }
 
-  auto compile(Graph& graph) -> void {
-    auto module_op = codegen(graph, context_);
-    if (!module_op) {
-      std::println("Failed to compile module");
-    }
-  }
+  auto compile(Graph& graph) -> void { module_op_ = codegen(graph, context_); }
+
+  auto module_op() -> auto& { return module_op_; }
+  auto module_op() const -> const auto& { return module_op_; }
 
  private:
   mlir::MLIRContext context_;
