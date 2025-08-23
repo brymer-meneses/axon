@@ -15,6 +15,8 @@ namespace nb = nanobind;
 
 using namespace axon;
 
+static thread_local std::shared_ptr<Graph> current_graph{};
+
 NB_MODULE(axon_bindings, m) {
   nb::class_<Tensor>(m, "Tensor")
       .def("__repr__",
@@ -24,15 +26,18 @@ NB_MODULE(axon_bindings, m) {
       .def("__add__",
            [](const LazyTensor& lhs, const LazyTensor& rhs) -> LazyTensor {
              auto inst_id =
-                 lhs.graph->createOp(insts::Add(lhs.inst_id, rhs.inst_id));
-             return {inst_id, lhs.graph};
+                 current_graph->createOp(insts::Add(lhs.inst_id, rhs.inst_id));
+             return {inst_id};
            })
       .def("__mul__",
            [](const LazyTensor& lhs, const LazyTensor& rhs) -> LazyTensor {
              auto inst_id =
-                 lhs.graph->createOp(insts::Mul(lhs.inst_id, rhs.inst_id));
-             return {inst_id, lhs.graph};
+                 current_graph->createOp(insts::Mul(lhs.inst_id, rhs.inst_id));
+             return {inst_id};
            });
+  nb::class_<CompilationUnit>(m, "CompilationUnit")
+      .def("compile",
+           [](CompilationUnit& self, Graph& graph) { self.compile(graph); });
 
   nb::class_<Graph>(m, "Graph")
       .def(nb::init<>())
@@ -42,9 +47,12 @@ NB_MODULE(axon_bindings, m) {
              bool requires_grad) -> LazyTensor {
             llvm::SmallVector<int64_t> shape_ = {shape.begin(), shape.end()};
             auto inst_id = self->declareParam(shape_, requires_grad);
-            return {inst_id, self};
+            return {inst_id};
           },
-          nb::rv_policy::move);
+          nb::rv_policy::move)
+      .def("finalize", [](std::shared_ptr<Graph> self, LazyTensor tensor) {
+        axon::backward(*self, tensor.inst_id);
+      });
 
   m.def(
       "_create_tensor",
@@ -59,8 +67,6 @@ NB_MODULE(axon_bindings, m) {
         return {data, grad};
       },
       nb::rv_policy::move);
-
-  static thread_local std::shared_ptr<Graph> current_graph{};
 
   m.def("_get_current_graph",
         []() -> std::shared_ptr<Graph> { return current_graph; });

@@ -24,6 +24,7 @@ class CompiledFunction:
         # trace the tensor operations
         bindings._set_current_graph(graph)
         result = self._func(*args, **kwargs)
+        graph.finalize(result)
 
         # check if it matches the cached graph
         if graph == self._cached_graph:

@@ -1,6 +1,7 @@
 module;
 
 #include <optional>
+#include <print>
 
 #include "mlir/IR/BuiltinOps.h"
 
@@ -20,9 +21,12 @@ class CompilationUnit {
     module_op_ = mlir::ModuleOp::create(builder_.getUnknownLoc());
   }
 
-  auto compile() -> void {}
-
-  auto execute() -> void {}
+  auto compile(Graph& graph) -> void {
+    auto module_op = codegen(graph, context_);
+    if (!module_op) {
+      std::println("Failed to compile module");
+    }
+  }
 
  private:
   mlir::MLIRContext context_;
