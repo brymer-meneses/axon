@@ -46,7 +46,11 @@ NB_MODULE(axon_bindings, m) {
              auto inst_id =
                  current_graph->createOp(insts::Mul(lhs.inst_id, rhs.inst_id));
              return {inst_id};
-           });
+           })
+      .def("backward", [](const LazyTensor& self) -> void {
+        axon::backward(*current_graph, self.inst_id);
+      });
+
   nb::class_<CompilationUnit>(m, "CompilationUnit")
       .def("compile",
            [](CompilationUnit& self, Graph& graph) { self.compile(graph); })
@@ -69,10 +73,6 @@ NB_MODULE(axon_bindings, m) {
             return {inst_id};
           },
           nb::rv_policy::move)
-      .def("finalize",
-           [](Graph& self, LazyTensor tensor) {
-             axon::backward(self, tensor.inst_id);
-           })
       .def("compile", [](Graph& graph) -> std::unique_ptr<CompilationUnit> {
         auto compilation_unit = std::make_unique<CompilationUnit>();
         compilation_unit->compile(graph);

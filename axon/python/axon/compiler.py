@@ -23,12 +23,11 @@ class CompiledFunction:
         # trace the tensor operations
         bindings._set_current_graph(graph)
         result = self._func(*args, **kwargs)
-        if isinstance(result, bindings.LazyTensor):
-            graph.finalize(result)
 
         # check if it matches the cached graph
         if graph != self._cached_graph:
             self._compiled = graph.compile()
+
         return result
 
     def __repr__(self) -> str:
