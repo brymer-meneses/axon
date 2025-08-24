@@ -16,7 +16,7 @@ auto backward(Graph& graph, InstId output_id, InstId grad_id = InstId::None)
   AXON_DCHECK(output_id.isValid(), "`output_id` has no value.");
 
   if (not grad_id.isValid()) {
-    grad_id = output_id;
+    grad_id = graph.createOp(insts::OnesLike(output_id));
   }
 
   llvm::SmallVector<Dependency> work_list;

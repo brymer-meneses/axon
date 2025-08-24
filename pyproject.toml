@@ -1,4 +1,21 @@
+[project]
+name = "axon"
+version = "0.1"
+dependencies = [
+    "numpy>=2.2.6",
+    "pytest>=8.4.1",
+]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["axon/python"]
+[tool.setuptools]
+package-dir = {"" = "axon/python"}
+
+[tool.setuptools.packages.find]
+where = ["axon/python"]
+
+[tool.setuptools.package-data]
+"*" = ["*.so", "*.pyd", "*.dll"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+]

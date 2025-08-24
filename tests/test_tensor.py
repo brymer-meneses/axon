@@ -1,6 +1,5 @@
 import axon
 
-
 def test_compilation():
 
     @axon.compile

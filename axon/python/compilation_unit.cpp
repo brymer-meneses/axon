@@ -10,7 +10,6 @@ export module axon.python:compilation_unit;
 import axon.core;
 import axon.mlir;
 
-import :storage;
 import :tensor;
 
 export namespace axon {

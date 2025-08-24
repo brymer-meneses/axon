@@ -20,7 +20,7 @@ struct ParamId : IndexBase<ParamId> {
   using IndexBase::IndexBase;
 };
 
-struct DataId : IndexBase<DataId> {
+struct ConstantId : IndexBase<ConstantId> {
   using IndexBase::IndexBase;
 };
 

@@ -40,11 +40,12 @@ static auto codegen(insts::AccumulateGrad op, CompilationContext& ctx,
 
 static auto codegen(insts::Constant op, CompilationContext& ctx, InstId inst_id)
     -> void {
-  auto& data = ctx.graph.data().get(op.data_id);
+  auto& constant = ctx.graph.constants().get(op.constant_id);
   auto result_type =
-      mlir::RankedTensorType::get(data.shape, ctx.builder.getF32Type());
+      mlir::RankedTensorType::get(constant.shape(), ctx.builder.getF32Type());
 
-  auto data_ref = llvm::ArrayRef<float>(data.data);
+  auto data_ref = llvm::ArrayRef<float>(constant.dataAs<ElementType::Float32>(),
+                                        constant.size());
   auto data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
 
   ctx.values[inst_id] = ctx.builder.create<ConstantOp>(
@@ -67,6 +68,13 @@ static auto codegen(insts::Add op, CompilationContext& ctx, InstId inst_id)
 
   ctx.values[inst_id] =
       ctx.builder.create<AddOp>(ctx.builder.getUnknownLoc(), lhs, rhs);
+}
+
+static auto codegen(insts::OnesLike op, CompilationContext& ctx, InstId inst_id)
+    -> void {
+  auto like = ctx.values[op.inst_id];
+  ctx.values[inst_id] =
+      ctx.builder.create<FillLikeOp>(ctx.builder.getUnknownLoc(), like, 1.0);
 }
 
 static auto codegen(insts::Mul op, CompilationContext& ctx, InstId inst_id)

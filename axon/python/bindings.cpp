@@ -22,6 +22,15 @@ using namespace axon;
 
 static thread_local std::shared_ptr<Graph> current_graph{};
 
+static auto createStoragefromNanobind(nb::ndarray<>& array,
+                                      ElementType element_type) -> Storage {
+  auto* data = reinterpret_cast<std::byte*>(array.data());
+  auto shape = llvm::ArrayRef<int64_t>(array.shape_ptr(), array.ndim());
+  auto stride = llvm::ArrayRef<int64_t>(array.stride_ptr(), array.ndim());
+
+  return {element_type, data, shape, stride, /*is_owned=*/false};
+}
+
 NB_MODULE(axon_bindings, m) {
   nb::class_<Tensor>(m, "Tensor")
       .def("__repr__",
@@ -73,21 +82,27 @@ NB_MODULE(axon_bindings, m) {
             return {inst_id};
           },
           nb::rv_policy::move)
-      .def("compile", [](Graph& graph) -> std::unique_ptr<CompilationUnit> {
-        auto compilation_unit = std::make_unique<CompilationUnit>();
-        compilation_unit->compile(graph);
-        return std::move(compilation_unit);
+      .def("compile",
+           [](Graph& graph) -> std::unique_ptr<CompilationUnit> {
+             auto compilation_unit = std::make_unique<CompilationUnit>();
+             compilation_unit->compile(graph);
+             return std::move(compilation_unit);
+           })
+      .def("create_constant", [](nb::ndarray<>& array) -> LazyTensor {
+        auto data = createStoragefromNanobind(array, ElementType::Float32);
+        auto inst_id = current_graph->createConstant(std::move(data));
+        return {inst_id};
       });
 
   m.def(
       "_create_tensor",
       [](nb::ndarray<>& array, bool requires_grad) -> Tensor {
         if (not requires_grad) {
-          auto data = Storage::fromNanobind(array, ElementType::Float32);
+          auto data = createStoragefromNanobind(array, ElementType::Float32);
           return {data};
         }
 
-        auto data = Storage::fromNanobind(array, ElementType::Float32);
+        auto data = createStoragefromNanobind(array, ElementType::Float32);
         auto grad = Storage::createZerosLike(data);
         return {data, grad};
       },

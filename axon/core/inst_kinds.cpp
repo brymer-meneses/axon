@@ -32,7 +32,7 @@ struct Mul {
 };
 
 struct Constant {
-  DataId data_id;
+  ConstantId constant_id;
 };
 
 struct AccumulateGrad {
@@ -44,11 +44,15 @@ struct GetParameter {
   ParamId param_id;
 };
 
+struct OnesLike {
+  InstId inst_id;
+};
+
 }  // namespace insts
 
 using InstInternalType =
     std::variant<insts::Add, insts::Mul, insts::AccumulateGrad, insts::Constant,
-                 insts::GetParameter>;
+                 insts::GetParameter, insts::OnesLike>;
 
 template <typename T>
 constexpr bool IsExpressionInst =

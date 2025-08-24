@@ -35,7 +35,6 @@ class BackwardContext {
 
  private:
   Graph& graph_;
-  IdStore<InstId, InstId> cached_values_;
 };
 
 template <typename T>

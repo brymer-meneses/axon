@@ -1,12 +1,12 @@
 module;
 
+#include <algorithm>
+
+#include "axon/base/dcheck.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
-#include "nanobind/ndarray.h"
 
-export module axon.python:storage;
-
-namespace nb = nanobind;
+export module axon.core:storage;
 
 export namespace axon {
 
@@ -14,6 +14,18 @@ enum class ElementType {
   Float32,
   Float64,
 };
+
+template <ElementType element_type>
+consteval auto elementTypeToCppImpl() -> auto {
+  if constexpr (element_type == ElementType::Float32) {
+    return float{};
+  } else if constexpr (element_type == ElementType::Float64) {
+    return double{};
+  }
+}
+
+template <ElementType element_type>
+using ElementTypeCpp = decltype(elementTypeToCppImpl<element_type>());
 
 auto elementTypeSize(ElementType type) -> int64_t {
   switch (type) {
@@ -72,26 +84,42 @@ class Storage {
     return num_elems * elementTypeSize(element_type_);
   }
 
-  static auto fromNanobind(nb::ndarray<>& array, ElementType element_type)
-      -> Storage {
-    auto* data = reinterpret_cast<std::byte*>(array.data());
-    auto shape = llvm::ArrayRef<int64_t>(array.shape_ptr(), array.ndim());
-    auto stride = llvm::ArrayRef<int64_t>(array.stride_ptr(), array.ndim());
+  static auto createFilled(llvm::ArrayRef<int64_t> shape,
+                           llvm::ArrayRef<int64_t> strides,
+                           ElementType element_type, auto value) -> Storage {
+    int64_t num_elems = 1;
+    for (auto dim : shape) {
+      num_elems *= dim;
+    }
+    auto size = num_elems * elementTypeSize(element_type);
+    auto* data = new std::byte[size];
 
-    return {element_type, data, shape, stride, /*is_owned=*/false};
+    if (element_type == ElementType::Float32) {
+      auto* data_ptr = reinterpret_cast<float*>(data);
+      std::fill_n(data_ptr, size, value);
+    } else if (element_type == ElementType::Float64) {
+      auto* data_ptr = reinterpret_cast<double*>(data);
+      std::fill_n(data_ptr, size, value);
+    }
+
+    return {element_type, data, shape, strides, /*is_owned=*/true};
   }
 
   static auto createZerosLike(const Storage& storage) -> Storage {
-    auto size = storage.size();
-    auto* data = new std::byte[size];
-    std::memset(data, 0, size);
-
-    return {storage.element_type_, data, storage.shape_, storage.strides_,
-            /*is_owned=*/true};
+    return createFilled(storage.shape(), storage.strides(),
+                        storage.element_type(), 0);
   }
 
+  template <ElementType type>
+  auto dataAs() -> ElementTypeCpp<type>* {
+    return reinterpret_cast<ElementTypeCpp<type>*>(data_);
+  }
+
+  auto data() -> std::byte* { return data_; }
+
   auto shape() const -> llvm::ArrayRef<int64_t> { return shape_; }
-  auto stride() const -> llvm::ArrayRef<int64_t> { return strides_; }
+  auto strides() const -> llvm::ArrayRef<int64_t> { return strides_; }
+  auto element_type() const -> ElementType { return element_type_; }
 
  private:
   std::byte* data_;

@@ -9,7 +9,7 @@ from .axon_bindings import Tensor, LazyTensor
 def tensor(ndarray, requires_grad=False) -> Tensor | LazyTensor:
     graph = axon_bindings._get_current_graph()
     if graph is not None:
-        return graph._create_constant(ndarray)
+        return graph.create_constant(ndarray)
 
     if not isinstance(ndarray, np.ndarray):
         ndarray = np.array(ndarray)

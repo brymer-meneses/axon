@@ -10,6 +10,7 @@ export module axon.core:graph;
 import axon.base;
 
 import :ids;
+import :storage;
 import :inst;
 
 namespace axon {
@@ -20,15 +21,13 @@ struct Parameter {
   InstId inst_id = InstId::None;
 };
 
-struct Data {
-  std::vector<float> data;
-  llvm::SmallVector<int64_t> shape;
-
-  Data(float value) : data({value}), shape({}) {}
-};
-
 export class Graph {
  public:
+  Graph() = default;
+
+  Graph(const Graph&) = delete;
+  auto operator=(const Graph&) -> Graph& = delete;
+
   auto declareParam(llvm::SmallVector<int64_t> shape, bool requires_grad)
       -> InstId {
     auto input_id = parameters_.emplace(Parameter(shape, requires_grad));
@@ -41,10 +40,9 @@ export class Graph {
     return inst_id;
   }
 
-  auto createConstant(float value) -> InstId {
-    auto data_id = data_.emplace(value);
-    auto inst_id = insts_.emplace(insts::Constant{data_id});
-    inst_to_data_.set(inst_id, data_id);
+  auto createConstant(Storage&& constant) -> InstId {
+    auto constant_id = constants_.emplace(std::move(constant));
+    auto inst_id = insts_.emplace(insts::Constant{constant_id});
     return inst_id;
   }
 
@@ -54,13 +52,6 @@ export class Graph {
       return param.shape;
     }
     return {};
-  }
-
-  auto getData(InstId inst_id) -> std::optional<Data*> {
-    if (auto data_id = inst_to_data_.get(inst_id)) {
-      return &data_.get(data_id);
-    }
-    return std::nullopt;
   }
 
   auto checkRequiresGrad(InstId inst_id) const -> bool {
@@ -86,8 +77,8 @@ export class Graph {
   auto insts() -> auto& { return insts_; }
   auto insts() const -> const auto& { return insts_; }
 
-  auto data() -> auto& { return data_; }
-  auto data() const -> const auto& { return data_; }
+  auto constants() -> auto& { return constants_; }
+  auto constants() const -> const auto& { return constants_; }
 
   auto parameters() -> auto& { return parameters_; }
   auto parameters() const -> const auto& { return parameters_; }
@@ -95,8 +86,7 @@ export class Graph {
  private:
   ValueStore<ParamId, Parameter> parameters_;
   ValueStore<InstId, Inst> insts_;
-  IdStore<InstId, DataId> inst_to_data_;
-  ValueStore<DataId, Data> data_;
+  ValueStore<ConstantId, Storage> constants_;
 
   IdStore<InstId, InstId> gradients_;
 };

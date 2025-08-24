@@ -11,8 +11,6 @@ export module axon.python:tensor;
 import axon.base;
 import axon.core;
 
-import :storage;
-
 export namespace axon {
 
 struct LazyTensor {

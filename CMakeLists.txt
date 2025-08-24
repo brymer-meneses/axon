@@ -19,6 +19,7 @@ target_sources(axon
     axon/core/inst_rules.cpp
     axon/core/ids.cpp
     axon/core/graph.cpp
+    axon/core/storage.cpp
 
     axon/mlir/codegen_graph.cpp
     axon/mlir/mlir.cpp
@@ -44,6 +45,7 @@ target_include_directories(axon
 )
 target_link_libraries(axon
   SYSTEM 
+    nanobind
     ${llvm_libs}
     xtensor
     xtensor-blas
@@ -95,7 +97,6 @@ target_sources(axon_bindings
   PUBLIC FILE_SET CXX_MODULES FILES
     axon/python/tensor.cpp
     axon/python/compilation_unit.cpp
-    axon/python/storage.cpp
     axon/python/python.cpp
   PUBLIC
     axon/python/bindings.cpp
@@ -103,7 +104,6 @@ target_sources(axon_bindings
 target_link_libraries(axon_bindings 
   PRIVATE 
     axon
-    nanobind
     xtensor
     xtensor-blas
     Python::Module
