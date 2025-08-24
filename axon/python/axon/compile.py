@@ -27,11 +27,10 @@ class CompiledFunction:
         # check if it matches the cached graph
         if graph != self._cached_graph:
             self._compiled = graph.compile()
-            self._compiled.run_to_standard_pass()
 
         return result
 
-    def __repr__(self) -> str:
+    def dump_ir(self) -> str:
         return self._compiled.__repr__()
 
 def _convert_params(graph, *args, **kwargs):

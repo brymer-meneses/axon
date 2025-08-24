@@ -18,4 +18,5 @@ where = ["axon/python"]
 [dependency-groups]
 dev = [
     "pytest>=8.4.1",
+    "pytest-clarity>=1.0.1",
 ]

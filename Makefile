@@ -20,7 +20,6 @@ clean:
 	rm -rf build
 
 test: build
-	uv venv
 	uv pip install -e .
 	uv run pytest -s
 
