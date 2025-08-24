@@ -27,6 +27,7 @@ class CompiledFunction:
         # check if it matches the cached graph
         if graph != self._cached_graph:
             self._compiled = graph.compile()
+            self._compiled.run_to_standard_pass()
 
         return result
 

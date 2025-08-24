@@ -15,12 +15,12 @@ build/CMakeCache.txt: CMakeLists.txt
 
 build: build/CMakeCache.txt
 	cmake --build build
-	uv venv
-	uv pip install -e .
 
 clean:
 	rm -rf build
 
 test: build
+	uv venv
+	uv pip install -e .
 	uv run pytest -s
 

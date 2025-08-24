@@ -111,6 +111,29 @@ struct AccumulateGradOpLowering : mlir::OpConversionPattern<AccumulateGradOp> {
   }
 };
 
+struct FillLikeOpLowering : mlir::OpConversionPattern<FillLikeOp> {
+  using mlir::OpConversionPattern<FillLikeOp>::OpConversionPattern;
+
+  auto matchAndRewrite(FillLikeOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+    auto tensor = mlir::cast<mlir::TensorType>(op.getTensor().getType());
+
+    auto result_buffer = rewriter.create<mlir::tensor::EmptyOp>(
+        loc, tensor.getShape(), tensor.getElementType());
+
+    auto fill_value = rewriter.create<mlir::arith::ConstantFloatOp>(
+        loc, op.getFillValue(), rewriter.getF32Type());
+
+    auto fill_op = rewriter.create<mlir::linalg::FillOp>(
+        loc, mlir::ValueRange{fill_value}, mlir::ValueRange{result_buffer});
+
+    rewriter.replaceOp(op, fill_op.getResult(0));
+    return mlir::success();
+  }
+};
+
 struct AxonToStdTypeConverter : mlir::TypeConverter {
   AxonToStdTypeConverter(mlir::MLIRContext* ctx) {
     addConversion([](mlir::Type type) -> mlir::Type { return type; });
@@ -159,13 +182,15 @@ struct AxonToStandardLoweringPass
                          mlir::bufferization::BufferizationDialect,
                          mlir::BuiltinDialect, mlir::tensor::TensorDialect>();
     target.addLegalOp<TupleAccessOp>();
-    target.addIllegalOp<AddOp, MulOp, GetDataOp, AccumulateGradOp>();
+    target
+        .addIllegalOp<AddOp, MulOp, GetDataOp, AccumulateGradOp, FillLikeOp>();
 
     AxonToStdTypeConverter type_converter{&context};
 
     mlir::RewritePatternSet patterns{&context};
     patterns.add<AddOpLowering, MulOpLowering, GetDataOpLowering,
-                 AccumulateGradOpLowering>(type_converter, &context);
+                 AccumulateGradOpLowering, FillLikeOpLowering>(type_converter,
+                                                               &context);
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, type_converter);

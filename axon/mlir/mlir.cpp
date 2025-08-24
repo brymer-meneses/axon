@@ -26,7 +26,7 @@ import axon.core;
 
 export import :codegen_graph;
 
-import :lowering;
+export import :lowering;
 
 export namespace axon {
 

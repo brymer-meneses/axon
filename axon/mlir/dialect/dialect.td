@@ -109,18 +109,18 @@ def Axon_MulOp : AxonDialect_Op<"mul"> {
 }
 
 def Axon_FillLikeOp : AxonDialect_Op<"fill_like"> {
-  let arguments = (ins AnyTensor:$tensor, F64Attr:$value);
+  let arguments = (ins AnyTensor:$tensor, F64Attr:$fill_value);
   let results = (outs AnyTensor:$result);
 
   let builders = [
-    OpBuilder<(ins "mlir::Value":$tensor, "double":$value), [{
+    OpBuilder<(ins "mlir::Value":$tensor, "double":$fill_value), [{
       auto result_type = llvm::cast<mlir::TensorType>(tensor.getType());
-      auto attr = $_builder.getF64FloatAttr(value);
+      auto attr = $_builder.getF64FloatAttr(fill_value);
       build($_builder, $_state, result_type, tensor, attr);
     }]>
   ];
 
-  let assemblyFormat = "$tensor `,` $value `:` type($tensor) `->` type($result) attr-dict";
+  let assemblyFormat = "$tensor `,` $fill_value `:` type($tensor) `->` type($result) attr-dict";
 }
 
 def Axon_TupleAccessOp : AxonDialect_Op<"tuple_access", [

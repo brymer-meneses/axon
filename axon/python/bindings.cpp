@@ -63,13 +63,16 @@ NB_MODULE(axon_bindings, m) {
   nb::class_<CompilationUnit>(m, "CompilationUnit")
       .def("compile",
            [](CompilationUnit& self, Graph& graph) { self.compile(graph); })
-      .def("__repr__", [](CompilationUnit& self) -> std::string {
-        mlir::OpPrintingFlags flags;
-        std::string repr;
-        llvm::raw_string_ostream string_stream{repr};
-        self.module_op()->print(string_stream, flags);
-        return repr;
-      });
+      .def("__repr__",
+           [](CompilationUnit& self) -> std::string {
+             mlir::OpPrintingFlags flags;
+             std::string repr;
+             llvm::raw_string_ostream string_stream{repr};
+             self.module_op()->print(string_stream, flags);
+             return repr;
+           })
+      .def("run_to_standard_pass",
+           [](CompilationUnit& self) -> void { self.runToStandardPass(); });
 
   nb::class_<Graph>(m, "Graph")
       .def(nb::init<>())
