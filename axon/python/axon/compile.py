@@ -47,4 +47,7 @@ def _convert_params(graph, *args, **kwargs):
     return tuple(new_args), new_kwargs
 
 def compile(func: typing.Callable) -> typing.Callable:
-    return CompiledFunction(func)
+    compiled = CompiledFunction(func)
+    compiled.__doc__ = func.__doc__
+    compiled.__qualname__ = func.__qualname__
+    return compiled
