@@ -1,24 +1,30 @@
 include(FetchContent)
 
+set(FETCHCONTENT_QUIET FALSE CACHE BOOL "Disable quiet mode for FetchContent" FORCE)
+
 FetchContent_Declare(nanobind
   GIT_REPOSITORY https://github.com/wjakob/nanobind
   GIT_TAG        v2.7.0
   GIT_SUBMODULES_RECURSE ON
+  GIT_SHALLOW 1
 )
 
 FetchContent_Declare(xtensor 
   GIT_REPOSITORY https://github.com/xtensor-stack/xtensor
   GIT_TAG        0.26.0
+  GIT_SHALLOW 1
 )
 
 FetchContent_Declare(xtl 
   GIT_REPOSITORY https://github.com/xtensor-stack/xtl.git 
   GIT_TAG        0.8.0
+  GIT_SHALLOW 1
 )
 
 FetchContent_Declare(xtensor-blas
   GIT_REPOSITORY https://github.com/xtensor-stack/xtensor-blas.git 
   GIT_TAG        0.22.0
+  GIT_SHALLOW 1
 )
 
 FetchContent_MakeAvailable(nanobind xtl xtensor xtensor-blas)

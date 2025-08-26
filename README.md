@@ -17,7 +17,7 @@ class Model(axon.Module):
 def mse_loss(y, y_hat):
     return 0.5 * (y-y_hat) ** 2
 
-@axon.compile
+@axon.jit()
 def training_step(x, y, model):
     y_hat = model(x)
     l = mse_loss(y, y_hat)

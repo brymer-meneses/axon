@@ -45,25 +45,42 @@ auto codegen(Graph& graph, mlir::MLIRContext& mlir_ctx) -> mlir::ModuleOp {
   return module_op;
 }
 
-auto createLowerToLlvmPipeline(mlir::PassManager& manager) -> void {
+struct LoweringOps {
+  enum class Level {
+    Axon,
+    Standard,
+    LLVM,
+  };
+
+  Level level;
+};
+
+auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringOps opts)
+    -> void {
+  if (opts.level == LoweringOps::Level::Axon) {
+    return;
+  }
+
   manager.addPass(axon::createStandardLoweringPass());
 
-  manager.addPass(mlir::createConvertElementwiseToLinalgPass());
+  if (opts.level == LoweringOps::Level::LLVM) {
+    manager.addPass(mlir::createConvertElementwiseToLinalgPass());
 
-  mlir::bufferization::OneShotBufferizationOptions bufferization_options;
-  manager.addPass(
-      mlir::bufferization::createOneShotBufferizePass(bufferization_options));
+    mlir::bufferization::OneShotBufferizationOptions bufferization_options;
+    manager.addPass(
+        mlir::bufferization::createOneShotBufferizePass(bufferization_options));
 
-  mlir::bufferization::BufferDeallocationPipelineOptions deallocation_options;
-  mlir::bufferization::buildBufferDeallocationPipeline(manager,
-                                                       deallocation_options);
+    mlir::bufferization::BufferDeallocationPipelineOptions deallocation_options;
+    mlir::bufferization::buildBufferDeallocationPipeline(manager,
+                                                         deallocation_options);
 
-  manager.addPass(mlir::createConvertLinalgToAffineLoopsPass());
-  manager.addPass(mlir::affine::createLoopFusionPass());
+    manager.addPass(mlir::createConvertLinalgToAffineLoopsPass());
+    manager.addPass(mlir::affine::createLoopFusionPass());
 
-  manager.addPass(axon::createLlvmLoweringPass());
+    manager.addPass(axon::createLlvmLoweringPass());
 
-  manager.addPass(mlir::createCanonicalizerPass());
+    manager.addPass(mlir::createCanonicalizerPass());
+  }
 }
 
 }  // namespace axon

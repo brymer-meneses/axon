@@ -101,6 +101,10 @@ target_sources(axon_bindings
   PUBLIC
     axon/python/bindings.cpp
 )
+target_include_directories(axon_bindings
+ PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
 target_link_libraries(axon_bindings 
   PRIVATE 
     axon

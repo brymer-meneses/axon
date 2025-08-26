@@ -1,12 +1,16 @@
+import atexit
+
 from . import axon_bindings as bindings
 
-import typing
-import numpy as np
-
 from .tensor import tensor
-from .compile import compile
+from .jit import jit
 
 __all__ = [
-    "compile",
+    "jit",
     "tensor"
 ]
+
+def _cleanup() -> None:
+    bindings._clear_current_graph()
+    
+atexit.register(_cleanup)

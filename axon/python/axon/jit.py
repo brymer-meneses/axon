@@ -7,9 +7,20 @@ import functools
 
 from . import axon_bindings as bindings
 
+from .axon_bindings import LoweringOps
+
+def jit(opts: typing.Optional[bindings.LoweringOps] = None) -> typing.Callable:
+    def decorator(func: typing.Callable) -> typing.Callable:
+        compiled = CompiledFunction(opts, func)
+        compiled.__doc__ = func.__doc__
+        compiled.__qualname__ = func.__qualname__
+        return compiled
+    return decorator
+
 class CompiledFunction:
-    def __init__(self, func: typing.Callable) -> None:
+    def __init__(self, opts: typing.Optional[bindings.LoweringOps], func: typing.Callable) -> None:
         self._func = func
+        self._opts = LoweringOps(LoweringOps.Level.Axon) if opts is None else opts
         self._cached_graph = None
         self._compiled = None
 
@@ -18,20 +29,20 @@ class CompiledFunction:
     # current graph.
     def __call__(self, *args, **kwargs) -> typing.Any:
         graph = bindings.Graph()
-        args, kwargs = _convert_params(graph, *args, **kwargs)
+        traced_args, traced_kwargs = _convert_params(graph, *args, **kwargs)
 
         # trace the tensor operations
         bindings._set_current_graph(graph)
-        result = self._func(*args, **kwargs)
+        result = self._func(*traced_args, **traced_kwargs)
 
         # check if it matches the cached graph
         if graph != self._cached_graph:
-            self._compiled = graph.compile()
+            self._compiled = graph.compile(self._opts)
 
         return result
 
     def dump_ir(self) -> str:
-        return self._compiled.__repr__()
+        return self._compiled.dump_ir()
 
 def _convert_params(graph, *args, **kwargs):
     new_args = []
@@ -46,8 +57,3 @@ def _convert_params(graph, *args, **kwargs):
         new_kwargs[key] = value
     return tuple(new_args), new_kwargs
 
-def compile(func: typing.Callable) -> typing.Callable:
-    compiled = CompiledFunction(func)
-    compiled.__doc__ = func.__doc__
-    compiled.__qualname__ = func.__qualname__
-    return compiled

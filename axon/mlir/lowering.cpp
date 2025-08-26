@@ -2,6 +2,7 @@ module;
 
 #include <memory>
 
+#include "axon/base/dcheck.h"
 #include "axon/mlir/dialect/dialect.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
@@ -124,7 +125,7 @@ struct FillLikeOpLowering : mlir::OpConversionPattern<FillLikeOp> {
         loc, tensor.getShape(), tensor.getElementType());
 
     auto fill_value = rewriter.create<mlir::arith::ConstantFloatOp>(
-        loc, op.getFillValue(), rewriter.getF32Type());
+        loc, op.getFillValue(), rewriter.getF64Type());
 
     auto fill_op = rewriter.create<mlir::linalg::FillOp>(
         loc, mlir::ValueRange{fill_value}, mlir::ValueRange{result_buffer});
@@ -212,9 +213,12 @@ struct AxonToStandardLoweringPass
 };
 
 struct AxonToLlvmTypeConverter : mlir::LLVMTypeConverter {
-  AxonToLlvmTypeConverter(mlir::MLIRContext* ctx)
-      : mlir::LLVMTypeConverter(ctx) {
+  AxonToLlvmTypeConverter(mlir::MLIRContext* ctx,
+                          const mlir::LowerToLLVMOptions& options)
+      : mlir::LLVMTypeConverter(ctx, options) {
     addConversion([ctx, this](mlir::TupleType tuple_type) -> mlir::Type {
+      AXON_DCHECK(getOptions().useBarePtrCallConv, "");
+
       llvm::SmallVector<mlir::Type> llvm_types;
       for (mlir::Type elem_type : tuple_type.getTypes()) {
         mlir::Type converted_type = convertType(elem_type);
@@ -273,16 +277,21 @@ struct AxonToLlvmLoweringPass
     target.addLegalDialect<mlir::LLVM::LLVMDialect>();
     target.addLegalOp<mlir::ModuleOp>();
 
+    mlir::LowerToLLVMOptions options{&context};
+
+    // All shapes are known at compile time so memrefs should be lowered to a
+    // pointer.
+    options.useBarePtrCallConv = true;
+
     mlir::RewritePatternSet patterns{&context};
-    AxonToLlvmTypeConverter type_converter{&context};
+    AxonToLlvmTypeConverter type_converter{&context, options};
+    AXON_DCHECK(type_converter.getOptions().useBarePtrCallConv == true, "");
 
     patterns.add<TupleAccessOpLowering>(type_converter, &context);
 
     mlir::populateAffineToStdConversionPatterns(patterns);
-
     mlir::arith::populateArithToLLVMConversionPatterns(type_converter,
                                                        patterns);
-
     mlir::populateSCFToControlFlowConversionPatterns(patterns);
     mlir::cf::populateControlFlowToLLVMConversionPatterns(type_converter,
                                                           patterns);

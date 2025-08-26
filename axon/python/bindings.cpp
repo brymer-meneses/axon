@@ -1,7 +1,9 @@
 
 
 #include <memory>
+#include <ranges>
 #include <sstream>
+#include <stdexcept>
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
@@ -15,6 +17,7 @@
 
 import axon.core;
 import axon.python;
+import axon.mlir;
 
 namespace nb = nanobind;
 
@@ -33,8 +36,6 @@ static auto createStoragefromNanobind(nb::ndarray<>& array,
 
 NB_MODULE(axon_bindings, m) {
   nb::class_<Tensor>(m, "Tensor")
-      .def("__repr__",
-           [](const Tensor& self) -> std::string { return "tensor"; })
       .def_prop_ro("shape",
                    [](const Tensor& self) -> std::vector<int64_t> {
                      return self.shape();
@@ -42,6 +43,20 @@ NB_MODULE(axon_bindings, m) {
       .def_prop_ro("requires_grad", [](const Tensor& self) -> bool {
         return self.requiresGrad();
       });
+
+  m.def(
+      "_create_tensor",
+      [](nb::ndarray<>& array, bool requires_grad) -> Tensor {
+        if (not requires_grad) {
+          auto data = createStoragefromNanobind(array, ElementType::Float32);
+          return {data};
+        }
+
+        auto data = createStoragefromNanobind(array, ElementType::Float32);
+        auto grad = Storage::createZerosLike(data);
+        return {data, grad};
+      },
+      nb::rv_policy::move);
 
   nb::class_<LazyTensor>(m, "LazyTensor")
       .def("__add__",
@@ -61,18 +76,18 @@ NB_MODULE(axon_bindings, m) {
       });
 
   nb::class_<CompilationUnit>(m, "CompilationUnit")
-      .def("compile",
-           [](CompilationUnit& self, Graph& graph) { self.compile(graph); })
-      .def("__repr__",
-           [](CompilationUnit& self) -> std::string {
-             mlir::OpPrintingFlags flags;
-             std::string repr;
-             llvm::raw_string_ostream string_stream{repr};
-             self.module_op()->print(string_stream, flags);
-             return repr;
-           })
-      .def("run_to_standard_pass",
-           [](CompilationUnit& self) -> void { self.runToStandardPass(); });
+      .def("dump_ir",
+           [](const CompilationUnit& self) { return self.dump_ir(); });
+
+  auto lowering_ops = nb::class_<LoweringOps>(m, "LoweringOps");
+  lowering_ops.def(nb::init<LoweringOps::Level>());
+  lowering_ops.def_rw("level", &LoweringOps::level);
+
+  nb::enum_<LoweringOps::Level>(lowering_ops, "Level")
+      .value("Axon", LoweringOps::Level::Axon)
+      .value("Standard", LoweringOps::Level::Standard)
+      .value("LLVM", LoweringOps::Level::LLVM)
+      .export_values();
 
   nb::class_<Graph>(m, "Graph")
       .def(nb::init<>())
@@ -86,9 +101,12 @@ NB_MODULE(axon_bindings, m) {
           },
           nb::rv_policy::move)
       .def("compile",
-           [](Graph& graph) -> std::unique_ptr<CompilationUnit> {
+           [](Graph& graph,
+              const LoweringOps& ops) -> std::unique_ptr<CompilationUnit> {
              auto compilation_unit = std::make_unique<CompilationUnit>();
-             compilation_unit->compile(graph);
+             if (compilation_unit->compile(graph, ops).failed()) {
+               throw std::runtime_error("Failed to compile graph");
+             }
              return std::move(compilation_unit);
            })
       .def("create_constant", [](nb::ndarray<>& array) -> LazyTensor {
@@ -97,24 +115,12 @@ NB_MODULE(axon_bindings, m) {
         return {inst_id};
       });
 
-  m.def(
-      "_create_tensor",
-      [](nb::ndarray<>& array, bool requires_grad) -> Tensor {
-        if (not requires_grad) {
-          auto data = createStoragefromNanobind(array, ElementType::Float32);
-          return {data};
-        }
-
-        auto data = createStoragefromNanobind(array, ElementType::Float32);
-        auto grad = Storage::createZerosLike(data);
-        return {data, grad};
-      },
-      nb::rv_policy::move);
-
   m.def("_get_current_graph",
         []() -> std::shared_ptr<Graph> { return current_graph; });
 
   m.def("_set_current_graph", [](std::shared_ptr<Graph> graph) -> void {
     current_graph = std::move(graph);
   });
+
+  m.def("_clear_current_graph", []() -> void { current_graph.reset(); });
 }
