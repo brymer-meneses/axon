@@ -1,3 +1,4 @@
+#include "mlir/Conversion/LLVMCommon/MemRefBuilder.h"
 module;
 
 #include <memory>
@@ -5,6 +6,7 @@ module;
 #include <vector>
 
 #include "axon/base/dcheck.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/TargetSelect.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
@@ -21,9 +23,9 @@ import axon.mlir;
 
 import :tensor;
 
-export namespace axon {
+namespace axon {
 
-class CompilationUnit {
+export class CompilationUnit {
  public:
   CompilationUnit() : builder_(&context_) {
     module_op_ = mlir::ModuleOp::create(builder_.getUnknownLoc());
@@ -56,13 +58,14 @@ class CompilationUnit {
     auto maybe_engine =
         mlir::ExecutionEngine::create(module_op_, engine_options);
     AXON_DCHECK(maybe_engine, "failed to construct an execution engine");
-
     auto& engine = maybe_engine.get();
 
+    std::println("begin");
     auto invocation_result = engine->invokePacked("graph");
     if (invocation_result) {
       llvm::errs() << "JIT invocation failed\n";
     }
+    std::println("end");
   }
 
   auto dump_ir() const -> std::string {

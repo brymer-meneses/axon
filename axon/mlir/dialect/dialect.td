@@ -32,6 +32,8 @@ def Axon_TensorRefType : AxonDialect_Type<"TensorRef", "tensor_ref"> {
   let extraClassDeclaration = [{
     auto isDynamic() const -> bool { return getShape().empty(); }
   }];
+
+  let genMnemonicAlias = 1;
 }
 
 class AxonDialect_Op<string mnemonic, list<Trait> traits = []> : Op<AxonDialect, mnemonic, traits>;
@@ -44,7 +46,7 @@ def Axon_GetDataOp : AxonDialect_Op<"get_data"> {
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$input), [{
-      auto tensor_ref_type = input.getType().cast<axon::TensorRefType>();
+      auto tensor_ref_type = mlir::cast<axon::TensorRefType>(input.getType());
       auto shape = tensor_ref_type.getShape();
       auto element_type = tensor_ref_type.getElementType();
       auto result_type = mlir::RankedTensorType::get(shape, element_type);

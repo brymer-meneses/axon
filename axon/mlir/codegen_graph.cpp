@@ -34,8 +34,8 @@ static auto codegen(insts::AccumulateGrad op, CompilationContext& ctx,
   auto from = ctx.tensor_refs[op.inst_id];
   auto value = ctx.values[op.value_id];
 
-  ctx.builder.create<AccumulateGradOp>(ctx.builder.getUnknownLoc(), from,
-                                       value);
+  AccumulateGradOp::create(ctx.builder, ctx.builder.getUnknownLoc(), from,
+                           value);
 }
 
 static auto codegen(insts::Constant op, CompilationContext& ctx, InstId inst_id)
@@ -48,8 +48,8 @@ static auto codegen(insts::Constant op, CompilationContext& ctx, InstId inst_id)
                                         constant.size());
   auto data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
 
-  ctx.values[inst_id] = ctx.builder.create<ConstantOp>(
-      ctx.builder.getUnknownLoc(), data_attribute);
+  ctx.values[inst_id] = ConstantOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), data_attribute);
 }
 
 static auto codegen(insts::GetParameter op, CompilationContext& ctx,
@@ -58,7 +58,7 @@ static auto codegen(insts::GetParameter op, CompilationContext& ctx,
 
   ctx.tensor_refs[inst_id] = tensor_ref;
   ctx.values[inst_id] =
-      ctx.builder.create<GetDataOp>(ctx.builder.getUnknownLoc(), tensor_ref);
+      GetDataOp::create(ctx.builder, ctx.builder.getUnknownLoc(), tensor_ref);
 }
 
 static auto codegen(insts::Add op, CompilationContext& ctx, InstId inst_id)
@@ -67,14 +67,14 @@ static auto codegen(insts::Add op, CompilationContext& ctx, InstId inst_id)
   auto rhs = ctx.values[op.rhs_id];
 
   ctx.values[inst_id] =
-      ctx.builder.create<AddOp>(ctx.builder.getUnknownLoc(), lhs, rhs);
+      AddOp::create(ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs);
 }
 
 static auto codegen(insts::OnesLike op, CompilationContext& ctx, InstId inst_id)
     -> void {
   auto like = ctx.values[op.inst_id];
   ctx.values[inst_id] =
-      ctx.builder.create<FillLikeOp>(ctx.builder.getUnknownLoc(), like, 1.0);
+      FillLikeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like, 1.0);
 }
 
 static auto codegen(insts::Mul op, CompilationContext& ctx, InstId inst_id)
@@ -83,7 +83,7 @@ static auto codegen(insts::Mul op, CompilationContext& ctx, InstId inst_id)
   auto rhs = ctx.values[op.rhs_id];
 
   ctx.values[inst_id] =
-      ctx.builder.create<MulOp>(ctx.builder.getUnknownLoc(), lhs, rhs);
+      MulOp::create(ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs);
 }
 
 static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)

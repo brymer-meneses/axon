@@ -4,7 +4,7 @@ project(axon)
 
 include(cmake/dependencies.cmake)
 
-add_library(axon STATIC)
+add_library(axon SHARED)
 
 target_sources(axon 
   PUBLIC FILE_SET CXX_MODULES FILES
@@ -33,15 +33,15 @@ target_sources(axon
 target_compile_features(axon PUBLIC cxx_std_23)
 target_include_directories(axon
   SYSTEM PRIVATE 
-  ${xtensor_INCLUDE_DIRS} 
-  ${NANOBIND_INCLUDE_DIRS}
-  ${LLVM_INCLUDE_DIRS}
-  ${MLIR_INCLUDE_DIRS}
+    ${xtensor_INCLUDE_DIRS} 
+    ${NANOBIND_INCLUDE_DIRS}
+    ${LLVM_INCLUDE_DIRS}
+    ${MLIR_INCLUDE_DIRS}
 
-  # The generated files by `mlir-tblgen` are stored here
-  ${CMAKE_CURRENT_BINARY_DIR}
+    # The generated files by `mlir-tblgen` are stored here
+    ${CMAKE_CURRENT_BINARY_DIR}
 
-  ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_link_libraries(axon
   SYSTEM 
@@ -69,6 +69,8 @@ target_link_libraries(axon
     MLIRBufferizationPipelines
     MLIRReconcileUnrealizedCasts
     MLIRFuncTransforms
+    MLIRExecutionEngine
+    MLIRFuncAllExtensions
 )
 
 if (MSVC)
@@ -88,11 +90,10 @@ add_public_tablegen_target(AxonDialectIncGen)
 add_dependencies(axon AxonDialectIncGen)
 
 # these options are needed for linking to nanobind
-target_compile_options(axon PRIVATE -fno-stack-protector)
 set_target_properties(axon PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-nanobind_build_library(nanobind shared)
-add_library(axon_bindings MODULE)
+nanobind_build_library(nanobind SHARED)
+add_library(axon_bindings SHARED)
 target_sources(axon_bindings
   PUBLIC FILE_SET CXX_MODULES FILES
     axon/python/tensor.cpp
@@ -113,13 +114,14 @@ target_link_libraries(axon_bindings
     Python::Module
 )
 
-target_compile_features(axon_bindings PUBLIC cxx_std_23)
+# target_compile_features(axon_bindings PUBLIC cxx_std_23)
 set_target_properties(axon_bindings
   PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/axon/python/axon"
 )
 
-nanobind_disable_stack_protector(axon_bindings)
+# target_compile_options(axon_bindings PRIVATE -fno-rtti)
+# nanobind_disable_stack_protector(axon_bindings)
 nanobind_lto(axon_bindings)
 nanobind_set_visibility(axon_bindings)
 nanobind_extension(axon_bindings)
@@ -132,3 +134,4 @@ nanobind_add_stub(
   DEPENDS axon_bindings
 )
 
+include_directories(${MLIR_INCLUDE_DIRS})

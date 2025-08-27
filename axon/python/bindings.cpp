@@ -77,7 +77,11 @@ NB_MODULE(axon_bindings, m) {
 
   nb::class_<CompilationUnit>(m, "CompilationUnit")
       .def("dump_ir",
-           [](const CompilationUnit& self) { return self.dump_ir(); });
+           [](const CompilationUnit& self) { return self.dump_ir(); })
+      .def("execute", [](CompilationUnit& self,
+                         std::vector<std::shared_ptr<Tensor>> tensors) {
+        self.execute(std::move(tensors));
+      });
 
   auto lowering_ops = nb::class_<LoweringOps>(m, "LoweringOps");
   lowering_ops.def(nb::init<LoweringOps::Level>());

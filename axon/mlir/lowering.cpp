@@ -10,12 +10,15 @@ module;
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+#include "mlir/Conversion/MemRefToEmitC/MemRefToEmitC.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+#include "mlir/Dialect/Func/Extensions/AllExtensions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/Func/Transforms/Passes.h"
@@ -48,8 +51,8 @@ struct BinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
     auto rhs_tensor = llvm::cast<mlir::TensorType>(adaptor.getRhs().getType());
 
     if (rhs_tensor.getShape().equals(lhs_tensor.getShape())) {
-      auto new_op = rewriter.create<LoweredBinaryOp>(loc, adaptor.getLhs(),
-                                                     adaptor.getRhs());
+      auto new_op = LoweredBinaryOp::create(rewriter, loc, adaptor.getLhs(),
+                                            adaptor.getRhs());
       rewriter.replaceOp(op, new_op);
       return mlir::success();
     }
@@ -65,18 +68,16 @@ struct GetDataOpLowering : mlir::OpConversionPattern<GetDataOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
-    auto tensor_ref = llvm::cast<TensorRefType>(op.getInput().getType());
 
-    if (not tensor_ref.getRequiresGrad()) {
-      auto new_op = rewriter.create<mlir::bufferization::ToTensorOp>(
-          loc, adaptor.getInput(), /*restrict=*/true, /*writable=*/false);
-      rewriter.replaceOp(op, new_op);
-      return mlir::success();
-    }
+    auto tensor_ref_type = mlir::cast<TensorRefType>(op.getInput().getType());
+    auto tensor_type = mlir::RankedTensorType::get(
+        tensor_ref_type.getShape(), tensor_ref_type.getElementType());
 
-    auto memref = rewriter.create<TupleAccessOp>(loc, adaptor.getInput(), 0);
-    auto new_op = rewriter.create<mlir::bufferization::ToTensorOp>(
-        loc, memref, /*restrict=*/true, /*writable=*/false);
+    auto memref =
+        TupleAccessOp::create(rewriter, loc, adaptor.getInput(), 0).getResult();
+    auto new_op = mlir::bufferization::ToTensorOp::create(
+        rewriter, loc, tensor_type, memref, /*restrict=*/true,
+        /*writable=*/false);
     rewriter.replaceOp(op, new_op);
     return mlir::success();
   }
@@ -97,15 +98,15 @@ struct AccumulateGradOpLowering : mlir::OpConversionPattern<AccumulateGradOp> {
     // `TensorRefType` is lowered to tuple<memref, memref>, then to access the
     // grad memref we need to invoke the tuple access op to access the gradient.
     auto grad_ref =
-        rewriter.create<TupleAccessOp>(loc, adaptor.getAccumulator(), 1);
+        TupleAccessOp::create(rewriter, loc, adaptor.getAccumulator(), 1);
     auto memref_type = mlir::MemRefType::get(tensor_type.getShape(),
                                              tensor_type.getElementType());
-    auto value_as_memref = rewriter.create<mlir::bufferization::ToMemrefOp>(
-        loc, memref_type, adaptor.getValue());
+    auto value_as_memref = mlir::bufferization::ToBufferOp::create(
+        rewriter, loc, memref_type, adaptor.getValue());
 
-    rewriter.create<mlir::linalg::AddOp>(
-        loc, mlir::ValueRange{grad_ref, value_as_memref},
-        mlir::ValueRange{grad_ref});
+    mlir::linalg::AddOp::create(rewriter, loc,
+                                mlir::ValueRange{grad_ref, value_as_memref},
+                                mlir::ValueRange{grad_ref});
 
     rewriter.eraseOp(op);
     return mlir::success();
@@ -121,14 +122,15 @@ struct FillLikeOpLowering : mlir::OpConversionPattern<FillLikeOp> {
     auto loc = op.getLoc();
     auto tensor = mlir::cast<mlir::TensorType>(op.getTensor().getType());
 
-    auto result_buffer = rewriter.create<mlir::tensor::EmptyOp>(
-        loc, tensor.getShape(), tensor.getElementType());
+    auto result_buffer = mlir::tensor::EmptyOp::create(
+        rewriter, loc, tensor.getShape(), tensor.getElementType());
 
     auto fill_value = rewriter.create<mlir::arith::ConstantFloatOp>(
-        loc, op.getFillValue(), rewriter.getF64Type());
+        loc, rewriter.getF64Type(), op.getFillValue());
 
-    auto fill_op = rewriter.create<mlir::linalg::FillOp>(
-        loc, mlir::ValueRange{fill_value}, mlir::ValueRange{result_buffer});
+    auto fill_op = mlir::linalg::FillOp::create(
+        rewriter, loc, mlir::ValueRange{fill_value},
+        mlir::ValueRange{result_buffer});
 
     rewriter.replaceOp(op, fill_op.getResult(0));
     return mlir::success();
@@ -171,6 +173,8 @@ struct AxonToStandardLoweringPass
                 mlir::bufferization::BufferizationDialect, mlir::BuiltinDialect,
                 mlir::arith::ArithDialect, mlir::tensor::TensorDialect>();
     mlir::linalg::registerBufferizableOpInterfaceExternalModels(registry);
+    mlir::bufferization::func_ext::
+        registerBufferizableOpInterfaceExternalModels(registry);
   }
 
   auto runOnOperation() -> void final {
@@ -249,7 +253,7 @@ struct TupleAccessOpLowering : mlir::OpConversionPattern<TupleAccessOp> {
     auto index = adaptor.getIndex();
 
     auto new_op =
-        rewriter.create<mlir::LLVM::ExtractValueOp>(loc, input, index);
+        mlir::LLVM::ExtractValueOp::create(rewriter, loc, input, index);
     rewriter.replaceOp(op, new_op);
     return mlir::success();
   }
@@ -285,7 +289,6 @@ struct AxonToLlvmLoweringPass
 
     mlir::RewritePatternSet patterns{&context};
     AxonToLlvmTypeConverter type_converter{&context, options};
-    AXON_DCHECK(type_converter.getOptions().useBarePtrCallConv == true, "");
 
     patterns.add<TupleAccessOpLowering>(type_converter, &context);
 

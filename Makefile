@@ -1,10 +1,10 @@
 CXX := clang++
 CXX_FLAGS := -stdlib=libc++ 
-CMAKE_BUILD_TYPE ?= Release
+CMAKE_BUILD_TYPE ?= Debug
 
-.PHONY: test clean build
+.PHONY: test clean build 
 
-build/CMakeCache.txt: CMakeLists.txt
+build/CMakeCache.txt:
 	@mkdir -p build
 	cmake -S . -B build -G Ninja \
 		-DCMAKE_CXX_COMPILER=$(CXX) \
@@ -14,7 +14,7 @@ build/CMakeCache.txt: CMakeLists.txt
 		-DCMAKE_COLOR_DIAGNOSTICS=ON
 
 build: build/CMakeCache.txt
-	cmake --build build
+	cmake --build build -j8
 
 clean:
 	rm -rf build

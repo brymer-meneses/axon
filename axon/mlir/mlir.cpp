@@ -66,7 +66,7 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringOps opts)
   if (opts.level == LoweringOps::Level::LLVM) {
     manager.addPass(mlir::createConvertElementwiseToLinalgPass());
 
-    mlir::bufferization::OneShotBufferizationOptions bufferization_options;
+    mlir::bufferization::OneShotBufferizePassOptions bufferization_options;
     manager.addPass(
         mlir::bufferization::createOneShotBufferizePass(bufferization_options));
 
