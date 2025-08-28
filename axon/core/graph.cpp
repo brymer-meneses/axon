@@ -16,6 +16,9 @@ import :inst;
 namespace axon {
 
 struct Parameter {
+  Parameter(llvm::ArrayRef<int64_t> shape, bool requires_grad)
+      : shape(shape), requires_grad(requires_grad) {}
+
   llvm::SmallVector<int64_t> shape;
   bool requires_grad;
   InstId inst_id = InstId::None;
@@ -28,7 +31,7 @@ export class Graph {
   Graph(const Graph&) = delete;
   auto operator=(const Graph&) -> Graph& = delete;
 
-  auto declareParam(llvm::SmallVector<int64_t> shape, bool requires_grad)
+  auto declareParam(llvm::ArrayRef<int64_t> shape, bool requires_grad)
       -> InstId {
     auto input_id = parameters_.emplace(Parameter(shape, requires_grad));
     auto inst_id = insts_.emplace(insts::GetParameter(input_id));

@@ -2,6 +2,7 @@ module;
 
 #include <memory>
 
+#include "axon/base/dcheck.h"
 #include "llvm/ADT/ArrayRef.h"
 
 export module axon.python:abi;
@@ -72,15 +73,17 @@ struct TensorDescriptor {
   }
 
   static auto create(const Tensor& tensor) -> TensorDescriptor* {
+    AXON_DCHECK(tensor.hasData(), "Passed tensor is not live");
+
     auto total_size = MemRefDescriptor::getAllocSize(tensor.rank());
     if (tensor.requiresGrad()) {
       total_size *= 2;
     }
 
     auto* buffer = new std::byte[total_size];
-    MemRefDescriptor::createInPlace(buffer, tensor.data.data(),
-                                    tensor.data.data(), 0, tensor.data.shape(),
-                                    tensor.data.strides());
+    MemRefDescriptor::createInPlace(
+        buffer, tensor.data->data(), tensor.data->data(), 0,
+        tensor.data->shape(), tensor.data->strides());
     if (tensor.requiresGrad()) {
       auto* ptr = buffer + MemRefDescriptor::getAllocSize(tensor.rank());
       MemRefDescriptor::createInPlace(

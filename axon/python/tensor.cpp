@@ -20,23 +20,34 @@ namespace nb = nanobind;
 
 namespace axon {
 
-export struct LazyTensor {
-  InstId inst_id;
-};
-
 export struct Tensor {
-  Tensor(Storage& data) : data(std::move(data)), grad(std::nullopt) {}
+  Tensor(Storage& data) : data(std::move(data)) {}
   Tensor(Storage& data, Storage& grad)
       : data(std::move(data)), grad(std::move(grad)) {}
 
-  auto shape() const -> llvm::ArrayRef<int64_t> { return data.shape(); }
+  Tensor(InstId inst_id) : inst_id(inst_id) {}
+
+  auto isLazy() const -> bool { return inst_id.isValid(); }
+  auto hasData() const -> bool { return data.has_value(); }
+
+  auto shape() const -> llvm::ArrayRef<int64_t> {
+    if (hasData()) {
+      return data->shape();
+    }
+    std::terminate();
+  }
   auto requiresGrad() const -> bool { return grad.has_value(); }
+
   auto rank() const -> int64_t {
-    return static_cast<int64_t>(data.shape().size());
+    if (hasData()) {
+      return static_cast<int64_t>(data->shape().size());
+    }
+    std::terminate();
   }
 
-  Storage data;
+  std::optional<Storage> data;
   std::optional<Storage> grad;
+  InstId inst_id = InstId::None;
 };
 
 }  // namespace axon

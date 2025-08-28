@@ -3,7 +3,7 @@ import numpy as np
 from . import axon_bindings as bindings
 from .axon_bindings import ElementType
 
-def tensor(ndarray, requires_grad=False, element_type=ElementType.Float32) -> bindings.Tensor | bindings.LazyTensor:
+def tensor(ndarray, requires_grad=False, element_type=ElementType.Float32) -> bindings.Tensor:
     graph = bindings._get_current_graph()
     if graph is not None:
         if requires_grad:
