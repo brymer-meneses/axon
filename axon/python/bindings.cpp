@@ -46,22 +46,46 @@ static auto createStoragefromNanobind(nb::ndarray<>& array,
   return {element_type, data_ptr, shape, stride, /*is_owned=*/true};
 }
 
-NB_MODULE(axon_bindings, m) {
-  auto lowering_ops = nb::class_<LoweringOps>(m, "LoweringOps");
-  lowering_ops.def(nb::init<LoweringOps::Level>());
-  lowering_ops.def_rw("level", &LoweringOps::level);
+static auto buildGraphBindings(nb::module_& m) -> void {
+  nb::class_<Graph>(m, "Graph")
+      .def(nb::init<>())
+      .def(
+          "declare_parameter",
+          [](Graph& self, std::vector<int64_t> shape,
+             bool requires_grad) -> LazyTensor {
+            llvm::SmallVector<int64_t> shape_ = {shape.begin(), shape.end()};
+            auto inst_id = self.declareParam(shape_, requires_grad);
+            return {inst_id};
+          },
+          nb::rv_policy::move)
+      .def("compile",
+           [](Graph& graph,
+              const LoweringOps& ops) -> std::unique_ptr<CompilationUnit> {
+             auto compilation_unit = std::make_unique<CompilationUnit>();
+             if (compilation_unit->compile(graph, ops).failed()) {
+               throw std::runtime_error("Failed to compile graph");
+             }
+             return std::move(compilation_unit);
+           })
+      .def("create_constant",
+           [](nb::ndarray<>& array,
+              ElementType::InternalType element_type) -> LazyTensor {
+             auto data = createStoragefromNanobind(array, element_type);
+             auto inst_id = current_graph->createConstant(std::move(data));
+             return {inst_id};
+           });
 
-  nb::enum_<LoweringOps::Level>(lowering_ops, "Level")
-      .value("Axon", LoweringOps::Level::Axon)
-      .value("Standard", LoweringOps::Level::Standard)
-      .value("LLVM", LoweringOps::Level::LLVM)
-      .export_values();
+  m.def("_get_current_graph",
+        []() -> std::shared_ptr<Graph> { return current_graph; });
 
-  nb::enum_<ElementType::InternalType>(m, "ElementType")
-      .value("Float32", ElementType::Float32)
-      .value("Float64", ElementType::Float64)
-      .export_values();
+  m.def("_set_current_graph", [](std::shared_ptr<Graph> graph) -> void {
+    current_graph = std::move(graph);
+  });
 
+  m.def("_clear_current_graph", []() -> void { current_graph.reset(); });
+}
+
+static auto buildTensorBindings(nb::module_& m) -> void {
   nb::class_<Tensor>(m, "Tensor")
       .def_prop_ro("shape",
                    [](const Tensor& self) -> std::vector<int64_t> {
@@ -125,6 +149,23 @@ NB_MODULE(axon_bindings, m) {
       .def("backward", [](const LazyTensor& self) -> void {
         axon::backward(*current_graph, self.inst_id);
       });
+}
+
+NB_MODULE(axon_bindings, m) {
+  nb::enum_<ElementType::InternalType>(m, "ElementType")
+      .value("Float32", ElementType::Float32)
+      .value("Float64", ElementType::Float64)
+      .export_values();
+
+  auto lowering_ops = nb::class_<LoweringOps>(m, "LoweringOps");
+  lowering_ops.def(nb::init<LoweringOps::Level>());
+  lowering_ops.def_rw("level", &LoweringOps::level);
+
+  nb::enum_<LoweringOps::Level>(lowering_ops, "Level")
+      .value("Axon", LoweringOps::Level::Axon)
+      .value("Standard", LoweringOps::Level::Standard)
+      .value("LLVM", LoweringOps::Level::LLVM)
+      .export_values();
 
   nb::class_<CompilationUnit>(m, "CompilationUnit")
       .def("dump_ir",
@@ -134,40 +175,6 @@ NB_MODULE(axon_bindings, m) {
         self.execute(std::move(tensors));
       });
 
-  nb::class_<Graph>(m, "Graph")
-      .def(nb::init<>())
-      .def(
-          "declare_parameter",
-          [](Graph& self, std::vector<int64_t> shape,
-             bool requires_grad) -> LazyTensor {
-            llvm::SmallVector<int64_t> shape_ = {shape.begin(), shape.end()};
-            auto inst_id = self.declareParam(shape_, requires_grad);
-            return {inst_id};
-          },
-          nb::rv_policy::move)
-      .def("compile",
-           [](Graph& graph,
-              const LoweringOps& ops) -> std::unique_ptr<CompilationUnit> {
-             auto compilation_unit = std::make_unique<CompilationUnit>();
-             if (compilation_unit->compile(graph, ops).failed()) {
-               throw std::runtime_error("Failed to compile graph");
-             }
-             return std::move(compilation_unit);
-           })
-      .def("create_constant",
-           [](nb::ndarray<>& array,
-              ElementType::InternalType element_type) -> LazyTensor {
-             auto data = createStoragefromNanobind(array, element_type);
-             auto inst_id = current_graph->createConstant(std::move(data));
-             return {inst_id};
-           });
-
-  m.def("_get_current_graph",
-        []() -> std::shared_ptr<Graph> { return current_graph; });
-
-  m.def("_set_current_graph", [](std::shared_ptr<Graph> graph) -> void {
-    current_graph = std::move(graph);
-  });
-
-  m.def("_clear_current_graph", []() -> void { current_graph.reset(); });
+  buildTensorBindings(m);
+  buildGraphBindings(m);
 }
