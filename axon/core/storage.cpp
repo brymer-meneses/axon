@@ -111,11 +111,11 @@ class Storage {
   }
 
   template <ElementType type>
-  auto dataAs() -> ElementTypeCpp<type>* {
+  auto dataAs() const -> ElementTypeCpp<type>* {
     return reinterpret_cast<ElementTypeCpp<type>*>(data_);
   }
 
-  auto data() -> std::byte* { return data_; }
+  auto data() const -> std::byte* { return data_; }
 
   auto shape() const -> llvm::ArrayRef<int64_t> { return shape_; }
   auto strides() const -> llvm::ArrayRef<int64_t> { return strides_; }

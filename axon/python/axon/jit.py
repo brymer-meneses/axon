@@ -29,7 +29,7 @@ class CompiledFunction:
     # current graph.
     def __call__(self, *args, **kwargs) -> typing.Any:
         graph = bindings.Graph()
-        traced_args, traced_kwargs = _convert_params(graph, *args, **kwargs)
+        traced_args, traced_kwargs, params = _process_params(graph, *args, **kwargs)
 
         # trace the tensor operations
         bindings._set_current_graph(graph)
@@ -39,21 +39,24 @@ class CompiledFunction:
         if graph != self._cached_graph:
             self._compiled = graph.compile(self._opts)
 
-        return result
+        return self._compiled.execute(params)
 
     def dump_ir(self) -> str:
         return self._compiled.dump_ir()
 
-def _convert_params(graph, *args, **kwargs):
+def _process_params(graph, *args, **kwargs):
+    tensors: bindings.Tensor = []
     new_args = []
     for arg in args:
         if isinstance(arg, bindings.Tensor):
+            tensors.append(arg)
             arg = graph.declare_parameter(arg.shape, arg.requires_grad)
         new_args.append(arg)
     new_kwargs = {}
     for (key, value) in kwargs.items():
         if isinstance(value, bindings.Tensor):
+            tensors.append(value)
             value = graph.declare_parameter(value.shape, value.requires_grad)
         new_kwargs[key] = value
-    return tuple(new_args), new_kwargs
+    return tuple(new_args), new_kwargs, tensors
 

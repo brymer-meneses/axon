@@ -19,7 +19,9 @@ build: build/CMakeCache.txt
 clean:
 	rm -rf build
 
-test: build
+install: build
 	uv pip install -e .
+
+test: build install
 	uv run pytest -s
 

@@ -14,6 +14,9 @@
 #include "nanobind/stl/string.h"
 #include "nanobind/stl/unique_ptr.h"
 #include "nanobind/stl/vector.h"
+#include "xtensor/containers/xadapt.hpp"
+#include "xtensor/containers/xarray.hpp"
+#include "xtensor/io/xio.hpp"
 
 import axon.core;
 import axon.python;
@@ -40,8 +43,31 @@ NB_MODULE(axon_bindings, m) {
                    [](const Tensor& self) -> std::vector<int64_t> {
                      return self.shape();
                    })
-      .def_prop_ro("requires_grad", [](const Tensor& self) -> bool {
-        return self.requiresGrad();
+      .def_prop_ro(
+          "requires_grad",
+          [](const Tensor& self) -> bool { return self.requiresGrad(); })
+      .def("__repr__", [](const Tensor& self) -> std::string {
+        std::stringstream stream{};
+
+        stream << "[";
+
+        for (auto i : std::views::iota(0, 3)) {
+          float elem = reinterpret_cast<float*>(self.data.data())[i];
+          stream << elem << ",";
+        }
+
+        stream << "]";
+
+        stream << " [";
+        if (self.requiresGrad()) {
+          for (auto i : std::views::iota(0, 3)) {
+            float elem = reinterpret_cast<float*>(self.grad->data())[i];
+            stream << elem << ",";
+          }
+        }
+        stream << "]";
+
+        return stream.str();
       });
 
   m.def(

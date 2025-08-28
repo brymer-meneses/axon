@@ -1,8 +1,8 @@
-#include "mlir/Conversion/LLVMCommon/MemRefBuilder.h"
 module;
 
 #include <memory>
 #include <print>
+#include <stdexcept>
 #include <vector>
 
 #include "axon/base/dcheck.h"
@@ -22,8 +22,21 @@ import axon.core;
 import axon.mlir;
 
 import :tensor;
+import :abi;
 
 namespace axon {
+
+static auto convertParams(std::span<std::shared_ptr<Tensor>> params)
+    -> llvm::SmallVector<void*> {
+  llvm::SmallVector<void*> args;
+
+  for (auto tensor : params) {
+    auto ptr = reinterpret_cast<void*>(abi::TensorDescriptor::create(*tensor));
+    args.emplace_back(ptr);
+  }
+
+  return args;
+}
 
 export class CompilationUnit {
  public:
@@ -59,13 +72,12 @@ export class CompilationUnit {
         mlir::ExecutionEngine::create(module_op_, engine_options);
     AXON_DCHECK(maybe_engine, "failed to construct an execution engine");
     auto& engine = maybe_engine.get();
+    auto args = convertParams(params);
 
-    std::println("begin");
-    auto invocation_result = engine->invokePacked("graph");
+    auto invocation_result = engine->invokePacked("graph", args);
     if (invocation_result) {
-      llvm::errs() << "JIT invocation failed\n";
+      std::runtime_error("JIT invocation failed\n");
     }
-    std::println("end");
   }
 
   auto dump_ir() const -> std::string {

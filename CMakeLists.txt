@@ -99,6 +99,7 @@ target_sources(axon_bindings
     axon/python/tensor.cpp
     axon/python/compilation_unit.cpp
     axon/python/python.cpp
+    axon/python/abi.cpp
   PUBLIC
     axon/python/bindings.cpp
 )
@@ -126,12 +127,12 @@ nanobind_lto(axon_bindings)
 nanobind_set_visibility(axon_bindings)
 nanobind_extension(axon_bindings)
 
-nanobind_add_stub(
-  axon_bindings_stub
-  MODULE axon_bindings
-  OUTPUT axon_bindings.pyi
-  PYTHON_PATH $<TARGET_FILE_DIR:axon_bindings>
-  DEPENDS axon_bindings
-)
+# nanobind_add_stub(
+#   axon_bindings_stub
+#   MODULE axon_bindings
+#   OUTPUT axon_bindings.pyi
+#   PYTHON_PATH $<TARGET_FILE_DIR:axon_bindings>
+#   DEPENDS axon_bindings
+# )
 
-include_directories(${MLIR_INCLUDE_DIRS})
+# include_directories(${MLIR_INCLUDE_DIRS})

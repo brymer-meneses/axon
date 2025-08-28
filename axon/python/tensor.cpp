@@ -24,37 +24,12 @@ struct Tensor {
 
   auto shape() const -> llvm::ArrayRef<int64_t> { return data.shape(); }
   auto requiresGrad() const -> bool { return grad.has_value(); }
+  auto rank() const -> int64_t {
+    return static_cast<int64_t>(data.shape().size());
+  }
 
   Storage data;
   std::optional<Storage> grad;
 };
-
-class MemRefDescriptor {
- public:
-  MemRefDescriptor(const Storage&) {}
-
-  ~MemRefDescriptor() {
-    delete[] sizes_;
-    delete[] strides_;
-  }
-
- private:
-  void* allocated_ptr_;
-  void* aligned_ptr_;
-  int64_t offset_;
-  int64_t* sizes_;
-  int64_t* strides_;
-};
-
-enum TensorType { RequiresGrad, Normal };
-
-template <TensorType>
-struct TensorDescriptor {};
-
-template <>
-struct TensorDescriptor<RequiresGrad> {};
-
-template <>
-struct TensorDescriptor<Normal> {};
 
 }  // namespace axon
