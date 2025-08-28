@@ -20,7 +20,7 @@ def jit(opts: typing.Optional[bindings.LoweringOps] = None) -> typing.Callable:
 class CompiledFunction:
     def __init__(self, opts: typing.Optional[bindings.LoweringOps], func: typing.Callable) -> None:
         self._func = func
-        self._opts = LoweringOps(LoweringOps.Level.Axon) if opts is None else opts
+        self._opts = LoweringOps(LoweringOps.Level.LLVM) if opts is None else opts
         self._cached_graph = None
         self._compiled = None
 

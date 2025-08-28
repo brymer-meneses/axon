@@ -2,6 +2,7 @@ import atexit
 
 from . import axon_bindings as bindings
 
+from .axon_bindings import LoweringOps
 from .tensor import tensor
 from .jit import jit
 

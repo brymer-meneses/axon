@@ -44,12 +44,14 @@ static auto codegen(insts::Constant op, CompilationContext& ctx, InstId inst_id)
   auto result_type =
       mlir::RankedTensorType::get(constant.shape(), ctx.builder.getF32Type());
 
-  auto data_ref = llvm::ArrayRef<float>(constant.dataAs<ElementType::Float32>(),
-                                        constant.size());
-  auto data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
+  if (constant.element_type() == ElementType::Float32) {
+    auto data_ptr = reinterpret_cast<float*>(constant.data());
+    auto data_ref = llvm::ArrayRef<float>(data_ptr, constant.size());
+    auto data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
 
-  ctx.values[inst_id] = ConstantOp::create(
-      ctx.builder, ctx.builder.getUnknownLoc(), data_attribute);
+    ctx.values[inst_id] = ConstantOp::create(
+        ctx.builder, ctx.builder.getUnknownLoc(), data_attribute);
+  }
 }
 
 static auto codegen(insts::GetParameter op, CompilationContext& ctx,

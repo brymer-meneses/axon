@@ -1,10 +1,12 @@
 
 
+#include <iostream>
 #include <memory>
 #include <ranges>
 #include <sstream>
 #include <stdexcept>
 
+#include "axon/base/dcheck.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/IR/OperationSupport.h"
@@ -30,14 +32,36 @@ static thread_local std::shared_ptr<Graph> current_graph{};
 
 static auto createStoragefromNanobind(nb::ndarray<>& array,
                                       ElementType element_type) -> Storage {
-  auto* data = reinterpret_cast<std::byte*>(array.data());
+  // TODO: Explore ways to avoid copying the memory.
+  auto* data_ptr = new std::byte[array.size()];
+  std::memcpy(data_ptr, array.data(),
+              element_type.getSizeInBytes() * array.size());
+
   auto shape = llvm::ArrayRef<int64_t>(array.shape_ptr(), array.ndim());
   auto stride = llvm::ArrayRef<int64_t>(array.stride_ptr(), array.ndim());
 
-  return {element_type, data, shape, stride, /*is_owned=*/false};
+  AXON_DCHECK(element_type == ElementType::Float32,
+              "Only float32 is supported for now.");
+
+  return {element_type, data_ptr, shape, stride, /*is_owned=*/true};
 }
 
 NB_MODULE(axon_bindings, m) {
+  auto lowering_ops = nb::class_<LoweringOps>(m, "LoweringOps");
+  lowering_ops.def(nb::init<LoweringOps::Level>());
+  lowering_ops.def_rw("level", &LoweringOps::level);
+
+  nb::enum_<LoweringOps::Level>(lowering_ops, "Level")
+      .value("Axon", LoweringOps::Level::Axon)
+      .value("Standard", LoweringOps::Level::Standard)
+      .value("LLVM", LoweringOps::Level::LLVM)
+      .export_values();
+
+  nb::enum_<ElementType::InternalType>(m, "ElementType")
+      .value("Float32", ElementType::Float32)
+      .value("Float64", ElementType::Float64)
+      .export_values();
+
   nb::class_<Tensor>(m, "Tensor")
       .def_prop_ro("shape",
                    [](const Tensor& self) -> std::vector<int64_t> {
@@ -72,13 +96,14 @@ NB_MODULE(axon_bindings, m) {
 
   m.def(
       "_create_tensor",
-      [](nb::ndarray<>& array, bool requires_grad) -> Tensor {
+      [](nb::ndarray<>& array, bool requires_grad,
+         ElementType::InternalType element_type) -> Tensor {
         if (not requires_grad) {
-          auto data = createStoragefromNanobind(array, ElementType::Float32);
+          auto data = createStoragefromNanobind(array, element_type);
           return {data};
         }
 
-        auto data = createStoragefromNanobind(array, ElementType::Float32);
+        auto data = createStoragefromNanobind(array, element_type);
         auto grad = Storage::createZerosLike(data);
         return {data, grad};
       },
@@ -109,16 +134,6 @@ NB_MODULE(axon_bindings, m) {
         self.execute(std::move(tensors));
       });
 
-  auto lowering_ops = nb::class_<LoweringOps>(m, "LoweringOps");
-  lowering_ops.def(nb::init<LoweringOps::Level>());
-  lowering_ops.def_rw("level", &LoweringOps::level);
-
-  nb::enum_<LoweringOps::Level>(lowering_ops, "Level")
-      .value("Axon", LoweringOps::Level::Axon)
-      .value("Standard", LoweringOps::Level::Standard)
-      .value("LLVM", LoweringOps::Level::LLVM)
-      .export_values();
-
   nb::class_<Graph>(m, "Graph")
       .def(nb::init<>())
       .def(
@@ -139,11 +154,13 @@ NB_MODULE(axon_bindings, m) {
              }
              return std::move(compilation_unit);
            })
-      .def("create_constant", [](nb::ndarray<>& array) -> LazyTensor {
-        auto data = createStoragefromNanobind(array, ElementType::Float32);
-        auto inst_id = current_graph->createConstant(std::move(data));
-        return {inst_id};
-      });
+      .def("create_constant",
+           [](nb::ndarray<>& array,
+              ElementType::InternalType element_type) -> LazyTensor {
+             auto data = createStoragefromNanobind(array, element_type);
+             auto inst_id = current_graph->createConstant(std::move(data));
+             return {inst_id};
+           });
 
   m.def("_get_current_graph",
         []() -> std::shared_ptr<Graph> { return current_graph; });

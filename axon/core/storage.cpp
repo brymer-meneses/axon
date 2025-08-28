@@ -10,31 +10,32 @@ export module axon.core:storage;
 
 export namespace axon {
 
-enum class ElementType {
-  Float32,
-  Float64,
+class ElementType {
+ public:
+  enum InternalType {
+    Float32,
+    Float64,
+  };
+
+  ElementType(InternalType type) : type_(type) {}
+  ElementType() = default;
+
+  auto operator==(ElementType other) const -> bool {
+    return type_ == other.type_;
+  }
+
+  auto getSizeInBytes() const -> size_t {
+    switch (type_) {
+      case ElementType::Float32:
+        return 4;
+      case ElementType::Float64:
+        return 8;
+    }
+  }
+
+ private:
+  InternalType type_;
 };
-
-template <ElementType element_type>
-consteval auto elementTypeToCppImpl() -> auto {
-  if constexpr (element_type == ElementType::Float32) {
-    return float{};
-  } else if constexpr (element_type == ElementType::Float64) {
-    return double{};
-  }
-}
-
-template <ElementType element_type>
-using ElementTypeCpp = decltype(elementTypeToCppImpl<element_type>());
-
-auto elementTypeSize(ElementType type) -> int64_t {
-  switch (type) {
-    case ElementType::Float32:
-      return 4;
-    case ElementType::Float64:
-      return 8;
-  }
-}
 
 class Storage {
  public:
@@ -81,7 +82,7 @@ class Storage {
     for (auto dim : shape_) {
       num_elems *= dim;
     }
-    return num_elems * elementTypeSize(element_type_);
+    return num_elems * element_type_.getSizeInBytes();
   }
 
   static auto createFilled(llvm::ArrayRef<int64_t> shape,
@@ -91,7 +92,7 @@ class Storage {
     for (auto dim : shape) {
       num_elems *= dim;
     }
-    auto size = num_elems * elementTypeSize(element_type);
+    auto size = num_elems * element_type.getSizeInBytes();
     auto* data = new std::byte[size];
 
     if (element_type == ElementType::Float32) {
@@ -108,11 +109,6 @@ class Storage {
   static auto createZerosLike(const Storage& storage) -> Storage {
     return createFilled(storage.shape(), storage.strides(),
                         storage.element_type(), 0);
-  }
-
-  template <ElementType type>
-  auto dataAs() const -> ElementTypeCpp<type>* {
-    return reinterpret_cast<ElementTypeCpp<type>*>(data_);
   }
 
   auto data() const -> std::byte* { return data_; }

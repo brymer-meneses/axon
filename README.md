@@ -23,7 +23,7 @@ def training_step(x, y, model):
     l = mse_loss(y, y_hat)
     l.backward()
 
-optim = axon.SGD(lr=0.01)
+optim = axon.SGD(model.parameters(), lr=0.01)
 for (x, y) in dataset:
     l = training_step(x, y, model)
     optim.zero_grad()
