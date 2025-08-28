@@ -70,13 +70,16 @@ export class CompilationUnit {
     engine_options.transformer = opt_pipeline;
     auto maybe_engine =
         mlir::ExecutionEngine::create(module_op_, engine_options);
-    AXON_DCHECK(maybe_engine, "failed to construct an execution engine");
+    if (!maybe_engine) {
+      throw std::runtime_error("Failed to create JIT engine");
+    }
+
     auto& engine = maybe_engine.get();
     auto args = convertParams(params);
 
     auto invocation_result = engine->invokePacked("graph", args);
     if (invocation_result) {
-      std::runtime_error("JIT invocation failed\n");
+      throw std::runtime_error("JIT invocation failed\n");
     }
   }
 

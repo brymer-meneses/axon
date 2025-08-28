@@ -4,6 +4,34 @@ project(axon)
 
 include(cmake/dependencies.cmake)
 
+add_library(mlir INTERFACE)
+target_link_libraries(mlir
+  INTERFACE
+    MLIRIR
+    MLIRPass
+    MLIRSupport
+    MLIRTransforms
+    MLIRDialect
+    MLIRLLVMDialect
+    MLIRTensorDialect
+    MLIRArithDialect
+    MLIRFuncDialect
+    MLIRLinalgDialect
+    MLIRBufferizationDialect
+    MLIRAffineToStandard
+    MLIRSCFToControlFlow
+    MLIRTensorToLinalg
+    MLIRFuncToLLVM
+    MLIRMemRefToLLVM
+    MLIRArithToLLVM
+    MLIRBufferizationPipelines
+    MLIRReconcileUnrealizedCasts
+    MLIRFuncTransforms
+    MLIRExecutionEngine
+    MLIRFuncAllExtensions
+)
+
+
 add_library(axon SHARED)
 
 target_sources(axon 
@@ -49,28 +77,7 @@ target_link_libraries(axon
     ${llvm_libs}
     xtensor
     xtensor-blas
-    MLIRIR
-    MLIRPass
-    MLIRSupport
-    MLIRTransforms
-    MLIRDialect
-    MLIRLLVMDialect
-    MLIRTensorDialect
-    MLIRArithDialect
-    MLIRFuncDialect
-    MLIRLinalgDialect
-    MLIRBufferizationDialect
-    MLIRAffineToStandard
-    MLIRSCFToControlFlow
-    MLIRTensorToLinalg
-    MLIRFuncToLLVM
-    MLIRMemRefToLLVM
-    MLIRArithToLLVM
-    MLIRBufferizationPipelines
-    MLIRReconcileUnrealizedCasts
-    MLIRFuncTransforms
-    MLIRExecutionEngine
-    MLIRFuncAllExtensions
+    mlir
 )
 
 if (MSVC)

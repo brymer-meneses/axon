@@ -15,6 +15,8 @@ module;
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Arith/Transforms/BufferDeallocationOpInterfaceImpl.h"
+#include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
@@ -30,6 +32,7 @@ module;
 #include "mlir/Dialect/MemRef/Transforms/Transforms.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -172,13 +175,17 @@ struct AxonToStandardLoweringPass
                 mlir::linalg::LinalgDialect, mlir::memref::MemRefDialect,
                 mlir::bufferization::BufferizationDialect, mlir::BuiltinDialect,
                 mlir::arith::ArithDialect, mlir::tensor::TensorDialect>();
+    // TODO: this shouldn't be here
     mlir::linalg::registerBufferizableOpInterfaceExternalModels(registry);
     mlir::bufferization::func_ext::
         registerBufferizableOpInterfaceExternalModels(registry);
+    mlir::arith::registerBufferizableOpInterfaceExternalModels(registry);
+    mlir::tensor::registerBufferizableOpInterfaceExternalModels(registry);
   }
 
   auto runOnOperation() -> void final {
     auto& context = getContext();
+
     mlir::ConversionTarget target(context);
 
     target
@@ -276,6 +283,7 @@ struct AxonToLlvmLoweringPass
 
   auto runOnOperation() -> void final {
     auto& context = getContext();
+
     mlir::ConversionTarget target(context);
 
     target.addLegalDialect<mlir::LLVM::LLVMDialect>();

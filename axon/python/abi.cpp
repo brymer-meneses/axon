@@ -84,7 +84,7 @@ struct TensorDescriptor {
     if (tensor.requiresGrad()) {
       auto* ptr = buffer + MemRefDescriptor::getAllocSize(tensor.rank());
       MemRefDescriptor::createInPlace(
-          buffer, tensor.grad->data(), tensor.grad->data(), 0,
+          ptr, tensor.grad->data(), tensor.grad->data(), 0,
           tensor.grad->shape(), tensor.grad->strides());
     }
 
