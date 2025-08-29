@@ -1,42 +1,19 @@
 module;
 
-#include <memory>
-
-#include "axon/base/dcheck.h"
 #include "axon/mlir/dialect/dialect.h"
-#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
-#include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
-#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
-#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
-#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
-#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
-#include "mlir/Conversion/MemRefToEmitC/MemRefToEmitC.h"
-#include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
-#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/Arith/Transforms/BufferDeallocationOpInterfaceImpl.h"
-#include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
-#include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
-#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
-#include "mlir/Dialect/Func/Extensions/AllExtensions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/Func/Transforms/Passes.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
-#include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/MemRef/Transforms/Transforms.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-export module axon.mlir:lowering;
+export module axon.mlir:standard_lowering;
 
 namespace axon {
 
@@ -140,8 +117,8 @@ struct FillLikeOpLowering : mlir::OpConversionPattern<FillLikeOp> {
   }
 };
 
-struct AxonToStdTypeConverter : mlir::TypeConverter {
-  AxonToStdTypeConverter(mlir::MLIRContext* ctx) {
+struct AxonToStandardTypeConverter : mlir::TypeConverter {
+  AxonToStandardTypeConverter(mlir::MLIRContext* ctx) {
     addConversion([](mlir::Type type) -> mlir::Type { return type; });
     addConversion([ctx](TensorRefType tensor_ref) -> mlir::Type {
       auto element_type = tensor_ref.getElementType();
@@ -175,12 +152,6 @@ struct AxonToStandardLoweringPass
                 mlir::linalg::LinalgDialect, mlir::memref::MemRefDialect,
                 mlir::bufferization::BufferizationDialect, mlir::BuiltinDialect,
                 mlir::arith::ArithDialect, mlir::tensor::TensorDialect>();
-    // TODO: this shouldn't be here
-    mlir::linalg::registerBufferizableOpInterfaceExternalModels(registry);
-    mlir::bufferization::func_ext::
-        registerBufferizableOpInterfaceExternalModels(registry);
-    mlir::arith::registerBufferizableOpInterfaceExternalModels(registry);
-    mlir::tensor::registerBufferizableOpInterfaceExternalModels(registry);
   }
 
   auto runOnOperation() -> void final {
@@ -197,7 +168,7 @@ struct AxonToStandardLoweringPass
     target
         .addIllegalOp<AddOp, MulOp, GetDataOp, AccumulateGradOp, FillLikeOp>();
 
-    AxonToStdTypeConverter type_converter{&context};
+    AxonToStandardTypeConverter type_converter{&context};
 
     mlir::RewritePatternSet patterns{&context};
     patterns.add<AddOpLowering, MulOpLowering, GetDataOpLowering,
@@ -222,105 +193,6 @@ struct AxonToStandardLoweringPass
     }
   }
 };
-
-struct AxonToLlvmTypeConverter : mlir::LLVMTypeConverter {
-  AxonToLlvmTypeConverter(mlir::MLIRContext* ctx,
-                          const mlir::LowerToLLVMOptions& options)
-      : mlir::LLVMTypeConverter(ctx, options) {
-    addConversion([ctx, this](mlir::TupleType tuple_type) -> mlir::Type {
-      AXON_DCHECK(getOptions().useBarePtrCallConv, "");
-
-      llvm::SmallVector<mlir::Type> llvm_types;
-      for (mlir::Type elem_type : tuple_type.getTypes()) {
-        mlir::Type converted_type = convertType(elem_type);
-        if (!converted_type) {
-          return {};
-        }
-        if (!mlir::LLVM::isCompatibleType(converted_type)) {
-          return {};
-        }
-
-        llvm_types.push_back(converted_type);
-      }
-
-      return mlir::LLVM::LLVMStructType::getLiteral(ctx, llvm_types);
-    });
-  }
-};
-
-struct TupleAccessOpLowering : mlir::OpConversionPattern<TupleAccessOp> {
-  using mlir::OpConversionPattern<TupleAccessOp>::OpConversionPattern;
-
-  auto matchAndRewrite(TupleAccessOp op, OpAdaptor adaptor,
-                       mlir::ConversionPatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto loc = op.getLoc();
-
-    auto input = adaptor.getInput();
-    auto index = adaptor.getIndex();
-
-    auto new_op =
-        mlir::LLVM::ExtractValueOp::create(rewriter, loc, input, index);
-    rewriter.replaceOp(op, new_op);
-    return mlir::success();
-  }
-};
-
-struct AxonToLlvmLoweringPass
-    : mlir::PassWrapper<AxonToLlvmLoweringPass,
-                        mlir::OperationPass<mlir::ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AxonToLlvmLoweringPass)
-
-  auto getArgument() const -> llvm::StringRef override {
-    return "axon-to-llvm-lowering";
-  }
-
-  auto getDependentDialects(mlir::DialectRegistry& registry) const
-      -> void override {
-    registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect,
-                    mlir::cf::ControlFlowDialect>();
-  }
-
-  auto runOnOperation() -> void final {
-    auto& context = getContext();
-
-    mlir::ConversionTarget target(context);
-
-    target.addLegalDialect<mlir::LLVM::LLVMDialect>();
-    target.addLegalOp<mlir::ModuleOp>();
-
-    mlir::LowerToLLVMOptions options{&context};
-
-    // All shapes are known at compile time so memrefs should be lowered to a
-    // pointer.
-    options.useBarePtrCallConv = true;
-
-    mlir::RewritePatternSet patterns{&context};
-    AxonToLlvmTypeConverter type_converter{&context, options};
-
-    patterns.add<TupleAccessOpLowering>(type_converter, &context);
-
-    mlir::populateAffineToStdConversionPatterns(patterns);
-    mlir::arith::populateArithToLLVMConversionPatterns(type_converter,
-                                                       patterns);
-    mlir::populateSCFToControlFlowConversionPatterns(patterns);
-    mlir::cf::populateControlFlowToLLVMConversionPatterns(type_converter,
-                                                          patterns);
-
-    mlir::populateFinalizeMemRefToLLVMConversionPatterns(type_converter,
-                                                         patterns);
-    mlir::populateFuncToLLVMConversionPatterns(type_converter, patterns);
-
-    if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
-                                                  std::move(patterns)))) {
-      signalPassFailure();
-    }
-  }
-};
-
-export auto createLlvmLoweringPass() -> std::unique_ptr<mlir::Pass> {
-  return std::make_unique<AxonToLlvmLoweringPass>();
-}
 
 export auto createStandardLoweringPass() -> std::unique_ptr<mlir::Pass> {
   return std::make_unique<AxonToStandardLoweringPass>();

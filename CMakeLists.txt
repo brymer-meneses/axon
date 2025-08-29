@@ -32,7 +32,7 @@ target_link_libraries(mlir
 )
 
 
-add_library(axon SHARED)
+add_library(axon STATIC)
 
 target_sources(axon 
   PUBLIC FILE_SET CXX_MODULES FILES
@@ -49,9 +49,10 @@ target_sources(axon
     axon/core/graph.cpp
     axon/core/storage.cpp
 
-    axon/mlir/codegen_graph.cpp
+    axon/mlir/codegen.cpp
     axon/mlir/mlir.cpp
-    axon/mlir/lowering.cpp
+    axon/mlir/lowering/llvm.cpp
+    axon/mlir/lowering/standard.cpp
   PRIVATE
     axon/mlir/dialect/dialect.cpp
     axon/mlir/dialect/types.cpp
@@ -100,7 +101,7 @@ add_dependencies(axon AxonDialectIncGen)
 set_target_properties(axon PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 nanobind_build_library(nanobind SHARED)
-add_library(axon_bindings SHARED)
+add_library(axon_bindings MODULE)
 target_sources(axon_bindings
   PUBLIC FILE_SET CXX_MODULES FILES
     axon/python/tensor.cpp

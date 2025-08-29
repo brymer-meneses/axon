@@ -13,7 +13,7 @@ module;
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 
-export module axon.mlir:codegen_graph;
+export module axon.mlir:codegen;
 
 import axon.core;
 import axon.base;
