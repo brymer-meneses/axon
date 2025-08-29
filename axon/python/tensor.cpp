@@ -27,19 +27,36 @@ namespace axon {
 
 export class Tensor {
  public:
-  Tensor(Storage& data) : data_(std::move(data)) {}
-
-  Tensor(Storage& data, Storage& grad)
-      : data_(std::move(data)), grad_(std::make_shared<Tensor>(grad)) {}
+  Tensor(Storage&& data, bool requires_grad)
+      : data_(std::move(data)), requires_grad_(requires_grad) {}
 
   Tensor(InstId inst_id) : inst_id_(inst_id) {}
 
   auto hasData() const -> bool { return data_.has_value(); }
-  auto setInstId(InstId inst_id) -> void { inst_id_ = inst_id; }
+  auto hasGrad() const -> bool { return grad_ != nullptr; }
 
-  auto inst_id() const -> InstId { return inst_id_; }
+  auto zeroGrad() -> void {
+    if (not requires_grad_) {
+      throw std::runtime_error(
+          "Cannot zero a tensor that does not require gradients.");
+    }
 
-  auto requiresGrad() const -> bool { return grad_ != nullptr; }
+    if (grad_ != nullptr) {
+      grad_->data()->fillWithZeros();
+    } else {
+      grad_ = std::make_shared<Tensor>(Storage::createZerosLike(*data_),
+                                       /*requires_grad=*/false);
+    }
+  }
+
+  auto trace(Graph& graph) -> void {
+    inst_id_ = graph.declareParam(data_->shape(), requires_grad_);
+    if (requires_grad_ && not hasGrad()) {
+      zeroGrad();
+    }
+  }
+
+  auto requiresGrad() const -> bool { return requires_grad_; }
 
   auto shape() const -> llvm::ArrayRef<int64_t> {
     if (hasData()) {
@@ -55,21 +72,26 @@ export class Tensor {
     std::terminate();
   }
 
+  auto inst_id() const -> InstId { return inst_id_; }
+
   auto data() -> std::optional<Storage>& { return data_; }
   auto data() const -> const std::optional<Storage>& { return data_; }
 
   auto grad() const -> std::shared_ptr<Tensor> { return grad_; }
 
  private:
+  bool requires_grad_;
+
   std::optional<Storage> data_;
-  std::shared_ptr<Tensor> grad_;
+  std::shared_ptr<Tensor> grad_ = nullptr;
+
   InstId inst_id_ = InstId::None;
 };
 
-static void dumpRecursive(llvm::raw_string_ostream& stream, const float* ptr,
+static auto dumpRecursive(llvm::raw_string_ostream& stream, const float* ptr,
                           size_t dim, llvm::ArrayRef<int64_t> shape,
                           llvm::ArrayRef<int64_t> strides, int indent_width,
-                          int depth = 0) {
+                          int depth) -> void {
   if (dim == shape.size() - 1) {
     // Base case: 1-D row
     stream << "[";
@@ -109,7 +131,7 @@ export auto dumpTensor(const Tensor& tensor, int indent_width = 8)
   auto base = reinterpret_cast<const float*>(tensor.data()->data_ptr());
 
   stream << "tensor(";
-  dumpRecursive(stream, base, 0, shape, strides, indent_width);
+  dumpRecursive(stream, base, 0, shape, strides, indent_width, /*depth=*/0);
 
   if (tensor.requiresGrad()) {
     stream << ", requires_grad=True";

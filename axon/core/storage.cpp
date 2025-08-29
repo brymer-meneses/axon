@@ -88,6 +88,16 @@ class Storage {
     return num_elems;
   }
 
+  auto fillWithZeros() -> void {
+    if (element_type_ == ElementType::Float32) {
+      auto* data_ptr = reinterpret_cast<float*>(data_);
+      std::fill_n(data_ptr, size(), 0.0);
+    } else if (element_type_ == ElementType::Float64) {
+      auto* data_ptr = reinterpret_cast<double*>(data_);
+      std::fill_n(data_ptr, size(), 0.0);
+    }
+  }
+
   auto getSizeInBytes() const -> size_t {
     return size() * element_type_.getSizeInBytes();
   }

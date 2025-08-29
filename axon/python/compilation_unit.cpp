@@ -1,7 +1,6 @@
 module;
 
 #include <memory>
-#include <print>
 #include <stdexcept>
 #include <vector>
 
@@ -12,8 +11,6 @@ module;
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/PassManager.h"
-#include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
-#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 
 export module axon.python:compilation_unit;
@@ -38,15 +35,26 @@ static auto convertParams(std::span<std::shared_ptr<Tensor>> params)
   return args;
 }
 
+static auto destroyParams(llvm::ArrayRef<void*> params) -> void {
+  for (auto param : params) {
+    auto tensor_descriptor = reinterpret_cast<abi::TensorDescriptor*>(param);
+    abi::TensorDescriptor::destroy(tensor_descriptor);
+  }
+}
+
 export class CompilationUnit {
  public:
-  CompilationUnit() : builder_(&context_) {
-    module_op_ = mlir::ModuleOp::create(builder_.getUnknownLoc());
+  CompilationUnit() : context_(createDialectRegistry()) {
+    context_.loadAllAvailableDialects();
   }
 
   auto compile(Graph& graph, LoweringOps ops) -> mlir::LogicalResult {
     mlir::PassManager manager(&context_);
-    module_op_ = codegen(graph, context_);
+    mlir::OpBuilder builder(&context_);
+
+    module_op_ = mlir::ModuleOp::create(builder.getUnknownLoc());
+
+    codegenGraph(graph, builder, module_op_);
     manager.enableVerifier();
 
     axon::buildLlvmLoweringPipeline(manager, ops);
@@ -58,9 +66,6 @@ export class CompilationUnit {
   auto execute(std::vector<std::shared_ptr<Tensor>> params) -> void {
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
-
-    mlir::registerBuiltinDialectTranslation(context_);
-    mlir::registerLLVMDialectTranslation(context_);
 
     auto opt_pipeline = mlir::makeOptimizingTransformer(
         /*optLevel=*/0, /*sizeLevel=*/0,
@@ -78,6 +83,8 @@ export class CompilationUnit {
     auto args = convertParams(params);
 
     auto invocation_result = engine->invokePacked("graph", args);
+    destroyParams(args);
+
     if (invocation_result) {
       throw std::runtime_error("JIT invocation failed\n");
     }
@@ -92,7 +99,6 @@ export class CompilationUnit {
 
  private:
   mlir::MLIRContext context_;
-  mlir::OpBuilder builder_;
   mlir::ModuleOp module_op_;
 };
 

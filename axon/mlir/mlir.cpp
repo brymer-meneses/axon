@@ -1,8 +1,6 @@
 module;
 
 #include "dialect/dialect.h"
-#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
-#include "mlir/Conversion/TensorToLinalg/TensorToLinalgPass.h"
 #include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Bufferization/Pipelines/Passes.h"
@@ -25,19 +23,19 @@ export import :lowering;
 
 export namespace axon {
 
-auto codegen(Graph& graph, mlir::MLIRContext& mlir_ctx) -> mlir::ModuleOp {
-  mlir_ctx.loadDialect<mlir::func::FuncDialect>();
-  mlir_ctx.loadDialect<mlir::tensor::TensorDialect>();
-  mlir_ctx.loadDialect<mlir::linalg::LinalgDialect>();
-  mlir_ctx.loadDialect<mlir::bufferization::BufferizationDialect>();
-  mlir_ctx.loadDialect<AxonDialect>();
+auto createDialectRegistry() -> mlir::DialectRegistry {
+  mlir::DialectRegistry registry;
 
-  mlir::OpBuilder builder{&mlir_ctx};
-  auto module_op = mlir::ModuleOp::create(builder.getUnknownLoc());
+  registry.insert<mlir::func::FuncDialect>();
+  registry.insert<mlir::tensor::TensorDialect>();
+  registry.insert<mlir::linalg::LinalgDialect>();
+  registry.insert<mlir::bufferization::BufferizationDialect>();
+  registry.insert<AxonDialect>();
 
-  codegenGraph(graph, builder, module_op);
+  mlir::registerBuiltinDialectTranslation(registry);
+  mlir::registerLLVMDialectTranslation(registry);
 
-  return module_op;
+  return registry;
 }
 
 struct LoweringOps {

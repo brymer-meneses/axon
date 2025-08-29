@@ -65,9 +65,7 @@ static auto buildGraphBindings(nb::module_& m) -> void {
            })
       .def("trace", [](Graph& graph, Tensor& tensor) {
         AXON_DCHECK(tensor.hasData(), "Passed tensor must have data.");
-        auto inst_id =
-            graph.declareParam(tensor.shape(), tensor.requiresGrad());
-        tensor.setInstId(inst_id);
+        tensor.trace(graph);
       });
 
   m.def("_get_current_graph",
@@ -126,14 +124,9 @@ static auto buildTensorBindings(nb::module_& m) -> void {
       "_create_tensor",
       [](nb::ndarray<>& array, bool requires_grad,
          ElementType::InternalType element_type) -> Tensor {
-        if (not requires_grad) {
-          auto data = createStoragefromNanobind(array, element_type);
-          return {data};
-        }
-
-        auto data = createStoragefromNanobind(array, element_type);
-        auto grad = Storage::createZerosLike(data);
-        return {data, grad};
+        auto tensor = Tensor(createStoragefromNanobind(array, element_type),
+                             requires_grad);
+        return tensor;
       },
       nb::rv_policy::move);
 }
