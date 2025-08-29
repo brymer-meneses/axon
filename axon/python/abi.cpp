@@ -81,14 +81,18 @@ struct TensorDescriptor {
     }
 
     auto* buffer = new std::byte[total_size];
-    MemRefDescriptor::createInPlace(
-        buffer, tensor.data->data(), tensor.data->data(), 0,
-        tensor.data->shape(), tensor.data->strides());
+    auto data_ptr = tensor.data()->data_ptr();
+    MemRefDescriptor::createInPlace(buffer, data_ptr, data_ptr, 0,
+                                    tensor.data()->shape(),
+                                    tensor.data()->strides());
+
     if (tensor.requiresGrad()) {
+      auto grad = tensor.grad();
+      auto grad_data_ptr = grad->data()->data_ptr();
+
       auto* ptr = buffer + MemRefDescriptor::getAllocSize(tensor.rank());
-      MemRefDescriptor::createInPlace(
-          ptr, tensor.grad->data(), tensor.grad->data(), 0,
-          tensor.grad->shape(), tensor.grad->strides());
+      MemRefDescriptor::createInPlace(ptr, grad_data_ptr, grad_data_ptr, 0,
+                                      grad->shape(), grad->data()->strides());
     }
 
     return reinterpret_cast<TensorDescriptor*>(buffer);

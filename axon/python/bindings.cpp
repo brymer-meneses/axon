@@ -1,5 +1,3 @@
-
-
 #include <iostream>
 #include <memory>
 #include <ranges>
@@ -33,9 +31,9 @@ static thread_local std::shared_ptr<Graph> current_graph{};
 static auto createStoragefromNanobind(nb::ndarray<>& array,
                                       ElementType element_type) -> Storage {
   // TODO: Explore ways to avoid copying the memory.
-  auto* data_ptr = new std::byte[array.size()];
-  std::memcpy(data_ptr, array.data(),
-              element_type.getSizeInBytes() * array.size());
+  auto buffer_size = array.size() * element_type.getSizeInBytes();
+  auto* data_ptr = new std::byte[buffer_size];
+  std::memcpy(data_ptr, array.data(), buffer_size);
 
   auto shape = llvm::ArrayRef<int64_t>(array.shape_ptr(), array.ndim());
   auto stride = llvm::ArrayRef<int64_t>(array.stride_ptr(), array.ndim());
@@ -67,8 +65,9 @@ static auto buildGraphBindings(nb::module_& m) -> void {
            })
       .def("trace", [](Graph& graph, Tensor& tensor) {
         AXON_DCHECK(tensor.hasData(), "Passed tensor must have data.");
-        tensor.inst_id =
+        auto inst_id =
             graph.declareParam(tensor.shape(), tensor.requiresGrad());
+        tensor.setInstId(inst_id);
       });
 
   m.def("_get_current_graph",
@@ -95,32 +94,13 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              if (not self.hasData()) {
                return "LazyTensor";
              }
-
-             std::stringstream stream{};
-             stream << "[";
-
-             for (auto i : std::views::iota(0, 3)) {
-               float elem = reinterpret_cast<float*>(self.data->data())[i];
-               stream << elem << ",";
-             }
-
-             stream << "]";
-
-             stream << " [";
-             if (self.requiresGrad()) {
-               for (auto i : std::views::iota(0, 3)) {
-                 float elem = reinterpret_cast<float*>(self.grad->data())[i];
-                 stream << elem << ",";
-               }
-             }
-             stream << "]";
-             return stream.str();
+             return dumpTensor(self);
            })
       .def("__add__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
              if (current_graph) {
                auto inst_id = current_graph->createOp(
-                   insts::Add(lhs.inst_id, rhs.inst_id));
+                   insts::Add(lhs.inst_id(), rhs.inst_id()));
                return {inst_id};
              }
              std::unreachable();
@@ -129,13 +109,17 @@ static auto buildTensorBindings(nb::module_& m) -> void {
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
              if (current_graph) {
                auto inst_id = current_graph->createOp(
-                   insts::Mul(lhs.inst_id, rhs.inst_id));
+                   insts::Mul(lhs.inst_id(), rhs.inst_id()));
                return {inst_id};
              }
              std::unreachable();
            })
-      .def("backward", [](const Tensor& self) -> void {
-        axon::backward(*current_graph, self.inst_id);
+      .def("backward",
+           [](const Tensor& self) -> void {
+             axon::backward(*current_graph, self.inst_id());
+           })
+      .def_prop_ro("grad", [](const Tensor& self) -> std::shared_ptr<Tensor> {
+        return self.grad();
       });
 
   m.def(

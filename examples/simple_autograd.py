@@ -1,8 +1,7 @@
 # incomplete for now :<
 
 import axon
-
-from axon import LoweringOps
+import numpy as np
 
 @axon.jit()
 def mul(a, b): 
@@ -10,13 +9,14 @@ def mul(a, b):
     l.backward()
 
 
-a = axon.tensor([1, 2, 3], requires_grad=True)
-b = axon.tensor([4, 5, 6], requires_grad=True)
-print(a)
-print(b)
+a = axon.tensor(5 * np.ones((3, 3), dtype=np.float32), requires_grad=True)
+b = axon.tensor(4 * np.ones((3, 3), dtype=np.float32), requires_grad=True)
+
+print(a.grad)
+print(b.grad)
 
 mul(a,b)
 
-print(a)
-print(b)
+print(a.grad)
+print(b.grad)
 

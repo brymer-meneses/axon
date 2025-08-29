@@ -1,6 +1,8 @@
 module;
 
 #include <algorithm>
+#include <exception>
+#include <print>
 
 #include "axon/base/dcheck.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -79,10 +81,15 @@ class Storage {
 
   auto size() const -> size_t {
     int64_t num_elems = 1;
-    for (auto dim : shape_) {
+    for (int64_t dim : shape_) {
       num_elems *= dim;
     }
-    return num_elems * element_type_.getSizeInBytes();
+
+    return num_elems;
+  }
+
+  auto getSizeInBytes() const -> size_t {
+    return size() * element_type_.getSizeInBytes();
   }
 
   static auto createFilled(llvm::ArrayRef<int64_t> shape,
@@ -111,7 +118,7 @@ class Storage {
                         storage.element_type(), 0);
   }
 
-  auto data() const -> std::byte* { return data_; }
+  auto data_ptr() const -> std::byte* { return data_; }
 
   auto shape() const -> llvm::ArrayRef<int64_t> { return shape_; }
   auto strides() const -> llvm::ArrayRef<int64_t> { return strides_; }
