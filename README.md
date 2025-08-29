@@ -1,6 +1,21 @@
 # Axon 
 
-Axon is a tiny Deep Learning Library that uses MLIR to optimize tensor operations.
+Axon is a tiny Deep Learning Library that uses MLIR to optimize tensor operations by
+using just-in-time compilation to execute functions that involve tensors.
+
+## Building
+
+You need to have `uv`, `cmake` `make` and a compiler that supports C++23. 
+```bash
+# create a virtual environment
+uv venv
+# build and install the library
+make install
+# run the example!
+uv run examples/simple_autograd.py
+```
+
+## Example
 
 ```python
 import axon
