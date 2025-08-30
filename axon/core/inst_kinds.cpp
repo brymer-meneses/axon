@@ -50,9 +50,19 @@ struct OnesLike {
 
 }  // namespace insts
 
+// clang-format off:
 using InstInternalType =
-    std::variant<insts::Add, insts::Mul, insts::AccumulateGrad, insts::Constant,
-                 insts::GetParameter, insts::OnesLike>;
+    std::variant<
+      insts::Add, 
+      insts::Mul, 
+      insts::MatMul,
+      insts::Transpose,
+      insts::AccumulateGrad, 
+      insts::Constant,
+      insts::GetParameter, 
+      insts::OnesLike
+    >;
+// clang-format on:
 
 template <typename T>
 constexpr bool IsExpressionInst =

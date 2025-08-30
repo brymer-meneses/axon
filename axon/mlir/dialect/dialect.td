@@ -31,6 +31,13 @@ def Axon_TensorRefType : AxonDialect_Type<"TensorRef", "tensor_ref"> {
 
   let extraClassDeclaration = [{
     auto isDynamic() const -> bool { return getShape().empty(); }
+
+    auto getTensorType() const -> mlir::Type { 
+      return mlir::RankedTensorType::get(getShape(), getElementType());
+    }
+    auto getMemRefType() const -> mlir::Type { 
+      return mlir::MemRefType::get(getShape(), getElementType());
+    }
   }];
 
   let genMnemonicAlias = 1;
@@ -84,30 +91,6 @@ def Axon_AccumulateGradOp : AxonDialect_Op<"accumulate_grad"> {
   let assemblyFormat = "$accumulator `,` $value `:` qualified(type($accumulator)) `,` type($value)  attr-dict";
 
   let hasVerifier = 1;
-}
-
-def Axon_AddOp : AxonDialect_Op<"add"> {
-  let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
-  let results = (outs AnyTensor:$result);
-
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs)>,
-  ];
-
-  let hasVerifier = 1;
-  let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs)  `->` type($result) attr-dict";
-}
-
-def Axon_MulOp : AxonDialect_Op<"mul"> {
-  let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
-  let results = (outs AnyTensor:$result);
-
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs)>
-  ];
-
-  let hasVerifier = 1;
-  let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs)  `->` type($result) attr-dict";
 }
 
 def Axon_FillLikeOp : AxonDialect_Op<"fill_like"> {

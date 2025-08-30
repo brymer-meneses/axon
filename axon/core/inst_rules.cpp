@@ -44,8 +44,6 @@ template <>
 struct BackwardRule<insts::Add> {
   static auto apply(const insts::Add& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
-    AXON_DCHECK(grad_id.isValid(), "{}", grad_id.value());
-
     llvm::SmallVector<Dependency, 2> deps;
     if (ctx.checkRequiresGrad(op.lhs_id)) {
       deps.emplace_back(op.lhs_id, grad_id);
@@ -62,8 +60,6 @@ template <>
 struct BackwardRule<insts::Mul> {
   static auto apply(const insts::Mul& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
-    AXON_DCHECK(grad_id.isValid(), "{}", grad_id.value());
-
     llvm::SmallVector<Dependency, 2> deps;
     if (ctx.checkRequiresGrad(op.lhs_id)) {
       auto prod = ctx.emit(insts::Mul(grad_id, op.rhs_id));
@@ -74,6 +70,25 @@ struct BackwardRule<insts::Mul> {
       deps.emplace_back(op.rhs_id, prod);
     }
 
+    return deps;
+  }
+};
+
+template <>
+struct BackwardRule<insts::MatMul> {
+  static auto apply(const insts::MatMul& op, InstId grad_id,
+                    BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
+    llvm::SmallVector<Dependency, 2> deps;
+    if (ctx.checkRequiresGrad(op.lhs_id)) {
+      auto transposed = ctx.emit(insts::Transpose(op.rhs_id));
+      auto prod = ctx.emit(insts::MatMul(grad_id, transposed));
+      deps.emplace_back(op.lhs_id, prod);
+    }
+    if (ctx.checkRequiresGrad(op.rhs_id)) {
+      auto transposed = ctx.emit(insts::Transpose(op.lhs_id));
+      auto prod = ctx.emit(insts::MatMul(transposed, grad_id));
+      deps.emplace_back(op.rhs_id, prod);
+    }
     return deps;
   }
 };

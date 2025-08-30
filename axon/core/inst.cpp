@@ -60,14 +60,6 @@ class Inst {
     };
     return std::visit(visitor, value_);
   }
-  auto isExpression() const -> bool {
-    return std::visit(
-        [](const auto& op) {
-          using InstType = std::decay_t<decltype(op)>;
-          return IsExpressionInst<InstType>;
-        },
-        value_);
-  }
 
  private:
   InstInternalType value_;

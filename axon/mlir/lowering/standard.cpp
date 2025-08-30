@@ -10,36 +10,13 @@ module;
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Tosa/IR/TosaOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 export module axon.mlir:standard_lowering;
 
 namespace axon {
-
-template <typename BinaryOp, typename LoweredBinaryOp>
-struct BinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
-  using mlir::OpConversionPattern<BinaryOp>::OpConversionPattern;
-  using OpAdaptor = typename mlir::OpConversionPattern<BinaryOp>::OpAdaptor;
-
-  auto matchAndRewrite(BinaryOp op, OpAdaptor adaptor,
-                       mlir::ConversionPatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto loc = op.getLoc();
-
-    auto lhs_tensor = llvm::cast<mlir::TensorType>(adaptor.getLhs().getType());
-    auto rhs_tensor = llvm::cast<mlir::TensorType>(adaptor.getRhs().getType());
-
-    if (rhs_tensor.getShape().equals(lhs_tensor.getShape())) {
-      auto new_op = LoweredBinaryOp::create(rewriter, loc, adaptor.getLhs(),
-                                            adaptor.getRhs());
-      rewriter.replaceOp(op, new_op);
-      return mlir::success();
-    }
-
-    std::unreachable();
-  }
-};
 
 struct GetDataOpLowering : mlir::OpConversionPattern<GetDataOp> {
   using mlir::OpConversionPattern<GetDataOp>::OpConversionPattern;
@@ -49,14 +26,13 @@ struct GetDataOpLowering : mlir::OpConversionPattern<GetDataOp> {
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
 
-    auto tensor_ref_type = mlir::cast<TensorRefType>(op.getInput().getType());
-    auto tensor_type = mlir::RankedTensorType::get(
-        tensor_ref_type.getShape(), tensor_ref_type.getElementType());
+    auto tensor_ref = mlir::cast<TensorRefType>(op.getInput().getType());
 
     auto memref =
         TupleAccessOp::create(rewriter, loc, adaptor.getInput(), 0).getResult();
     auto new_op = mlir::bufferization::ToTensorOp::create(
-        rewriter, loc, tensor_type, memref, /*restrict=*/true,
+        rewriter, loc, tensor_ref.getTensorType(), memref,
+        /*restrict=*/true,
         /*writable=*/false);
     rewriter.replaceOp(op, new_op);
     return mlir::success();
@@ -79,10 +55,8 @@ struct AccumulateGradOpLowering : mlir::OpConversionPattern<AccumulateGradOp> {
     // grad memref we need to invoke the tuple access op to access the gradient.
     auto grad_ref =
         TupleAccessOp::create(rewriter, loc, adaptor.getAccumulator(), 1);
-    auto memref_type = mlir::MemRefType::get(tensor_type.getShape(),
-                                             tensor_type.getElementType());
     auto value_as_memref = mlir::bufferization::ToBufferOp::create(
-        rewriter, loc, memref_type, adaptor.getValue());
+        rewriter, loc, tensor_type.getMemRefType(), adaptor.getValue());
 
     mlir::linalg::AddOp::create(rewriter, loc,
                                 mlir::ValueRange{grad_ref, value_as_memref},
@@ -133,9 +107,6 @@ struct AxonToStandardTypeConverter : mlir::TypeConverter {
   }
 };
 
-using AddOpLowering = BinaryOpLowering<AddOp, mlir::arith::AddFOp>;
-using MulOpLowering = BinaryOpLowering<MulOp, mlir::arith::MulFOp>;
-
 struct AxonToStandardLoweringPass
     : mlir::PassWrapper<AxonToStandardLoweringPass,
                         mlir::OperationPass<mlir::ModuleOp>> {
@@ -150,6 +121,7 @@ struct AxonToStandardLoweringPass
     registry
         .insert<mlir::affine::AffineDialect, mlir::func::FuncDialect,
                 mlir::linalg::LinalgDialect, mlir::memref::MemRefDialect,
+                mlir::tosa::TosaDialect,
                 mlir::bufferization::BufferizationDialect, mlir::BuiltinDialect,
                 mlir::arith::ArithDialect, mlir::tensor::TensorDialect>();
   }
@@ -159,21 +131,20 @@ struct AxonToStandardLoweringPass
 
     mlir::ConversionTarget target(context);
 
-    target
-        .addLegalDialect<mlir::func::FuncDialect, mlir::linalg::LinalgDialect,
-                         mlir::memref::MemRefDialect, mlir::arith::ArithDialect,
-                         mlir::bufferization::BufferizationDialect,
-                         mlir::BuiltinDialect, mlir::tensor::TensorDialect>();
+    target.addLegalDialect<mlir::func::FuncDialect, mlir::linalg::LinalgDialect,
+                           mlir::memref::MemRefDialect,
+                           mlir::arith::ArithDialect, mlir::tosa::TosaDialect,
+                           mlir::bufferization::BufferizationDialect,
+                           mlir::BuiltinDialect, mlir::tensor::TensorDialect>();
     target.addLegalOp<TupleAccessOp>();
-    target
-        .addIllegalOp<AddOp, MulOp, GetDataOp, AccumulateGradOp, FillLikeOp>();
+    target.addIllegalOp<GetDataOp, AccumulateGradOp, FillLikeOp>();
 
     AxonToStandardTypeConverter type_converter{&context};
 
     mlir::RewritePatternSet patterns{&context};
-    patterns.add<AddOpLowering, MulOpLowering, GetDataOpLowering,
-                 AccumulateGradOpLowering, FillLikeOpLowering>(type_converter,
-                                                               &context);
+    patterns
+        .add<GetDataOpLowering, AccumulateGradOpLowering, FillLikeOpLowering>(
+            type_converter, &context);
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, type_converter);

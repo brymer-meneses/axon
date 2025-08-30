@@ -1,6 +1,7 @@
 module;
 
 #include "dialect/dialect.h"
+#include "mlir/Conversion/TosaToLinalg/TosaToLinalg.h"
 #include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/Dialect/Arith/Transforms/BufferDeallocationOpInterfaceImpl.h"
 #include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
@@ -14,6 +15,8 @@ module;
 #include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Tosa/IR/TosaOps.h"
+#include "mlir/Dialect/Tosa/Transforms/Passes.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Transforms/Passes.h"
@@ -36,6 +39,7 @@ auto createDialectRegistry() -> mlir::DialectRegistry {
   registry.insert<mlir::tensor::TensorDialect>();
   registry.insert<mlir::linalg::LinalgDialect>();
   registry.insert<mlir::bufferization::BufferizationDialect>();
+  registry.insert<mlir::tosa::TosaDialect>();
   registry.insert<AxonDialect>();
 
   mlir::registerBuiltinDialectTranslation(registry);
@@ -68,9 +72,11 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringOps opts)
   }
 
   manager.addPass(axon::createStandardLoweringPass());
+  manager.addPass(mlir::createCanonicalizerPass());
 
   if (opts.level == LoweringOps::Level::LLVM) {
     manager.addPass(mlir::createConvertElementwiseToLinalgPass());
+    manager.addNestedPass<mlir::func::FuncOp>(mlir::tosa::createTosaToLinalg());
 
     mlir::bufferization::OneShotBufferizePassOptions bufferization_options;
     manager.addPass(
