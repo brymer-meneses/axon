@@ -10,7 +10,6 @@ module;
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/Dialect/Tosa/IR/TosaOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -19,7 +18,7 @@ export module axon.mlir:standard_lowering;
 namespace axon {
 
 template <typename BinaryOp, typename LoweredBinaryOp>
-struct BinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
+struct ElementWiseBinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
   using mlir::OpConversionPattern<BinaryOp>::OpConversionPattern;
   using OpAdaptor = typename mlir::OpConversionPattern<BinaryOp>::OpAdaptor;
 
@@ -28,9 +27,7 @@ struct BinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
 
-    auto tensor_type = mlir::cast<mlir::TensorType>(op.getLhs().getType());
-
-    // All binary op have the same lhs and rhs.
+    auto tensor_type = mlir::cast<mlir::TensorType>(op.getResult().getType());
     auto empty = mlir::tensor::EmptyOp::create(
         rewriter, loc, tensor_type.getShape(), tensor_type.getElementType());
 
@@ -43,8 +40,48 @@ struct BinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
   }
 };
 
-using AddOpLowering = BinaryOpLowering<AddOp, mlir::linalg::AddOp>;
-using MulOpLowering = BinaryOpLowering<MulOp, mlir::linalg::MulOp>;
+using AddOpLowering = ElementWiseBinaryOpLowering<AddOp, mlir::linalg::AddOp>;
+using MulOpLowering = ElementWiseBinaryOpLowering<MulOp, mlir::linalg::MulOp>;
+
+struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
+  using mlir::OpConversionPattern<MatMulOp>::OpConversionPattern;
+
+  auto matchAndRewrite(MatMulOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+    auto result_tensor_type =
+        mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
+    auto rank = result_tensor_type.getRank();
+
+    if (rank > 3 || rank <= 1) {
+      op.emitError("Got invalid rank for MatMulOp.");
+      return mlir::failure();
+    }
+
+    auto empty_op = mlir::tensor::EmptyOp::create(
+        rewriter, loc, result_tensor_type.getShape(),
+        result_tensor_type.getElementType());
+
+    if (result_tensor_type.getRank() == 3) {
+      auto new_op = mlir::linalg::BatchMatmulOp::create(
+          rewriter, loc, mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
+          mlir::ValueRange{empty_op});
+      rewriter.replaceOp(op, new_op.getResult(0));
+      return mlir::success();
+    }
+
+    if (result_tensor_type.getRank() == 2) {
+      auto new_op = mlir::linalg::MatmulOp::create(
+          rewriter, loc, mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
+          mlir::ValueRange{empty_op});
+      rewriter.replaceOp(op, new_op.getResult(0));
+      return mlir::success();
+    }
+
+    std::unreachable();
+  }
+};
 
 struct GetDataOpLowering : mlir::OpConversionPattern<GetDataOp> {
   using mlir::OpConversionPattern<GetDataOp>::OpConversionPattern;
@@ -78,7 +115,7 @@ struct AccumulateGradOpLowering : mlir::OpConversionPattern<AccumulateGradOp> {
     auto tensor_type =
         llvm::dyn_cast<TensorRefType>(op.getAccumulator().getType());
 
-    // Since  `adaptor.getAccumulator` must require a gradient and because
+    // Since `adaptor.getAccumulator` must require a gradient and because
     // `TensorRefType` is lowered to tuple<memref, memref>, then to access the
     // grad memref we need to invoke the tuple access op to access the gradient.
     auto grad_ref =
@@ -164,15 +201,16 @@ struct AxonToStandardLoweringPass
                          mlir::bufferization::BufferizationDialect,
                          mlir::BuiltinDialect, mlir::tensor::TensorDialect>();
     target.addLegalOp<TupleAccessOp>();
-    target
-        .addIllegalOp<GetDataOp, AccumulateGradOp, FillLikeOp, AddOp, MulOp>();
+    target.addIllegalOp<GetDataOp, AccumulateGradOp, FillLikeOp, AddOp, MulOp,
+                        MatMulOp>();
 
     AxonToStandardTypeConverter type_converter{&context};
 
     mlir::RewritePatternSet patterns{&context};
-    patterns.add<GetDataOpLowering, AccumulateGradOpLowering,
-                 FillLikeOpLowering, AddOpLowering, MulOpLowering>(
-        type_converter, &context);
+    patterns
+        .add<GetDataOpLowering, AccumulateGradOpLowering, FillLikeOpLowering,
+             AddOpLowering, MulOpLowering, MatMulOpLowering>(type_converter,
+                                                             &context);
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, type_converter);

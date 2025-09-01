@@ -93,17 +93,14 @@ def Axon_AccumulateGradOp : AxonDialect_Op<"accumulate_grad"> {
   let hasVerifier = 1;
 }
 
-def Axon_FillLikeOp : AxonDialect_Op<"fill_like"> {
+def Axon_FillLikeOp : AxonDialect_Op<"fill_like", [
+  Pure,
+  SameOperandsAndResultElementType,
+  SameOperandsAndResultType,
+]> {
   let arguments = (ins AnyTensor:$tensor, F64Attr:$fill_value);
   let results = (outs AnyTensor:$result);
 
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$tensor, "double":$fill_value), [{
-      auto result_type = llvm::cast<mlir::TensorType>(tensor.getType());
-      auto attr = $_builder.getF64FloatAttr(fill_value);
-      build($_builder, $_state, result_type, tensor, attr);
-    }]>
-  ];
 
   let assemblyFormat = "$tensor `,` $fill_value `:` type($tensor) `->` type($result) attr-dict";
 }
@@ -192,10 +189,20 @@ def Axon_SumOp : AxonDialect_Op<"sum", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, BoolAttr:$keepdims);
+  let arguments = (ins AnyTensor:$operand, I64Attr:$dim, BoolAttr:$keepDims);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";
+}
+
+def Axon_TransposeOp : AxonDialect_Op<"transpose", [
+  Pure,
+  SameOperandsAndResultElementType,
+]> {
+  let arguments = (ins AnyTensor:$operand, I64Attr:$from, I64Attr:$to);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `,` `(` $from `,` $to `)` type($operand) `->` type($result) attr-dict";
 }
 
 #endif // AXON_DIALECT

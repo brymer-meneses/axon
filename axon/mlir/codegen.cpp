@@ -5,6 +5,7 @@ module;
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "mlir/Dialect/Tosa/IR/TosaOps.h"
+#include "mlir/IR/OpDefinition.h"
 
 // MLIR Imports
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -65,8 +66,9 @@ static auto codegen(insts::Sum op, CompilationContext& ctx, InstId inst_id)
   auto result_type =
       mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
 
-  ctx.values[inst_id] = SumOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
-                                      result_type, operand, op.keepdims);
+  ctx.values[inst_id] =
+      SumOp::create(ctx.builder, ctx.builder.getUnknownLoc(), result_type,
+                    operand, op.axis, op.keepdims);
 }
 
 static auto codegen(insts::Broadcast op, CompilationContext& ctx,
@@ -109,7 +111,8 @@ static auto codegen(insts::OnesLike op, CompilationContext& ctx, InstId inst_id)
     -> void {
   auto like = ctx.values[op.operand_id];
   ctx.values[inst_id] =
-      FillLikeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like, 1.0);
+      FillLikeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like,
+                         ctx.builder.getF64FloatAttr(1.0));
 }
 
 static auto codegen(insts::Add op, CompilationContext& ctx, InstId inst_id)
@@ -124,15 +127,37 @@ static auto codegen(insts::Mul op, CompilationContext& ctx, InstId inst_id)
     -> void {
   auto lhs = ctx.values[op.lhs_id];
   auto rhs = ctx.values[op.rhs_id];
+
   ctx.values[inst_id] =
       MulOp::create(ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs);
 }
 
 static auto codegen(insts::MatMul op, CompilationContext& ctx, InstId inst_id)
-    -> void {}
+    -> void {
+  auto lhs = ctx.values[op.lhs_id];
+  auto rhs = ctx.values[op.rhs_id];
+
+  auto element_type =
+      mlir::cast<mlir::RankedTensorType>(lhs.getType()).getElementType();
+  auto result_type =
+      mlir::RankedTensorType::get(ctx.graph.getShape(inst_id), element_type);
+
+  ctx.values[inst_id] = MatMulOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), result_type, lhs, rhs);
+}
 
 static auto codegen(insts::Transpose op, CompilationContext& ctx,
-                    InstId inst_id) -> void {}
+                    InstId inst_id) -> void {
+  auto operand = ctx.values[op.operand_id];
+  auto result_shape = ctx.graph.getShape(inst_id);
+  auto element_type =
+      mlir::cast<mlir::RankedTensorType>(operand.getType()).getElementType();
+  auto result_type = mlir::RankedTensorType::get(result_shape, element_type);
+
+  ctx.values[inst_id] =
+      TransposeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), result_type,
+                          operand, op.from, op.to);
+}
 
 static auto codegen(insts::Squeeze op, CompilationContext& ctx, InstId inst_id)
     -> void {
