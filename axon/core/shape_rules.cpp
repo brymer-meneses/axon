@@ -83,6 +83,18 @@ struct InferShapeRule<insts::Broadcast> {
   }
 };
 
+template <>
+struct InferShapeRule<insts::Reshape> {
+  static auto apply(const insts::Reshape& op, const ShapeMapping& shapes)
+      -> Shape {
+    AXON_DCHECK(shapes.get(op.operand_id),
+                "op.operand_id must have a shape already.");
+
+    auto operand = shapes.get(op.operand_id);
+    return {op.target_shape.begin(), op.target_shape.end()};
+  }
+};
+
 template <typename T>
 concept HasInferShapeRule = requires(const T& op, const ShapeMapping& shapes) {
   { InferShapeRule<T>::apply(op, shapes) } -> std::same_as<Shape>;

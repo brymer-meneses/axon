@@ -73,4 +73,25 @@ auto TupleAccessOp::parse(mlir::OpAsmParser& parser,
   return mlir::success();
 }
 
+auto ReshapeOp::verify() -> mlir::LogicalResult {
+  auto target_shape = getTargetShape();
+  auto operand = mlir::cast<mlir::RankedTensorType>(getOperand().getType());
+
+  if (static_cast<int64_t>(target_shape.size()) != operand.getRank()) {
+    return mlir::failure();
+  }
+
+  static constexpr auto compute_num_elems = [](llvm::ArrayRef<int64_t> shape) {
+    int64_t elems = 1;
+    for (auto dim : shape) {
+      elems *= -dim;
+    }
+    return elems;
+  };
+
+  auto lhs_elems = compute_num_elems(target_shape);
+  auto rhs_elems = compute_num_elems(operand.getShape());
+  return mlir::success(lhs_elems == rhs_elems);
+}
+
 }  // namespace axon

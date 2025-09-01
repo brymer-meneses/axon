@@ -185,6 +185,9 @@ static auto codegen(insts::Unsqueeze op, CompilationContext& ctx,
       ctx.builder, ctx.builder.getUnknownLoc(), result_type, operand, op.dim);
 }
 
+static auto codegen(insts::Reshape op, CompilationContext& ctx, InstId inst_id)
+    -> void {}
+
 static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {
   llvm::SmallVector<mlir::Type> arg_types;

@@ -185,11 +185,23 @@ def Axon_UnsqueezeOp : AxonDialect_Op<"unsqueeze", [
   let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
 }
 
+def Axon_ReshapeOp : AxonDialect_Op<"reshape", [
+  Pure,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$operand, DenseI64ArrayAttr:$target_shape);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `,` type($operand) `->` type($result) attr-dict";
+
+  let hasVerifier = 1;
+}
+
 def Axon_SumOp : AxonDialect_Op<"sum", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, I64Attr:$dim, BoolAttr:$keepDims);
+  let arguments = (ins AnyTensor:$operand, I64Attr:$dim, BoolAttr:$keep_dims);
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";

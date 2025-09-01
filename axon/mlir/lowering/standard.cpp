@@ -83,6 +83,94 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
   }
 };
 
+struct BroadcastOpLowering : mlir::OpConversionPattern<BroadcastOp> {
+  using mlir::OpConversionPattern<BroadcastOp>::OpConversionPattern;
+
+  auto matchAndRewrite(BroadcastOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto result_tensor_type =
+        mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
+
+    auto result_element_type = result_tensor_type.getElementType();
+    auto result_shape = result_tensor_type.getShape();
+
+    auto init_op = mlir::tensor::EmptyOp::create(
+        rewriter, op.getLoc(), result_shape, result_element_type);
+
+    llvm::SmallVector<int64_t> dimensions;
+    for (const auto& expansion : op.getExpansions()) {
+      auto pair = mlir::cast<mlir::ArrayAttr>(expansion);
+
+      auto dim_attr = mlir::cast<mlir::IntegerAttr>(pair[0]);
+      dimensions.push_back(dim_attr.getInt());
+    }
+
+    auto operand = adaptor.getOperand();
+    auto new_op = mlir::linalg::BroadcastOp::create(
+        rewriter, op.getLoc(), operand, init_op, dimensions);
+
+    rewriter.replaceOp(op, new_op);
+    return mlir::success();
+  }
+};
+
+struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
+  using mlir::OpConversionPattern<SumOp>::OpConversionPattern;
+
+  auto matchAndRewrite(SumOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    if (op.getKeepDims()) {
+    }
+  }
+};
+
+struct SqueezeOpLowering : mlir::OpConversionPattern<SqueezeOp> {
+  using mlir::OpConversionPattern<SqueezeOp>::OpConversionPattern;
+
+  auto matchAndRewrite(SqueezeOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {}
+};
+
+struct UmsqueezeOpLowering : mlir::OpConversionPattern<UnsqueezeOp> {
+  using mlir::OpConversionPattern<UnsqueezeOp>::OpConversionPattern;
+
+  auto matchAndRewrite(UnsqueezeOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {}
+};
+
+struct ReshapeOpLowering : mlir::OpConversionPattern<ReshapeOp> {
+  using mlir::OpConversionPattern<ReshapeOp>::OpConversionPattern;
+
+  auto matchAndRewrite(ReshapeOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto operand = op.getOperand();
+    auto element_type =
+        mlir::cast<mlir::RankedTensorType>(operand).getElementType();
+
+    auto result_tensor =
+        mlir::RankedTensorType::get(op.getTargetShape(), element_type);
+    auto source_tensor = mlir::cast<mlir::RankedTensorType>(operand.getType());
+    auto reassociation_indices =
+        mlir::getReassociationIndicesForReshape(source_tensor, result_tensor);
+
+    if (!reassociation_indices) {
+      op.emitError("Shapes cannot be reshaped.");
+      return mlir::failure();
+    }
+
+    auto rehape_op = mlir::tensor::ExpandShapeOp::create(
+        rewriter, op.getLoc(), result_tensor, operand, *reassociation_indices);
+
+    rewriter.replaceOp(op, rehape_op);
+    return mlir::success();
+  }
+};
+
 struct GetDataOpLowering : mlir::OpConversionPattern<GetDataOp> {
   using mlir::OpConversionPattern<GetDataOp>::OpConversionPattern;
 
@@ -202,15 +290,15 @@ struct AxonToStandardLoweringPass
                          mlir::BuiltinDialect, mlir::tensor::TensorDialect>();
     target.addLegalOp<TupleAccessOp>();
     target.addIllegalOp<GetDataOp, AccumulateGradOp, FillLikeOp, AddOp, MulOp,
-                        MatMulOp>();
+                        MatMulOp, BroadcastOp>();
 
     AxonToStandardTypeConverter type_converter{&context};
 
     mlir::RewritePatternSet patterns{&context};
-    patterns
-        .add<GetDataOpLowering, AccumulateGradOpLowering, FillLikeOpLowering,
-             AddOpLowering, MulOpLowering, MatMulOpLowering>(type_converter,
-                                                             &context);
+    patterns.add<GetDataOpLowering, AccumulateGradOpLowering,
+                 FillLikeOpLowering, AddOpLowering, MulOpLowering,
+                 MatMulOpLowering, BroadcastOpLowering>(type_converter,
+                                                        &context);
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, type_converter);

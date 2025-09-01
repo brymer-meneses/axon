@@ -53,6 +53,11 @@ struct Transpose {
   uint32_t to;
 };
 
+struct Reshape {
+  InstId operand_id;
+  llvm::SmallVector<int64_t, 4> target_shape;
+};
+
 struct Add {
   InstId lhs_id;
   InstId rhs_id;
@@ -94,7 +99,8 @@ using InstInternalType =
       insts::AccumulateGrad, 
       insts::Constant,
       insts::GetParameter, 
-      insts::OnesLike
+      insts::OnesLike,
+      insts::Reshape
     >;
 // clang-format on:
 

@@ -36,6 +36,10 @@ class BackwardContext {
     graph_.gradients().set(dep.inst_id, dep.grad_id);
   }
 
+  auto getShape(InstId inst_id) -> llvm::ArrayRef<int64_t> {
+    return graph_.getShape(inst_id);
+  }
+
  private:
   Graph& graph_;
 };
@@ -101,6 +105,20 @@ struct BackwardRule<insts::Unsqueeze> {
     }
 
     grad_id = ctx.createOp(insts::Squeeze(grad_id, op.dim));
+    return {{op.operand_id, grad_id}};
+  }
+};
+
+template <>
+struct BackwardRule<insts::Reshape> {
+  static auto apply(const insts::Reshape& op, InstId grad_id,
+                    BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
+    if (!ctx.checkRequiresGrad(op.operand_id)) {
+      return {};
+    }
+
+    llvm::SmallVector<int64_t> target_shape(ctx.getShape(op.operand_id));
+    grad_id = ctx.createOp(insts::Reshape(grad_id, std::move(target_shape)));
     return {{op.operand_id, grad_id}};
   }
 };
