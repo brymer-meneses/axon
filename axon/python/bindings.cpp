@@ -78,6 +78,29 @@ static auto buildGraphBindings(nb::module_& m) -> void {
   m.def("_clear_current_graph", []() -> void { current_graph.reset(); });
 }
 
+static auto broadcastIfNecessary(InstId lhs_id, InstId rhs_id)
+    -> std::pair<InstId, InstId> {
+  auto lhs_shape = current_graph->getShape(lhs_id);
+  auto rhs_shape = current_graph->getShape(rhs_id);
+
+  auto lhs_rank = lhs_shape.size();
+  auto rhs_rank = rhs_shape.size();
+
+  if (lhs_rank != rhs_rank) {
+    if (lhs_rank == 2 && rhs_rank == 3) {
+      lhs_id = current_graph->createOp(insts::Unsqueeze(lhs_id, 0));
+
+      insts::Broadcast::Expansion expansion;
+      expansion.dim = 0;
+      expansion.scale = rhs_shape[0];
+
+      lhs_id = current_graph->createOp(insts::Broadcast(lhs_id, {expansion}));
+    }
+  }
+
+  return {lhs_id, rhs_id};
+}
+
 static auto buildTensorBindings(nb::module_& m) -> void {
   nb::class_<Tensor>(m, "Tensor")
       .def_prop_ro("shape",
@@ -106,8 +129,13 @@ static auto buildTensorBindings(nb::module_& m) -> void {
       .def("__mul__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
              if (current_graph) {
-               auto inst_id = current_graph->createOp(
-                   insts::Mul(lhs.inst_id(), rhs.inst_id()));
+               auto lhs_id = lhs.inst_id();
+               auto rhs_id = rhs.inst_id();
+               std::tie(lhs_id, rhs_id) = broadcastIfNecessary(lhs_id, rhs_id);
+
+               auto inst_id =
+                   current_graph->createOp(insts::Mul(lhs_id, rhs_id));
+
                return {inst_id};
              }
              std::unreachable();

@@ -75,7 +75,7 @@ struct GetParameter {
 };
 
 struct OnesLike {
-  InstId inst_id;
+  InstId operand_id;
 };
 
 }  // namespace insts
@@ -85,11 +85,11 @@ using InstInternalType =
     std::variant<
       insts::Add, 
       insts::Mul, 
+      insts::MatMul,
       insts::Sum,
       insts::Broadcast,
       insts::Unsqueeze,
       insts::Squeeze,
-      insts::MatMul,
       insts::Transpose,
       insts::AccumulateGrad, 
       insts::Constant,

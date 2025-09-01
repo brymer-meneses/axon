@@ -49,6 +49,8 @@ class Inst {
     return *value;
   }
 
+  auto index() const -> size_t { return value_.index(); }
+
   auto parents() const -> llvm::SmallVector<InstId> {
     constexpr auto visitor = [](const auto& op) -> llvm::SmallVector<InstId> {
       using InstType = std::decay_t<decltype(op)>;
@@ -58,7 +60,8 @@ class Inst {
         return {lhs, rhs};
       } else if constexpr (llvm::is_one_of<InstType, insts::Transpose,
                                            insts::Squeeze, insts::Sum,
-                                           insts::Unsqueeze>()) {
+                                           insts::Unsqueeze,
+                                           insts::Broadcast>()) {
         return {op.operand_id};
       }
       return {};

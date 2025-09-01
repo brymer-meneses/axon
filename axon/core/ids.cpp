@@ -20,8 +20,4 @@ struct ParamId : IndexBase<ParamId> {
   using IndexBase::IndexBase;
 };
 
-struct ConstantId : IndexBase<ConstantId> {
-  using IndexBase::IndexBase;
-};
-
 }  // namespace axon

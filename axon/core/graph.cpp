@@ -1,5 +1,7 @@
 module;
 
+#include <print>
+
 #include "axon/base/dcheck.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -103,21 +105,20 @@ export class Graph {
       if constexpr (HasInferShapeRule<InstType>) {
         auto shape = InferShapeRule<InstType>::apply(op, shapes_);
         shapes_.set(inst_id, std::move(shape));
-        return;
-      }
-
-      if constexpr (llvm::is_one_of<insts::Mul, insts::Add, insts::MatMul>()) {
+      } else if constexpr (llvm::is_one_of<InstType, insts::Mul, insts::Add,
+                                           insts::MatMul>()) {
         auto [lhs_id, rhs_id] = op;
-        auto shape = *shapes_.get(lhs_id);
+        Shape shape = *shapes_.get(lhs_id);
         shapes_.set(inst_id, std::move(shape));
-        return;
-      }
-
-      if constexpr (llvm::is_one_of<insts::Transpose, insts::Squeeze,
-                                    insts::Unsqueeze, insts::Broadcast>()) {
-        auto shape = *shapes_.get(op.operand_id);
+      } else if constexpr (llvm::is_one_of<InstType, insts::OnesLike,
+                                           insts::Sum, insts::Transpose>()) {
+        Shape shape = *shapes_.get(op.operand_id);
         shapes_.set(inst_id, std::move(shape));
-        return;
+      } else if constexpr (llvm::is_one_of<InstType, insts::GetParameter,
+                                           insts::AccumulateGrad>()) {
+        // do nothing
+      } else {
+        std::println("Unhandled operation {}", inst.index());
       }
     });
   }

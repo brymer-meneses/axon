@@ -1,5 +1,7 @@
 module;
 
+#include <print>
+
 #include "llvm/ADT/SmallVector.h"
 
 export module axon.core:backward_rules;

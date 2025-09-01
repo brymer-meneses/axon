@@ -61,7 +61,7 @@ static auto codegen(insts::Sum op, CompilationContext& ctx, InstId inst_id)
   auto operand = ctx.values[op.operand_id];
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
 
-  auto result_shape = ctx.graph.getShape(op.operand_id);
+  auto result_shape = ctx.graph.getShape(inst_id);
   auto result_type =
       mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
 
@@ -75,7 +75,7 @@ static auto codegen(insts::Broadcast op, CompilationContext& ctx,
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
 
   llvm::SmallVector<mlir::Attribute> expansions;
-  llvm::SmallVector<int64_t> result_shape(tensor_type.getRank(), 0);
+  llvm::SmallVector<int64_t> result_shape{tensor_type.getShape()};
 
   // Create an array attribute for each (dim, scale) pair
   for (auto expansion : op.expansions) {
@@ -107,7 +107,7 @@ static auto codegen(insts::GetParameter op, CompilationContext& ctx,
 
 static auto codegen(insts::OnesLike op, CompilationContext& ctx, InstId inst_id)
     -> void {
-  auto like = ctx.values[op.inst_id];
+  auto like = ctx.values[op.operand_id];
   ctx.values[inst_id] =
       FillLikeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like, 1.0);
 }
@@ -135,10 +135,30 @@ static auto codegen(insts::Transpose op, CompilationContext& ctx,
                     InstId inst_id) -> void {}
 
 static auto codegen(insts::Squeeze op, CompilationContext& ctx, InstId inst_id)
-    -> void {}
+    -> void {
+  auto operand = ctx.values[op.operand_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+
+  auto result_shape = ctx.graph.getShape(inst_id);
+  auto result_type =
+      mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
+
+  ctx.values[inst_id] = SqueezeOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), result_type, operand, op.dim);
+}
 
 static auto codegen(insts::Unsqueeze op, CompilationContext& ctx,
-                    InstId inst_id) -> void {}
+                    InstId inst_id) -> void {
+  auto operand = ctx.values[op.operand_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+
+  auto result_shape = ctx.graph.getShape(inst_id);
+  auto result_type =
+      mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
+
+  ctx.values[inst_id] = UnsqueezeOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), result_type, operand, op.dim);
+}
 
 static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {
