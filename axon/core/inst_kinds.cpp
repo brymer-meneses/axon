@@ -3,6 +3,7 @@ module;
 #include <variant>
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 
 export module axon.core:inst_kinds;
 
@@ -17,8 +18,39 @@ struct MatMul {
   InstId rhs_id;
 };
 
+struct Sum {
+  InstId operand_id;
+  // axis to sum
+  int32_t axis;
+
+  bool keepdims;
+};
+
+struct Broadcast {
+  struct Expansion {
+    int32_t dim;
+    int32_t scale;
+  };
+
+  InstId operand_id;
+  llvm::SmallVector<Expansion, 2> expansions;
+};
+
+struct Unsqueeze {
+  InstId operand_id;
+  int32_t dim;
+};
+
+struct Squeeze {
+  InstId operand_id;
+  int32_t dim;
+};
+
 struct Transpose {
-  InstId value_id;
+  InstId operand_id;
+
+  uint32_t from;
+  uint32_t to;
 };
 
 struct Add {
@@ -31,9 +63,7 @@ struct Mul {
   InstId rhs_id;
 };
 
-struct Constant {
-  ConstantId constant_id;
-};
+struct Constant {};
 
 struct AccumulateGrad {
   InstId inst_id;
@@ -55,6 +85,10 @@ using InstInternalType =
     std::variant<
       insts::Add, 
       insts::Mul, 
+      insts::Sum,
+      insts::Broadcast,
+      insts::Unsqueeze,
+      insts::Squeeze,
       insts::MatMul,
       insts::Transpose,
       insts::AccumulateGrad, 
@@ -63,9 +97,5 @@ using InstInternalType =
       insts::OnesLike
     >;
 // clang-format on:
-
-template <typename T>
-constexpr bool IsExpressionInst =
-    llvm::is_one_of<T, insts::Add, insts::Mul, insts::MatMul>();
 
 }  // namespace axon

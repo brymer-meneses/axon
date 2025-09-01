@@ -5,7 +5,7 @@ module;
 
 export module axon.core:autodiff;
 
-import :inst_rules;
+import :backward_rules;
 import :graph;
 import :ids;
 

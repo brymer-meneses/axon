@@ -198,4 +198,51 @@ class IdStore {
   std::vector<KeyValuePair> pairs_;
 };
 
+template <Index KeyType, typename ValueType>
+class IdMap {
+  using ValueTypeRef = std::reference_wrapper<ValueType>;
+  using ValueTypeConstRef = std::reference_wrapper<const ValueType>;
+
+ public:
+  auto set(KeyType key, ValueType&& value) -> void {
+    for (uint64_t i = 0; i < keys_.size(); i += 1) {
+      if (keys_[i] == key) {
+        values_[i] = std::move(value);
+        return;
+      }
+    }
+
+    keys_.emplace_back(key);
+    values_.emplace_back(std::move(value));
+  }
+
+  auto get(KeyType key) -> std::optional<ValueTypeRef> {
+    for (uint64_t i = 0; i < keys_.size(); i += 1) {
+      if (keys_[i] == key) {
+        return std::ref(values_[i]);
+      }
+    }
+    return std::nullopt;
+  }
+
+  auto get(KeyType key) const -> std::optional<ValueTypeConstRef> {
+    for (uint64_t i = 0; i < keys_.size(); i += 1) {
+      if (keys_[i] == key) {
+        return std::cref(values_[i]);
+      }
+    }
+    return std::nullopt;
+  }
+
+  auto keys() -> std::vector<KeyType>& { return keys_; }
+  auto keys() const -> const std::vector<KeyType>& { return keys_; }
+
+  auto values() -> std::vector<ValueType>& { return values_; }
+  auto values() const -> const std::vector<ValueType>& { return values_; }
+
+ private:
+  std::vector<KeyType> keys_;
+  std::vector<ValueType> values_;
+};
+
 }  // namespace axon

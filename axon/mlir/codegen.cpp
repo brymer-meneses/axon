@@ -1,5 +1,4 @@
 module;
-#include <ranges>
 
 #include "axon/base/dcheck.h"
 #include "dialect/dialect.h"
@@ -31,36 +30,6 @@ struct CompilationContext {
   llvm::DenseMap<InstId, mlir::Value> values{};
 };
 
-static auto computeExpandReassociation(mlir::TensorType lhs,
-                                       mlir::TensorType rhs)
-    -> llvm::SmallVector<mlir::ReassociationIndices> {
-  llvm::SmallVector<mlir::ReassociationIndices, 4> reassociation;
-
-  int64_t lhs_rank = lhs.getRank();
-  int64_t rhs_rank = rhs.getRank();
-
-  assert(rhsRank >= lhsRank && "expand requires rhs to have higher rank");
-
-  // How many extra leading dims rhs has
-  int64_t extra = rhs_rank - lhs_rank;
-
-  // First group: [0..extra] (extra leading dims + first matching one)
-  {
-    mlir::ReassociationIndices group;
-    for (int64_t i = 0; i <= extra; i++) {
-      group.push_back(i);
-    }
-    reassociation.emplace_back(std::move(group));
-  }
-
-  // Remaining groups: one-to-one mapping
-  for (int64_t i = extra + 1; i < rhs_rank; i++) {
-    reassociation.push_back({i});
-  }
-
-  return reassociation;
-}
-
 static auto codegen(insts::AccumulateGrad op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto from = ctx.tensor_refs[op.inst_id];
@@ -72,7 +41,8 @@ static auto codegen(insts::AccumulateGrad op, CompilationContext& ctx,
 
 static auto codegen(insts::Constant op, CompilationContext& ctx, InstId inst_id)
     -> void {
-  auto& constant = ctx.graph.constants().get(op.constant_id);
+  const Storage& constant = ctx.graph.constants().get(inst_id)->get();
+
   auto result_type =
       mlir::RankedTensorType::get(constant.shape(), ctx.builder.getF32Type());
 
@@ -84,6 +54,46 @@ static auto codegen(insts::Constant op, CompilationContext& ctx, InstId inst_id)
     ctx.values[inst_id] = ConstantOp::create(
         ctx.builder, ctx.builder.getUnknownLoc(), data_attribute);
   }
+}
+
+static auto codegen(insts::Sum op, CompilationContext& ctx, InstId inst_id)
+    -> void {
+  auto operand = ctx.values[op.operand_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+
+  auto result_shape = ctx.graph.getShape(op.operand_id);
+  auto result_type =
+      mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
+
+  ctx.values[inst_id] = SumOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
+                                      result_type, operand, op.keepdims);
+}
+
+static auto codegen(insts::Broadcast op, CompilationContext& ctx,
+                    InstId inst_id) -> void {
+  auto operand = ctx.values[op.operand_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+
+  llvm::SmallVector<mlir::Attribute> expansions;
+  llvm::SmallVector<int64_t> result_shape(tensor_type.getRank(), 0);
+
+  // Create an array attribute for each (dim, scale) pair
+  for (auto expansion : op.expansions) {
+    llvm::SmallVector<mlir::Attribute, 2> pair = {
+        ctx.builder.getI64IntegerAttr(expansion.dim),
+        ctx.builder.getI64IntegerAttr(expansion.scale),
+    };
+    expansions.push_back(ctx.builder.getArrayAttr(pair));
+    result_shape[expansion.dim] = expansion.scale;
+  }
+
+  auto result_type =
+      mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
+  auto expansions_attr = ctx.builder.getArrayAttr(expansions);
+
+  ctx.values[inst_id] =
+      BroadcastOp::create(ctx.builder, ctx.builder.getUnknownLoc(), result_type,
+                          operand, expansions_attr);
 }
 
 static auto codegen(insts::GetParameter op, CompilationContext& ctx,
@@ -102,84 +112,33 @@ static auto codegen(insts::OnesLike op, CompilationContext& ctx, InstId inst_id)
       FillLikeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like, 1.0);
 }
 
-static auto normalizeTensorOperands(mlir::OpBuilder& builder, mlir::Value lhs,
-                                    mlir::Value rhs)
-    -> std::tuple<mlir::Value, mlir::Value, mlir::Type> {
-  auto loc = builder.getUnknownLoc();
-
-  auto lhs_tensor = mlir::cast<mlir::TensorType>(lhs.getType());
-  auto rhs_tensor = mlir::cast<mlir::TensorType>(rhs.getType());
-  auto lhs_rank = lhs_tensor.getRank();
-  auto rhs_rank = lhs_tensor.getRank();
-
-  auto result_type = lhs_rank >= rhs_rank ? lhs.getType() : rhs.getType();
-  if (lhs_tensor.getRank() < rhs_tensor.getRank()) {
-    auto reassociation_indices =
-        computeExpandReassociation(lhs_tensor, rhs_tensor);
-
-    lhs = mlir::tensor::ExpandShapeOp::create(builder, loc, result_type, lhs,
-                                              reassociation_indices);
-  } else if (lhs_tensor.getRank() > rhs_tensor.getRank()) {
-    auto reassociation_indices =
-        computeExpandReassociation(rhs_tensor, lhs_tensor);
-    rhs = mlir::tensor::ExpandShapeOp::create(builder, loc, result_type, rhs,
-                                              reassociation_indices);
-  }
-  return {lhs, rhs, result_type};
-}
-
 static auto codegen(insts::Add op, CompilationContext& ctx, InstId inst_id)
     -> void {
   auto lhs = ctx.values[op.lhs_id];
   auto rhs = ctx.values[op.rhs_id];
-  auto loc = ctx.builder.getUnknownLoc();
-
-  mlir::Type result_type;
-  std::tie(lhs, rhs, result_type) =
-      normalizeTensorOperands(ctx.builder, lhs, rhs);
-
   ctx.values[inst_id] =
-      mlir::tosa::AddOp::create(ctx.builder, loc, result_type, lhs, rhs);
+      AddOp::create(ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs);
 }
 
 static auto codegen(insts::Mul op, CompilationContext& ctx, InstId inst_id)
     -> void {
   auto lhs = ctx.values[op.lhs_id];
   auto rhs = ctx.values[op.rhs_id];
-  auto loc = ctx.builder.getUnknownLoc();
-
-  mlir::Type result_type;
-  std::tie(lhs, rhs, result_type) =
-      normalizeTensorOperands(ctx.builder, lhs, rhs);
-
-  auto shift_value_type =
-      mlir::RankedTensorType::get({1}, ctx.builder.getI8Type());
-
-  auto shift_value = mlir::tosa::ConstOp::create(
-      ctx.builder, loc, shift_value_type,
-      mlir::DenseElementsAttr::get(shift_value_type,
-                                   ctx.builder.getI8IntegerAttr(0)));
-
-  ctx.values[inst_id] = mlir::tosa::MulOp::create(ctx.builder, loc, result_type,
-                                                  lhs, rhs, shift_value);
+  ctx.values[inst_id] =
+      MulOp::create(ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs);
 }
 
 static auto codegen(insts::MatMul op, CompilationContext& ctx, InstId inst_id)
-    -> void {
-  // auto lhs = ctx.values[op.lhs_id];
-  // auto rhs = ctx.values[op.rhs_id];
-  // ctx.values[inst_id] =
-  //     handleBinaryOp<mlir::tosa::MatMulOp>(ctx.builder, lhs, rhs);
-}
+    -> void {}
 
 static auto codegen(insts::Transpose op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
-  // auto lhs = ctx.values[op.lhs_id];
-  // auto rhs = ctx.values[op.rhs_id];
-  //
-  // ctx.values[inst_id] =
-  //     MulOp::create(ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs);
-}
+                    InstId inst_id) -> void {}
+
+static auto codegen(insts::Squeeze op, CompilationContext& ctx, InstId inst_id)
+    -> void {}
+
+static auto codegen(insts::Unsqueeze op, CompilationContext& ctx,
+                    InstId inst_id) -> void {}
 
 static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {

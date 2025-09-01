@@ -126,4 +126,76 @@ def Axon_TupleAccessOp : AxonDialect_Op<"tuple_access", [
   let hasCustomAssemblyFormat = 1;
 }
 
+def Axon_AddOp : AxonDialect_Op<"add", [
+  Pure, 
+  SameOperandsAndResultType, 
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs `->` type($result) attr-dict";
+}
+
+def Axon_MulOp : AxonDialect_Op<"mul", [
+  Pure, 
+  SameOperandsAndResultType,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs `->` type($result) attr-dict";
+}
+
+def Axon_MatMulOp : AxonDialect_Op<"matmul", [
+  Pure,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs) `->` type($result) attr-dict";
+}
+
+def Axon_BroadcastOp : AxonDialect_Op<"broadcast", [
+  Pure,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$operand, ArrayAttr:$expansions);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+}
+
+def Axon_SqueezeOp : AxonDialect_Op<"squeeze", [
+  Pure,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$operand, I64Attr:$dim);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+}
+
+def Axon_UnsqueezeOp : AxonDialect_Op<"unsqueeze", [
+  Pure,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$operand, I64Attr:$dim);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+}
+
+def Axon_SumOp : AxonDialect_Op<"sum", [
+  Pure,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$operand, BoolAttr:$keepdims);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+}
+
 #endif // AXON_DIALECT

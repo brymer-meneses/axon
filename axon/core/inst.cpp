@@ -54,7 +54,12 @@ class Inst {
       using InstType = std::decay_t<decltype(op)>;
       if constexpr (llvm::is_one_of<InstType, insts::Add, insts::Mul,
                                     insts::MatMul>()) {
-        return {op.lhs_id, op.rhs_id};
+        auto [lhs, rhs] = op;
+        return {lhs, rhs};
+      } else if constexpr (llvm::is_one_of<InstType, insts::Transpose,
+                                           insts::Squeeze, insts::Sum,
+                                           insts::Unsqueeze>()) {
+        return {op.operand_id};
       }
       return {};
     };

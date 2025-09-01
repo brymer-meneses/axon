@@ -116,8 +116,15 @@ static auto buildTensorBindings(nb::module_& m) -> void {
            [](const Tensor& self) -> void {
              axon::backward(*current_graph, self.inst_id());
            })
-      .def_prop_ro("grad", [](const Tensor& self) -> std::shared_ptr<Tensor> {
-        return self.grad();
+      .def_prop_ro("grad",
+                   [](const Tensor& self) -> std::shared_ptr<Tensor> {
+                     return self.grad();
+                   })
+      .def_prop_ro("shape", [](const Tensor& self) -> std::vector<int64_t> {
+        if (current_graph) {
+          return current_graph->getShape(self.inst_id());
+        }
+        return self.shape().vec();
       });
 
   m.def(

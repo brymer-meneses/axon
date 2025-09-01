@@ -1,8 +1,7 @@
 module;
 
-#include <vector>
-
 #include "axon/base/dcheck.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
 export module axon.core:graph;
@@ -12,14 +11,13 @@ import axon.base;
 import :ids;
 import :storage;
 import :inst;
+import :shape_rules;
 
 namespace axon {
 
 struct Parameter {
-  Parameter(llvm::ArrayRef<int64_t> shape, bool requires_grad)
-      : shape(shape), requires_grad(requires_grad) {}
+  Parameter(bool requires_grad) : requires_grad(requires_grad) {}
 
-  llvm::SmallVector<int64_t> shape;
   bool requires_grad;
   InstId inst_id = InstId::None;
 };
@@ -33,27 +31,29 @@ export class Graph {
 
   auto declareParam(llvm::ArrayRef<int64_t> shape, bool requires_grad)
       -> InstId {
-    auto input_id = parameters_.emplace(Parameter(shape, requires_grad));
-    auto inst_id = insts_.emplace(insts::GetParameter(input_id));
-    auto& param = parameters_.get(input_id);
+    auto param_id = parameters_.emplace(requires_grad);
+    auto inst_id = insts_.emplace(insts::GetParameter(param_id));
+    auto& param = parameters_.get(param_id);
+
     param.inst_id = inst_id;
     if (requires_grad) {
       gradients_.set(inst_id, InstId::Pending);
     }
+
+    shapes_.set(inst_id, Shape(shape));
     return inst_id;
   }
 
   auto createConstant(Storage&& constant) -> InstId {
-    auto constant_id = constants_.emplace(std::move(constant));
-    auto inst_id = insts_.emplace(insts::Constant{constant_id});
+    auto inst_id = insts_.emplace(insts::Constant{});
+    constants_.set(inst_id, std::move(constant));
     return inst_id;
   }
 
-  auto getShape(InstId inst_id) -> llvm::ArrayRef<int64_t> {
-    if (auto get_param = insts_.get(inst_id).tryGetAs<insts::GetParameter>()) {
-      const auto& param = parameters_.get(get_param->param_id);
-      return param.shape;
-    }
+  auto getShape(InstId inst_id) -> ShapeRef {
+    if (auto shape = shapes_.get(inst_id)) {
+      return shape->get();
+    };
     return {};
   }
 
@@ -61,16 +61,20 @@ export class Graph {
     return gradients_.containsKey(inst_id);
   }
 
-  auto emit(Inst inst) -> InstId { return insts_.emplace(inst); }
+  auto createOp(Inst inst, bool emit_grad = true) -> InstId {
+    auto inst_id = insts_.emplace(inst);
+    if (emit_grad) {
+      auto parents = inst.parents();
+      auto requires_grad = std::ranges::any_of(
+          parents,
+          [this](InstId parent_id) { return checkRequiresGrad(parent_id); });
 
-  auto createOp(Inst inst) -> InstId {
-    auto inst_id = emit(inst);
-    auto requires_grad = std::ranges::any_of(
-        inst.parents(),
-        [this](InstId parent_id) { return checkRequiresGrad(parent_id); });
-    if (requires_grad) {
-      gradients_.set(inst_id, InstId::Pending);
+      if (requires_grad) {
+        gradients_.set(inst_id, InstId::Pending);
+      }
     }
+
+    inferShape(inst_id);
     return inst_id;
   }
 
@@ -86,10 +90,43 @@ export class Graph {
   auto parameters() -> auto& { return parameters_; }
   auto parameters() const -> const auto& { return parameters_; }
 
+  auto shapes() -> auto& { return shapes_; }
+  auto shapes() const -> const auto& { return shapes_; }
+
  private:
-  ValueStore<ParamId, Parameter> parameters_;
+  auto inferShape(InstId inst_id) -> void {
+    auto inst = insts_.get(inst_id);
+
+    inst.visit([&](const auto op) {
+      using InstType = std::decay_t<decltype(op)>;
+
+      if constexpr (HasInferShapeRule<InstType>) {
+        auto shape = InferShapeRule<InstType>::apply(op, shapes_);
+        shapes_.set(inst_id, std::move(shape));
+        return;
+      }
+
+      if constexpr (llvm::is_one_of<insts::Mul, insts::Add, insts::MatMul>()) {
+        auto [lhs_id, rhs_id] = op;
+        auto shape = *shapes_.get(lhs_id);
+        shapes_.set(inst_id, std::move(shape));
+        return;
+      }
+
+      if constexpr (llvm::is_one_of<insts::Transpose, insts::Squeeze,
+                                    insts::Unsqueeze, insts::Broadcast>()) {
+        auto shape = *shapes_.get(op.operand_id);
+        shapes_.set(inst_id, std::move(shape));
+        return;
+      }
+    });
+  }
+
   ValueStore<InstId, Inst> insts_;
-  ValueStore<ConstantId, Storage> constants_;
+  ValueStore<ParamId, Parameter> parameters_;
+
+  IdMap<InstId, Storage> constants_;
+  IdMap<InstId, Shape> shapes_;
 
   IdStore<InstId, InstId> gradients_;
 };

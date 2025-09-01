@@ -1,13 +1,12 @@
 module;
 
-#include "axon/base/dcheck.h"
 #include "llvm/ADT/SmallVector.h"
 
-export module axon.core:inst_rules;
+export module axon.core:backward_rules;
 
+import :graph;
 import :inst_kinds;
 import :inst;
-import :graph;
 
 export namespace axon {
 
@@ -24,11 +23,13 @@ class BackwardContext {
     return graph_.checkRequiresGrad(inst_id);
   }
 
-  auto emit(Inst inst) -> InstId { return graph_.emit(inst); }
+  auto createOp(Inst inst) -> InstId {
+    return graph_.createOp(inst, /*emit_grad=*/false);
+  }
 
   auto accumulateGrad(Dependency dep) -> void {
     if (auto current_grad_id = graph_.gradients().get(dep.inst_id)) {
-      dep.grad_id = graph_.emit(insts::Add(current_grad_id, dep.grad_id));
+      dep.grad_id = createOp(insts::Add(current_grad_id, dep.grad_id));
     }
     graph_.gradients().set(dep.inst_id, dep.grad_id);
   }
@@ -62,11 +63,11 @@ struct BackwardRule<insts::Mul> {
       -> llvm::SmallVector<Dependency> {
     llvm::SmallVector<Dependency, 2> deps;
     if (ctx.checkRequiresGrad(op.lhs_id)) {
-      auto prod = ctx.emit(insts::Mul(grad_id, op.rhs_id));
+      auto prod = ctx.createOp(insts::Mul(grad_id, op.rhs_id));
       deps.emplace_back(op.lhs_id, prod);
     }
     if (ctx.checkRequiresGrad(op.rhs_id)) {
-      auto prod = ctx.emit(insts::Mul(grad_id, op.lhs_id));
+      auto prod = ctx.createOp(insts::Mul(grad_id, op.lhs_id));
       deps.emplace_back(op.rhs_id, prod);
     }
 
@@ -75,21 +76,30 @@ struct BackwardRule<insts::Mul> {
 };
 
 template <>
-struct BackwardRule<insts::MatMul> {
-  static auto apply(const insts::MatMul& op, InstId grad_id,
+struct BackwardRule<insts::Broadcast> {
+  static auto apply(const insts::Broadcast& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
-    llvm::SmallVector<Dependency, 2> deps;
-    if (ctx.checkRequiresGrad(op.lhs_id)) {
-      auto transposed = ctx.emit(insts::Transpose(op.rhs_id));
-      auto prod = ctx.emit(insts::MatMul(grad_id, transposed));
-      deps.emplace_back(op.lhs_id, prod);
+    if (!ctx.checkRequiresGrad(op.operand_id)) {
+      return {};
     }
-    if (ctx.checkRequiresGrad(op.rhs_id)) {
-      auto transposed = ctx.emit(insts::Transpose(op.lhs_id));
-      auto prod = ctx.emit(insts::MatMul(transposed, grad_id));
-      deps.emplace_back(op.rhs_id, prod);
+    for (auto expansion : op.expansions) {
+      grad_id =
+          ctx.createOp(insts::Sum(grad_id, expansion.dim, /*keepdims=*/true));
     }
-    return deps;
+    return {{op.operand_id, grad_id}};
+  }
+};
+
+template <>
+struct BackwardRule<insts::Unsqueeze> {
+  static auto apply(const insts::Unsqueeze& op, InstId grad_id,
+                    BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
+    if (!ctx.checkRequiresGrad(op.operand_id)) {
+      return {};
+    }
+
+    grad_id = ctx.createOp(insts::Squeeze(grad_id, op.dim));
+    return {{op.operand_id, grad_id}};
   }
 };
 
