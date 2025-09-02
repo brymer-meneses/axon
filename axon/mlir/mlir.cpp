@@ -1,7 +1,7 @@
 module;
 
 #include "dialect/dialect.h"
-#include "mlir/Conversion/TosaToLinalg/TosaToLinalg.h"
+#include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/Dialect/Arith/Transforms/BufferDeallocationOpInterfaceImpl.h"
 #include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
@@ -13,12 +13,14 @@ module;
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Tosa/IR/TosaOps.h"
 #include "mlir/Dialect/Tosa/Transforms/Passes.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 
 export module axon.mlir;
@@ -57,10 +59,12 @@ auto createDialectRegistry() -> mlir::DialectRegistry {
 
 struct LoweringOps {
   enum class Level {
-    Axon,
-    Standard,
-    LLVM,
+    Axon = 0,
+    Standard = 1,
+    LLVM = 2,
   };
+
+  LoweringOps(Level level) : level(level) {}
 
   Level level;
 };
@@ -76,7 +80,6 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringOps opts)
 
   if (opts.level == LoweringOps::Level::LLVM) {
     manager.addPass(mlir::createConvertElementwiseToLinalgPass());
-    manager.addNestedPass<mlir::func::FuncOp>(mlir::tosa::createTosaToLinalg());
 
     mlir::bufferization::OneShotBufferizePassOptions bufferization_options;
     manager.addPass(
@@ -86,11 +89,17 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringOps opts)
     mlir::bufferization::buildBufferDeallocationPipeline(manager,
                                                          deallocation_options);
 
+    manager.addPass(mlir::createCanonicalizerPass());
+
     manager.addPass(mlir::createConvertLinalgToAffineLoopsPass());
+
+    // Lower complex memref ops
+    manager.addPass(mlir::memref::createExpandStridedMetadataPass());
+
     manager.addPass(mlir::affine::createLoopFusionPass());
 
     manager.addPass(axon::createLlvmLoweringPass());
-
+    manager.addPass(mlir::createReconcileUnrealizedCastsPass());
     manager.addPass(mlir::createCanonicalizerPass());
   }
 }

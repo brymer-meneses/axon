@@ -1,22 +1,23 @@
-# incomplete for now :<
-
 import axon
+
+from axon import LoweringOps
+
 import numpy as np
 
+opts = LoweringOps(LoweringOps.Level.Standard)
+opts.level = LoweringOps.Level.Standard
+
 @axon.jit()
-def mul(a, b): 
-    l = a * b
+def matmul(a, b): 
+    l = a @ b
     l.backward()
 
+a = axon.tensor(np.ones((2, 2), dtype=np.float32), requires_grad=True)
+b = axon.tensor(np.ones((5, 2, 2), dtype=np.float32), requires_grad=True)
 
-a = axon.tensor(5 * np.ones((3, 3), dtype=np.float32), requires_grad=True)
-b = axon.tensor(4 * np.ones((3, 3), dtype=np.float32), requires_grad=True)
-
-print(a.grad)
-print(b.grad)
-
-mul(a,b)
-
+matmul(a,b)
+print(matmul.dump_ir())
+#
 print(a.grad)
 print(b.grad)
 

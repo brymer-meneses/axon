@@ -34,8 +34,6 @@ struct AxonToLlvmTypeConverter : mlir::LLVMTypeConverter {
                           const mlir::LowerToLLVMOptions& options)
       : mlir::LLVMTypeConverter(ctx, options) {
     addConversion([ctx, this](mlir::TupleType tuple_type) -> mlir::Type {
-      AXON_DCHECK(getOptions().useBarePtrCallConv, "");
-
       llvm::SmallVector<mlir::Type> llvm_types;
       for (mlir::Type elem_type : tuple_type.getTypes()) {
         mlir::Type converted_type = convertType(elem_type);
@@ -99,7 +97,7 @@ struct AxonToLlvmLoweringPass
 
     // All shapes are known at compile time so memrefs should be lowered to a
     // pointer.
-    options.useBarePtrCallConv = true;
+    options.useBarePtrCallConv = false;
 
     mlir::RewritePatternSet patterns{&context};
     AxonToLlvmTypeConverter type_converter{&context, options};

@@ -1,6 +1,9 @@
 module;
 
+#include <algorithm>
+
 #include "axon/mlir/dialect/dialect.h"
+#include "llvm/ADT/STLExtras.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
@@ -10,7 +13,10 @@ module;
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Utils/ReshapeOpsUtils.h"
+#include "mlir/IR/AffineExpr.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 export module axon.mlir:standard_lowering;
@@ -89,28 +95,51 @@ struct BroadcastOpLowering : mlir::OpConversionPattern<BroadcastOp> {
   auto matchAndRewrite(BroadcastOp op, OpAdaptor adaptor,
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
-    auto result_tensor_type =
+    auto result_tensor =
         mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
 
-    auto result_element_type = result_tensor_type.getElementType();
-    auto result_shape = result_tensor_type.getShape();
-
-    auto init_op = mlir::tensor::EmptyOp::create(
-        rewriter, op.getLoc(), result_shape, result_element_type);
-
-    llvm::SmallVector<int64_t> dimensions;
-    for (const auto& expansion : op.getExpansions()) {
-      auto pair = mlir::cast<mlir::ArrayAttr>(expansion);
-
-      auto dim_attr = mlir::cast<mlir::IntegerAttr>(pair[0]);
-      dimensions.push_back(dim_attr.getInt());
+    llvm::SmallVector<int64_t> dimensions_to_expand;
+    for (auto [i, attr] : llvm::enumerate(op.getExpansions())) {
+      auto pair = mlir::cast<mlir::ArrayAttr>(attr);
+      auto dim = mlir::cast<mlir::IntegerAttr>(pair[0]).getInt();
+      dimensions_to_expand.push_back(dim);
     }
 
-    auto operand = adaptor.getOperand();
-    auto new_op = mlir::linalg::BroadcastOp::create(
-        rewriter, op.getLoc(), operand, init_op, dimensions);
+    llvm::SmallVector<mlir::AffineExpr> affine_exprs;
+    for (auto i = 0; i < result_tensor.getRank(); i += 1) {
+      if (std::ranges::contains(dimensions_to_expand, i)) {
+        affine_exprs.push_back(mlir::getAffineConstantExpr(0, op.getContext()));
+      } else {
+        affine_exprs.push_back(mlir::getAffineDimExpr(i, op.getContext()));
+      }
+    }
+    auto input_map =
+        mlir::AffineMap::get(result_tensor.getRank(),
+                             /*symbolCount=*/0, affine_exprs, op.getContext());
+    auto output_map = mlir::AffineMap::getMultiDimIdentityMap(
+        result_tensor.getRank(), op.getContext());
 
-    rewriter.replaceOp(op, new_op);
+    llvm::SmallVector<mlir::AffineMap> indexing_maps = {input_map, output_map};
+    llvm::SmallVector iterator_types(result_tensor.getRank(),
+                                     mlir::utils::IteratorType::parallel);
+
+    auto init_op = mlir::tensor::EmptyOp::create(
+        rewriter, op.getLoc(), result_tensor.getShape(),
+        result_tensor.getElementType());
+
+    auto broadcast_op = mlir::linalg::GenericOp::create(
+        rewriter, op.getLoc(),
+        /*resultTensorTypes=*/mlir::TypeRange{op.getResult().getType()},
+        /*inputs=*/mlir::ValueRange{adaptor.getOperand()},
+        /*outputs=*/mlir::ValueRange{init_op},
+
+        indexing_maps, iterator_types,
+        [&](mlir::OpBuilder& builder, mlir::Location loc,
+            mlir::ValueRange args) {
+          mlir::linalg::YieldOp::create(builder, loc, args[0]);
+        });
+
+    rewriter.replaceOp(op, broadcast_op.getResult(0));
     return mlir::success();
   }
 };
@@ -121,8 +150,71 @@ struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
   auto matchAndRewrite(SumOp op, OpAdaptor adaptor,
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+    auto input_tensor =
+        mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
+    auto result_tensor =
+        mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
+
+    auto input_rank = input_tensor.getRank();
+    auto dim_to_reduce = static_cast<int64_t>(op.getDim());
+
+    // If we have keepDims on then we need to set `0` as the accumulator for
+    // that dimension.
+    mlir::AffineMap output_map;
     if (op.getKeepDims()) {
+      llvm::SmallVector<mlir::AffineExpr> affine_exprs;
+      for (int64_t i = 0; i < input_rank; i += 1) {
+        if (i == dim_to_reduce) {
+          affine_exprs.push_back(
+              mlir::getAffineConstantExpr(0, op.getContext()));
+        } else {
+          affine_exprs.push_back(mlir::getAffineDimExpr(i, op.getContext()));
+        }
+      }
+      output_map = mlir::AffineMap::get(input_rank, /*symbolCount=*/0,
+                                        affine_exprs, op.getContext());
+    } else {
+      llvm::SmallVector<mlir::AffineExpr> affine_exprs;
+      for (int64_t i = 0; i < input_rank; i += 1) {
+        if (i != dim_to_reduce) {
+          affine_exprs.push_back(mlir::getAffineDimExpr(i, op.getContext()));
+        }
+      }
+      output_map = mlir::AffineMap::get(input_rank, /*symbolCount=*/0,
+                                        affine_exprs, op.getContext());
     }
+
+    auto input_map = mlir::AffineMap::getMultiDimIdentityMap(
+        result_tensor.getRank(), op.getContext());
+
+    llvm::SmallVector<mlir::AffineMap> indexing_maps = {input_map, output_map};
+
+    llvm::SmallVector iterator_types(input_rank,
+                                     mlir::utils::IteratorType::parallel);
+    iterator_types[dim_to_reduce] = mlir::utils::IteratorType::reduction;
+
+    auto init_op =
+        mlir::tensor::EmptyOp::create(rewriter, loc, result_tensor.getShape(),
+                                      result_tensor.getElementType());
+
+    auto sum_op = mlir::linalg::GenericOp::create(
+        rewriter, loc,
+        /*resultTensorTypes=*/mlir::TypeRange{op.getResult().getType()},
+
+        /*inputs=*/mlir::ValueRange{adaptor.getOperand()},
+        /*outputs=*/mlir::ValueRange{init_op},
+
+        indexing_maps, iterator_types,
+        [&](mlir::OpBuilder& builder, mlir::Location loc,
+            mlir::ValueRange args) {
+          auto add =
+              mlir::arith::AddFOp::create(builder, loc, args[0], args[1]);
+          mlir::linalg::YieldOp::create(builder, loc, add.getResult());
+        });
+
+    rewriter.replaceOp(op, sum_op.getResult(0));
+    return mlir::success();
   }
 };
 
@@ -131,15 +223,54 @@ struct SqueezeOpLowering : mlir::OpConversionPattern<SqueezeOp> {
 
   auto matchAndRewrite(SqueezeOp op, OpAdaptor adaptor,
                        mlir::ConversionPatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {}
+      -> mlir::LogicalResult final {
+    auto input_tensor =
+        mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
+    auto result_tensor =
+        mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
+
+    auto reassociation_indices =
+        mlir::getReassociationIndicesForReshape(input_tensor, result_tensor);
+    if (!reassociation_indices) {
+      op.emitError(
+          std::format("Failed to compute reassociation indices for {} and {}",
+                      input_tensor.getShape(), result_tensor.getShape()));
+      return mlir::failure();
+    }
+
+    auto collapse_op = mlir::tensor::CollapseShapeOp::create(
+        rewriter, op.getLoc(), adaptor.getOperand(), *reassociation_indices);
+    rewriter.replaceOp(op, collapse_op);
+    return mlir::success();
+  }
 };
 
-struct UmsqueezeOpLowering : mlir::OpConversionPattern<UnsqueezeOp> {
+struct UnqueezeOpLowering : mlir::OpConversionPattern<UnsqueezeOp> {
   using mlir::OpConversionPattern<UnsqueezeOp>::OpConversionPattern;
 
   auto matchAndRewrite(UnsqueezeOp op, OpAdaptor adaptor,
                        mlir::ConversionPatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {}
+      -> mlir::LogicalResult final {
+    auto input_tensor =
+        mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
+    auto result_tensor =
+        mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
+
+    auto reassociation_indices =
+        mlir::getReassociationIndicesForReshape(input_tensor, result_tensor);
+    if (!reassociation_indices) {
+      op.emitError(
+          std::format("Failed to compute reassociation indices for {} and {}",
+                      input_tensor.getShape(), result_tensor.getShape()));
+      return mlir::failure();
+    }
+
+    auto collapse_op = mlir::tensor::ExpandShapeOp::create(
+        rewriter, op.getLoc(), op.getResult().getType(), adaptor.getOperand(),
+        *reassociation_indices);
+    rewriter.replaceOp(op, collapse_op);
+    return mlir::success();
+  }
 };
 
 struct ReshapeOpLowering : mlir::OpConversionPattern<ReshapeOp> {
@@ -147,26 +278,46 @@ struct ReshapeOpLowering : mlir::OpConversionPattern<ReshapeOp> {
 
   auto matchAndRewrite(ReshapeOp op, OpAdaptor adaptor,
                        mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {}
+};
+
+struct TransposeOpLowering : mlir::OpConversionPattern<TransposeOp> {
+  using mlir::OpConversionPattern<TransposeOp>::OpConversionPattern;
+
+  auto matchAndRewrite(TransposeOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
-    auto operand = op.getOperand();
-    auto element_type =
-        mlir::cast<mlir::RankedTensorType>(operand.getType()).getElementType();
+    auto result_type = op.getResult().getType();
+    auto result_tensor = mlir::cast<mlir::RankedTensorType>(result_type);
 
-    auto result_tensor =
-        mlir::RankedTensorType::get(op.getTargetShape(), element_type);
-    auto source_tensor = mlir::cast<mlir::RankedTensorType>(operand.getType());
-    auto reassociation_indices =
-        mlir::getReassociationIndicesForReshape(source_tensor, result_tensor);
-
-    if (!reassociation_indices) {
-      op.emitError("Shapes cannot be reshaped.");
-      return mlir::failure();
+    llvm::SmallVector<uint32_t> targets;
+    for (auto i = 0; i < result_tensor.getRank(); i += 1) {
+      targets.push_back(i);
     }
+    std::swap(targets[op.getFrom()], targets[op.getTo()]);
 
-    auto rehape_op = mlir::tensor::ExpandShapeOp::create(
-        rewriter, op.getLoc(), result_tensor, operand, *reassociation_indices);
+    auto input_map = mlir::AffineMap::getMultiDimIdentityMap(
+        result_tensor.getRank(), op.getContext());
+    auto output_map = mlir::AffineMap::getMultiDimMapWithTargets(
+        result_tensor.getRank(), targets, op.getContext());
 
-    rewriter.replaceOp(op, rehape_op);
+    llvm::SmallVector iterator_types(result_tensor.getRank(),
+                                     mlir::utils::IteratorType::parallel);
+    llvm::SmallVector indexing_maps = {input_map, output_map};
+
+    auto init_op =
+        mlir::tensor::EmptyOp::create(rewriter, op.getLoc(), result_type, {});
+
+    auto transpose_op = mlir::linalg::GenericOp::create(
+        rewriter, op.getLoc(), mlir::TypeRange{result_type},
+        mlir::ValueRange{adaptor.getOperand()}, mlir::ValueRange{init_op},
+        indexing_maps, iterator_types,
+        [&](mlir::OpBuilder& builder, mlir::Location loc,
+            mlir::ValueRange args) {
+          mlir::linalg::YieldOp::create(builder, loc, args[0]);
+        });
+
+    rewriter.replaceOp(op, transpose_op.getResult(0));
     return mlir::success();
   }
 };
@@ -178,7 +329,6 @@ struct GetDataOpLowering : mlir::OpConversionPattern<GetDataOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
-
     auto tensor_ref = mlir::cast<TensorRefType>(op.getInput().getType());
 
     auto memref =
@@ -205,7 +355,8 @@ struct AccumulateGradOpLowering : mlir::OpConversionPattern<AccumulateGradOp> {
 
     // Since `adaptor.getAccumulator` must require a gradient and because
     // `TensorRefType` is lowered to tuple<memref, memref>, then to access the
-    // grad memref we need to invoke the tuple access op to access the gradient.
+    // grad memref we need to invoke the tuple access op to access the
+    // gradient.
     auto grad_ref =
         TupleAccessOp::create(rewriter, loc, adaptor.getAccumulator(), 1);
     auto value_as_memref = mlir::bufferization::ToBufferOp::create(
@@ -290,15 +441,17 @@ struct AxonToStandardLoweringPass
                          mlir::BuiltinDialect, mlir::tensor::TensorDialect>();
     target.addLegalOp<TupleAccessOp>();
     target.addIllegalOp<GetDataOp, AccumulateGradOp, FillLikeOp, AddOp, MulOp,
-                        MatMulOp, BroadcastOp>();
+                        MatMulOp, SumOp, BroadcastOp, TransposeOp, SqueezeOp,
+                        UnsqueezeOp>();
 
     AxonToStandardTypeConverter type_converter{&context};
 
     mlir::RewritePatternSet patterns{&context};
     patterns.add<GetDataOpLowering, AccumulateGradOpLowering,
                  FillLikeOpLowering, AddOpLowering, MulOpLowering,
-                 MatMulOpLowering, BroadcastOpLowering>(type_converter,
-                                                        &context);
+                 MatMulOpLowering, SumOpLowering, BroadcastOpLowering,
+                 TransposeOpLowering, SqueezeOpLowering, UnqueezeOpLowering>(
+        type_converter, &context);
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, type_converter);
