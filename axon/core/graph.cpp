@@ -105,8 +105,8 @@ export class Graph {
       if constexpr (HasInferShapeRule<InstType>) {
         auto shape = InferShapeRule<InstType>::apply(op, shapes_);
         shapes_.set(inst_id, std::move(shape));
-      } else if constexpr (llvm::is_one_of<InstType, insts::Mul, insts::Add,
-                                           insts::MatMul>()) {
+      } else if constexpr (llvm::is_one_of<InstType, insts::Mul,
+                                           insts::Add>()) {
         auto [lhs_id, rhs_id] = op;
         Shape shape = *shapes_.get(lhs_id);
         shapes_.set(inst_id, std::move(shape));

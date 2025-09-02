@@ -1,17 +1,11 @@
 
+#include <mlir/Support/LLVM.h>
+
 #include <optional>
 
 #include "dialect.h"
 
 namespace axon {
-
-auto AccumulateGradOp::verify() -> mlir::LogicalResult {
-  auto requires_grad = getAccumulator().getType().getRequiresGrad();
-
-  return requires_grad
-             ? mlir::success()
-             : emitOpError("The accumulator needs to require gradients.");
-}
 
 auto ConstantOp::print(mlir::OpAsmPrinter& printer) -> void {
   printer << " ";
@@ -92,6 +86,36 @@ auto ReshapeOp::verify() -> mlir::LogicalResult {
   auto lhs_elems = compute_num_elems(target_shape);
   auto rhs_elems = compute_num_elems(operand.getShape());
   return mlir::success(lhs_elems == rhs_elems);
+}
+
+auto MatMulOp::verify() -> mlir::LogicalResult {
+  auto lhs = mlir::cast<mlir::RankedTensorType>(getLhs().getType());
+  auto rhs = mlir::cast<mlir::RankedTensorType>(getRhs().getType());
+
+  if (lhs.getRank() != rhs.getRank()) {
+    return mlir::failure();
+  }
+
+  auto lhs_shape = lhs.getShape();
+  auto rhs_shape = rhs.getShape();
+  if (lhs.getRank() == 3) {
+    return mlir::success(lhs_shape[2] == rhs_shape[1]);
+  }
+
+  if (lhs.getRank() == 2) {
+    return mlir::success(lhs_shape[1] == rhs_shape[0]);
+  }
+
+  return mlir::failure();
+}
+
+auto AccumulateGradOp::verify() -> mlir::LogicalResult {
+  auto requires_grad = getAccumulator().getType().getRequiresGrad();
+
+  auto accum_shape = getAccumulator().getType().getShape();
+  auto value_shape = getValue().getType().getShape();
+
+  return mlir::success(requires_grad && accum_shape == value_shape);
 }
 
 }  // namespace axon

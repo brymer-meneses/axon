@@ -1,5 +1,7 @@
 module;
 
+#include <utility>
+
 #include "axon/base/dcheck.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
@@ -18,6 +20,59 @@ using ShapeMapping = IdMap<InstId, Shape>;
 
 template <typename T>
 struct InferShapeRule;
+
+template <>
+struct InferShapeRule<insts::MatMul> {
+  static auto apply(const insts::MatMul& op, const ShapeMapping& shapes)
+      -> Shape {
+    AXON_DCHECK(shapes.get(op.lhs_id), "op.lhs_id must have a shape already.");
+    AXON_DCHECK(shapes.get(op.rhs_id), "op.rhs_id must have a shape already.");
+
+    auto lhs_shape = shapes.get(op.lhs_id)->get();
+    auto rhs_shape = shapes.get(op.rhs_id)->get();
+
+    AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
+                "op.lhs_id must have a shape already.");
+
+    Shape shape = lhs_shape;
+    // (N, A, B) @ (N, B, C) => (N, A, C)
+    if (lhs_shape.size() == 3) {
+      shape[1] = lhs_shape[1];
+      shape[2] = rhs_shape[2];
+      return shape;
+    }
+
+    // (A, B) @ (B, C) => (N, A, C)
+    if (lhs_shape.size() == 2) {
+      shape[0] = lhs_shape[0];
+      shape[1] = rhs_shape[1];
+      return shape;
+    }
+
+    std::unreachable();
+  }
+};
+
+template <>
+struct InferShapeRule<insts::Transpose> {
+  static auto apply(const insts::Transpose& op, const ShapeMapping& shapes)
+      -> Shape {
+    AXON_DCHECK(shapes.get(op.operand_id),
+                "op.operand_id must have a shape already.");
+
+    Shape shape = shapes.get(op.operand_id)->get();
+    AXON_DCHECK(op.from < shape.size(),
+                "op.from must not exceed the rank of the tensor");
+    AXON_DCHECK(op.to < shape.size(),
+                "op.to must not exceed the rank of the tensor");
+
+    auto tmp = shape[op.from];
+    shape[op.from] = shape[op.to];
+    shape[op.to] = tmp;
+
+    return shape;
+  }
+};
 
 template <>
 struct InferShapeRule<insts::Unsqueeze> {

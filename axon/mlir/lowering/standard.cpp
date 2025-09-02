@@ -150,7 +150,7 @@ struct ReshapeOpLowering : mlir::OpConversionPattern<ReshapeOp> {
       -> mlir::LogicalResult final {
     auto operand = op.getOperand();
     auto element_type =
-        mlir::cast<mlir::RankedTensorType>(operand).getElementType();
+        mlir::cast<mlir::RankedTensorType>(operand.getType()).getElementType();
 
     auto result_tensor =
         mlir::RankedTensorType::get(op.getTargetShape(), element_type);

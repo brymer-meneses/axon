@@ -140,6 +140,20 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              }
              std::unreachable();
            })
+      .def("__matmul__",
+           [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
+             if (current_graph) {
+               auto lhs_id = lhs.inst_id();
+               auto rhs_id = rhs.inst_id();
+               std::tie(lhs_id, rhs_id) = broadcastIfNecessary(lhs_id, rhs_id);
+
+               auto inst_id =
+                   current_graph->createOp(insts::MatMul(lhs_id, rhs_id));
+
+               return {inst_id};
+             }
+             std::unreachable();
+           })
       .def("backward",
            [](const Tensor& self) -> void {
              axon::backward(*current_graph, self.inst_id());

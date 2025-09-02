@@ -48,6 +48,50 @@ template <typename T>
 struct BackwardRule;
 
 template <>
+struct BackwardRule<insts::MatMul> {
+  static auto apply(const insts::MatMul& op, InstId grad_id,
+                    BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
+    llvm::SmallVector<Dependency, 2> deps;
+
+    // Suppose C = A @ B
+    //
+    // A: (M, N)
+    // B: (N, L)
+    // C: (M, L)
+    // G: (M, L)
+    //
+    // We want to combine G (which is the local gradient) with the A and B. dA
+    // and dB are the gradients of some function L with respect to
+    // A and B respectively.
+    //
+    // dA: G @ B^T  (M, L) @ (N, L)^T => (M, N)
+    // dB: A^T @ G  (M, N)^T @ (M, L) => (N, L)
+
+    auto transpose = [&](InstId inst_id) -> InstId {
+      auto shape = ctx.getShape(inst_id);
+      if (shape.size() == 3) {
+        return ctx.createOp(insts::Transpose(inst_id, 1, 2));
+      }
+      return ctx.createOp(insts::Transpose(inst_id, 0, 1));
+    };
+
+    if (ctx.checkRequiresGrad(op.lhs_id)) {
+      auto rhs_t = transpose(op.rhs_id);
+      auto new_grad = ctx.createOp(insts::MatMul(grad_id, rhs_t));
+      deps.emplace_back(op.lhs_id, new_grad);
+    }
+
+    if (ctx.checkRequiresGrad(op.rhs_id)) {
+      auto lhs_t = transpose(op.lhs_id);
+      auto new_grad = ctx.createOp(insts::MatMul(lhs_t, grad_id));
+      deps.emplace_back(op.rhs_id, new_grad);
+    }
+
+    return deps;
+  }
+};
+
+template <>
 struct BackwardRule<insts::Add> {
   static auto apply(const insts::Add& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {

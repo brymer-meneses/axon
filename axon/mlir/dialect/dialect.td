@@ -153,6 +153,7 @@ def Axon_MatMulOp : AxonDialect_Op<"matmul", [
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs) `->` type($result) attr-dict";
+  let hasVerifier = 1;
 }
 
 def Axon_BroadcastOp : AxonDialect_Op<"broadcast", [

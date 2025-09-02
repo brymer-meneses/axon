@@ -58,8 +58,7 @@ class Inst {
                                     insts::MatMul>()) {
         auto [lhs, rhs] = op;
         return {lhs, rhs};
-      } else if constexpr (llvm::is_one_of<InstType, insts::Transpose,
-                                           insts::Squeeze, insts::Sum,
+      } else if constexpr (llvm::is_one_of<InstType, insts::Squeeze, insts::Sum,
                                            insts::Unsqueeze,
                                            insts::Broadcast>()) {
         return {op.operand_id};
