@@ -86,7 +86,9 @@ def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure]> {
   let hasCustomAssemblyFormat = 1;
 }
 
-def Axon_AccumulateGradOp : AxonDialect_Op<"accumulate_grad"> {
+def Axon_AccumulateGradOp : AxonDialect_Op<"accumulate_grad", [
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>
+]> {
   let arguments = (ins Axon_TensorRefType:$accumulator, AnyTensor:$value);
   let assemblyFormat = "$accumulator `,` $value `:` qualified(type($accumulator)) `,` type($value)  attr-dict";
 
@@ -102,7 +104,7 @@ def Axon_FillLikeOp : AxonDialect_Op<"fill_like", [
   let results = (outs AnyTensor:$result);
 
 
-  let assemblyFormat = "$tensor `,` $fill_value `:` type($tensor) `->` type($result) attr-dict";
+  let assemblyFormat = "$tensor `,` $fill_value `->` type($result) attr-dict";
 }
 
 def Axon_TupleAccessOp : AxonDialect_Op<"tuple_access", [

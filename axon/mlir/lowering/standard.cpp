@@ -353,10 +353,10 @@ struct AccumulateGradOpLowering : mlir::OpConversionPattern<AccumulateGradOp> {
     auto tensor_type =
         llvm::dyn_cast<TensorRefType>(op.getAccumulator().getType());
 
-    // Since `adaptor.getAccumulator` must require a gradient and because
-    // `TensorRefType` is lowered to tuple<memref, memref>, then to access the
-    // grad memref we need to invoke the tuple access op to access the
-    // gradient.
+    // Since `adaptor.getAccumulator` must require a gradient (which ensures
+    // that this is a valid tuple access) and because `TensorRefType` is lowered
+    // to tuple<memref, memref>, then to access the grad memref we need to
+    // invoke a tuple access op to access it.
     auto grad_ref =
         TupleAccessOp::create(rewriter, loc, adaptor.getAccumulator(), 1);
     auto value_as_memref = mlir::bufferization::ToBufferOp::create(

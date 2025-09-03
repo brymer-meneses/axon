@@ -1,9 +1,9 @@
 
-#include <mlir/Support/LLVM.h>
-
 #include <optional>
 
 #include "dialect.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "mlir/Support/LLVM.h"
 
 namespace axon {
 
@@ -116,6 +116,16 @@ auto AccumulateGradOp::verify() -> mlir::LogicalResult {
   auto value_shape = getValue().getType().getShape();
 
   return mlir::success(requires_grad && accum_shape == value_shape);
+}
+
+void AccumulateGradOp::getEffects(
+    llvm::SmallVectorImpl<mlir::MemoryEffects::EffectInstance>& effects) {
+  // Operand 0: accumulator (written to)
+  effects.emplace_back(mlir::MemoryEffects::Write::get(),
+                       &getAccumulatorMutable());
+
+  // Operand 1: value (read)
+  effects.emplace_back(mlir::MemoryEffects::Read::get(), &getValueMutable());
 }
 
 }  // namespace axon

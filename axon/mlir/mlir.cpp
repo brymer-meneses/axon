@@ -91,17 +91,16 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
 
   if (level >= LoweringLevel::Bufferization) {
     mlir::bufferization::OneShotBufferizePassOptions bufferization_options;
-    bufferization_options.bufferizeFunctionBoundaries = true;
     manager.addPass(
         mlir::bufferization::createOneShotBufferizePass(bufferization_options));
     manager.addPass(mlir::createCanonicalizerPass());
-    manager.addPass(mlir::createCSEPass());
+    // manager.addPass(mlir::createCSEPass());
 
     // Now cleanup memrefs.
     manager.addPass(mlir::memref::createExpandStridedMetadataPass());
-    manager.addPass(mlir::memref::createFoldMemRefAliasOpsPass());
-    manager.addPass(
-        mlir::bufferization::createDropEquivalentBufferResultsPass());
+    // manager.addPass(mlir::memref::createFoldMemRefAliasOpsPass());
+    // manager.addPass(
+    //     mlir::bufferization::createDropEquivalentBufferResultsPass());
 
     // Allocation optimizations: hoist + promote *before* lowering dealloc.
     manager.addNestedPass<mlir::func::FuncOp>(
@@ -121,7 +120,7 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
                                                          deallocation_options);
 
     manager.addPass(mlir::createCanonicalizerPass());
-    manager.addPass(mlir::createCSEPass());
+    // manager.addPass(mlir::createCSEPass());
   }
 
   if (level >= LoweringLevel::Affine) {
