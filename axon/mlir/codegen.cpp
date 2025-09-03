@@ -4,7 +4,6 @@ module;
 #include "dialect/dialect.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
-#include "mlir/Dialect/Tosa/IR/TosaOps.h"
 #include "mlir/IR/OpDefinition.h"
 
 // MLIR Imports

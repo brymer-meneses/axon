@@ -1,5 +1,6 @@
 #include <iostream>
 #include <memory>
+#include <print>
 #include <ranges>
 #include <sstream>
 #include <stdexcept>
@@ -49,9 +50,9 @@ static auto buildGraphBindings(nb::module_& m) -> void {
       .def(nb::init<>())
       .def("compile",
            [](Graph& graph,
-              const LoweringOps& ops) -> std::unique_ptr<CompilationUnit> {
+              LoweringLevel level) -> std::unique_ptr<CompilationUnit> {
              auto compilation_unit = std::make_unique<CompilationUnit>();
-             if (compilation_unit->compile(graph, ops).failed()) {
+             if (compilation_unit->compile(graph, level).failed()) {
                throw std::runtime_error("Failed to compile graph");
              }
              return std::move(compilation_unit);
@@ -186,14 +187,12 @@ NB_MODULE(axon_bindings, m) {
       .value("Float64", ElementType::Float64)
       .export_values();
 
-  auto lowering_ops = nb::class_<LoweringOps>(m, "LoweringOps");
-  lowering_ops.def(nb::init<LoweringOps::Level>());
-  lowering_ops.def_rw("level", &LoweringOps::level);
-
-  nb::enum_<LoweringOps::Level>(lowering_ops, "Level")
-      .value("Axon", LoweringOps::Level::Axon)
-      .value("Standard", LoweringOps::Level::Standard)
-      .value("LLVM", LoweringOps::Level::LLVM)
+  nb::enum_<LoweringLevel>(m, "LoweringLevel")
+      .value("Axon", LoweringLevel::Axon)
+      .value("Standard", LoweringLevel::Standard)
+      .value("Affine", LoweringLevel::Affine)
+      .value("Linalg", LoweringLevel::Linalg)
+      .value("LLVM", LoweringLevel::LLVM)
       .export_values();
 
   nb::class_<CompilationUnit>(m, "CompilationUnit")

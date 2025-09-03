@@ -1,13 +1,12 @@
 import axon
 
-from axon import LoweringOps
+from axon import LoweringLevel, LoweringOps
 
 import numpy as np
 
-opts = LoweringOps(LoweringOps.Level.Standard)
-opts.level = LoweringOps.Level.Standard
+opts = LoweringOps(LoweringLevel.Linalg, execute=False)
 
-@axon.jit()
+@axon.jit(opts)
 def matmul(a, b): 
     l = a @ b
     l.backward()
@@ -18,6 +17,6 @@ b = axon.tensor(np.ones((5, 2, 2), dtype=np.float32), requires_grad=True)
 matmul(a,b)
 print(matmul.dump_ir())
 #
-print(a.grad)
-print(b.grad)
+# print(a.grad)
+# print(b.grad)
 

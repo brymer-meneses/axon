@@ -5,11 +5,18 @@ import itertools
 
 import functools
 
+from dataclasses import dataclass
+
 from . import axon_bindings as bindings
 
-from .axon_bindings import LoweringOps
+from .axon_bindings import LoweringLevel
 
-def jit(opts: typing.Optional[bindings.LoweringOps] = None) -> typing.Callable:
+@dataclass
+class LoweringOps:
+    level: LoweringLevel = LoweringLevel.LLVM
+    execute: bool = True
+
+def jit(opts: typing.Optional[LoweringOps] = None) -> typing.Callable:
     def decorator(func: typing.Callable) -> typing.Callable:
         compiled = CompiledFunction(opts, func)
         compiled.__doc__ = func.__doc__
@@ -18,9 +25,9 @@ def jit(opts: typing.Optional[bindings.LoweringOps] = None) -> typing.Callable:
     return decorator
 
 class CompiledFunction:
-    def __init__(self, opts: typing.Optional[bindings.LoweringOps], func: typing.Callable) -> None:
+    def __init__(self, opts: typing.Optional[LoweringOps], func: typing.Callable) -> None:
         self._func = func
-        self._opts = LoweringOps(LoweringOps.Level.LLVM) if opts is None else opts
+        self._opts = LoweringOps() if opts is None else opts
         self._cached_graph = None
         self._compiled = None
 
@@ -37,9 +44,10 @@ class CompiledFunction:
 
         # check if it matches the cached graph
         if graph != self._cached_graph:
-            self._compiled = graph.compile(self._opts)
+            self._compiled = graph.compile(self._opts.level)
 
-        return self._compiled.execute(tensors)
+        if self._opts.execute:
+            return self._compiled.execute(tensors)
 
     def dump_ir(self) -> str:
         return self._compiled.dump_ir()

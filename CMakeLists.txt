@@ -14,14 +14,12 @@ target_link_libraries(mlir
     MLIRDialect
     MLIRLLVMDialect
     MLIRTensorDialect
-    MLIRTosaDialect
     MLIRArithDialect
     MLIRFuncDialect
     MLIRLinalgDialect
     MLIRBufferizationDialect
     MLIRAffineToStandard
     MLIRSCFToControlFlow
-    MLIRTosaToLinalg
     MLIRTensorToLinalg
     MLIRFuncToLLVM
     MLIRMemRefToLLVM

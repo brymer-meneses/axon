@@ -50,7 +50,7 @@ export class CompilationUnit {
     context_.loadAllAvailableDialects();
   }
 
-  auto compile(Graph& graph, LoweringOps ops) -> mlir::LogicalResult {
+  auto compile(Graph& graph, LoweringLevel level) -> mlir::LogicalResult {
     mlir::PassManager manager(&context_);
     mlir::OpBuilder builder(&context_);
 
@@ -59,7 +59,7 @@ export class CompilationUnit {
     codegenGraph(graph, builder, module_op_);
     manager.enableVerifier();
 
-    axon::buildLlvmLoweringPipeline(manager, ops);
+    axon::buildLlvmLoweringPipeline(manager, level);
 
     auto result = manager.run(module_op_);
     return result;
