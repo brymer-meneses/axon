@@ -1,6 +1,6 @@
 CXX := clang++
 CXX_FLAGS := -stdlib=libc++ 
-CMAKE_BUILD_TYPE ?= RelWithDebInfo
+CMAKE_BUILD_TYPE ?= Debug
 
 .PHONY: test clean build 
 

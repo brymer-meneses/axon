@@ -11,6 +11,7 @@ module;
 #include "axon/base/dcheck.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_os_ostream.h"
+#include "nanobind/intrusive/counter.h"
 #include "nanobind/nanobind.h"
 #include "nanobind/ndarray.h"
 #include "xtensor/containers/xarray.hpp"
@@ -25,7 +26,7 @@ namespace nb = nanobind;
 
 namespace axon {
 
-export class Tensor {
+export class Tensor : nb::intrusive_base {
  public:
   Tensor(Storage&& data, bool requires_grad)
       : data_(std::move(data)), requires_grad_(requires_grad) {}

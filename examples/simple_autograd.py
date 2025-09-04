@@ -4,7 +4,7 @@ from axon import LoweringLevel, LoweringOps
 
 import numpy as np
 
-opts = LoweringOps(LoweringLevel.Linalg, execute=False)
+opts = LoweringOps(LoweringLevel.LLVM)
 
 @axon.jit(opts)
 def matmul(a, b): 
@@ -17,6 +17,6 @@ b = axon.tensor(np.ones((5, 2, 2), dtype=np.float32), requires_grad=True)
 matmul(a,b)
 print(matmul.dump_ir())
 #
-# print(a.grad)
-# print(b.grad)
+print(a.grad)
+print(b.grad)
 

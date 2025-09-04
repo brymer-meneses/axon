@@ -7,16 +7,20 @@ import functools
 
 from dataclasses import dataclass
 
-from . import axon_bindings as bindings
+from . import axon_bindings
 
-from .axon_bindings import LoweringLevel
+from typing import Callable, Optional
+
+from .graph_manager import GraphManager
+
+from .axon_bindings import LoweringLevel, Graph, Tensor
 
 @dataclass
 class LoweringOps:
     level: LoweringLevel = LoweringLevel.LLVM
     execute: bool = True
 
-def jit(opts: typing.Optional[LoweringOps] = None) -> typing.Callable:
+def jit(opts: Optional[LoweringOps] = None) -> typing.Callable:
     def decorator(func: typing.Callable) -> typing.Callable:
         compiled = CompiledFunction(opts, func)
         compiled.__doc__ = func.__doc__
@@ -25,7 +29,7 @@ def jit(opts: typing.Optional[LoweringOps] = None) -> typing.Callable:
     return decorator
 
 class CompiledFunction:
-    def __init__(self, opts: typing.Optional[LoweringOps], func: typing.Callable) -> None:
+    def __init__(self, opts: Optional[LoweringOps], func: Callable) -> None:
         self._func = func
         self._opts = LoweringOps() if opts is None else opts
         self._cached_graph = None
@@ -35,18 +39,19 @@ class CompiledFunction:
     # a new graph is created and checked if it is equal to the 
     # current graph.
     def __call__(self, *args, **kwargs) -> typing.Any:
-        graph = bindings.Graph()
-        tensors = _process_params(graph, *args, **kwargs)
+        graph = Graph()
 
         # trace the tensor operations
-        bindings._set_current_graph(graph)
-        result = self._func(*args, **kwargs)
+        with GraphManager(graph):
+            tensors = _process_params(graph, *args, **kwargs)
+            axon_bindings._set_current_graph(graph)
+            result = self._func(*args, **kwargs)
 
         # check if it matches the cached graph
         if graph != self._cached_graph:
             self._compiled = graph.compile(self._opts.level)
 
-        if self._opts.execute:
+        if self._opts.execute and self._opts.level == LoweringLevel.LLVM:
             return self._compiled.execute(tensors)
 
     def dump_ir(self) -> str:
@@ -55,11 +60,11 @@ class CompiledFunction:
 def _process_params(graph, *args, **kwargs):
     tensors = []
     for arg in args:
-        if isinstance(arg, bindings.Tensor):
+        if isinstance(arg, Tensor):
             graph.trace(arg)
             tensors.append(arg)
     for (key, value) in kwargs.items():
-        if isinstance(value, bindings.Tensor):
+        if isinstance(value, Tensor):
             graph.trace(value)
             tensors.append(value)
     return tensors

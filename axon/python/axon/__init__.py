@@ -10,7 +10,3 @@ __all__ = [
     "tensor"
 ]
 
-def _cleanup() -> None:
-    axon_bindings._clear_current_graph()
-    
-atexit.register(_cleanup)

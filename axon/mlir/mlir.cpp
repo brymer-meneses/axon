@@ -77,7 +77,6 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
   if (level >= LoweringLevel::Standard) {
     manager.addPass(axon::createStandardLoweringPass());
     manager.addPass(mlir::createCanonicalizerPass());
-    manager.addPass(mlir::createCSEPass());
   }
 
   if (level >= LoweringLevel::Linalg) {
@@ -91,6 +90,8 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
 
   if (level >= LoweringLevel::Bufferization) {
     mlir::bufferization::OneShotBufferizePassOptions bufferization_options;
+    bufferization_options.checkParallelRegions = true;
+
     manager.addPass(
         mlir::bufferization::createOneShotBufferizePass(bufferization_options));
     manager.addPass(mlir::createCanonicalizerPass());
@@ -120,7 +121,7 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
                                                          deallocation_options);
 
     manager.addPass(mlir::createCanonicalizerPass());
-    // manager.addPass(mlir::createCSEPass());
+    manager.addPass(mlir::createCSEPass());
   }
 
   if (level >= LoweringLevel::Affine) {
