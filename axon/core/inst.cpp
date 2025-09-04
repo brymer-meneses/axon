@@ -59,8 +59,8 @@ class Inst {
         auto [lhs, rhs] = op;
         return {lhs, rhs};
       } else if constexpr (llvm::is_one_of<InstType, insts::Squeeze, insts::Sum,
-                                           insts::Unsqueeze,
-                                           insts::Broadcast>()) {
+                                           insts::Unsqueeze, insts::Broadcast,
+                                           insts::Reshape>()) {
         return {op.operand_id};
       }
       return {};

@@ -11,6 +11,7 @@ import :inst_kinds;
 import :inst;
 
 export namespace axon {
+
 struct Dependency {
   InstId inst_id;
   InstId grad_id;

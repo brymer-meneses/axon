@@ -4,11 +4,11 @@ from axon import LoweringLevel, LoweringOps
 
 import numpy as np
 
-opts = LoweringOps(LoweringLevel.LLVM)
+opts = LoweringOps(LoweringLevel.Axon)
 
 @axon.jit(opts)
 def matmul(a, b): 
-    l = a @ b
+    l = a * b + a * b
     l.backward()
 
 a = axon.tensor(np.ones((2, 2), dtype=np.float32), requires_grad=True)

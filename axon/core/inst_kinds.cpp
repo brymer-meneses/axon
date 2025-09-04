@@ -28,12 +28,12 @@ struct Sum {
 
 struct Broadcast {
   struct Expansion {
-    int32_t dim;
-    int32_t scale;
+    int64_t dim;
+    int64_t scale;
   };
 
   InstId operand_id;
-  llvm::SmallVector<Expansion, 2> expansions;
+  llvm::SmallVector<Expansion> expansions;
 };
 
 struct Unsqueeze {
@@ -55,7 +55,7 @@ struct Transpose {
 
 struct Reshape {
   InstId operand_id;
-  llvm::SmallVector<int64_t, 4> target_shape;
+  llvm::SmallVector<int64_t> target_shape;
 };
 
 struct Add {

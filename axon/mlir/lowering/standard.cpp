@@ -265,10 +265,10 @@ struct UnqueezeOpLowering : mlir::OpConversionPattern<UnsqueezeOp> {
       return mlir::failure();
     }
 
-    auto collapse_op = mlir::tensor::ExpandShapeOp::create(
+    auto expand_op = mlir::tensor::ExpandShapeOp::create(
         rewriter, op.getLoc(), op.getResult().getType(), adaptor.getOperand(),
         *reassociation_indices);
-    rewriter.replaceOp(op, collapse_op);
+    rewriter.replaceOp(op, expand_op);
     return mlir::success();
   }
 };
@@ -278,7 +278,38 @@ struct ReshapeOpLowering : mlir::OpConversionPattern<ReshapeOp> {
 
   auto matchAndRewrite(ReshapeOp op, OpAdaptor adaptor,
                        mlir::ConversionPatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {}
+      -> mlir::LogicalResult final {
+    auto result_type = op.getResult().getType();
+    auto result_tensor = mlir::cast<mlir::RankedTensorType>(result_type);
+    auto input_tensor =
+        mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
+    auto reassociation_indices =
+        mlir::getReassociationIndicesForReshape(input_tensor, result_tensor);
+    if (!reassociation_indices) {
+      op.emitError(
+          std::format("Failed to compute reassociation indices for {} and {}",
+                      input_tensor.getShape(), result_tensor.getShape()));
+      return mlir::failure();
+    }
+
+    if (input_tensor.getRank() < result_tensor.getRank()) {
+      auto expand_op = mlir::tensor::ExpandShapeOp::create(
+          rewriter, op.getLoc(), op.getResult().getType(), adaptor.getOperand(),
+          *reassociation_indices);
+      rewriter.replaceOp(op, expand_op);
+      return mlir::success();
+    }
+
+    if (input_tensor.getRank() > result_tensor.getRank()) {
+      auto expand_op = mlir::tensor::CollapseShapeOp::create(
+          rewriter, op.getLoc(), op.getResult().getType(), adaptor.getOperand(),
+          *reassociation_indices);
+      rewriter.replaceOp(op, expand_op);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
 };
 
 struct TransposeOpLowering : mlir::OpConversionPattern<TransposeOp> {
@@ -442,16 +473,16 @@ struct AxonToStandardLoweringPass
     target.addLegalOp<TupleAccessOp>();
     target.addIllegalOp<GetDataOp, AccumulateGradOp, FillLikeOp, AddOp, MulOp,
                         MatMulOp, SumOp, BroadcastOp, TransposeOp, SqueezeOp,
-                        UnsqueezeOp>();
+                        UnsqueezeOp, ReshapeOp>();
 
     AxonToStandardTypeConverter type_converter{&context};
 
     mlir::RewritePatternSet patterns{&context};
-    patterns.add<GetDataOpLowering, AccumulateGradOpLowering,
-                 FillLikeOpLowering, AddOpLowering, MulOpLowering,
-                 MatMulOpLowering, SumOpLowering, BroadcastOpLowering,
-                 TransposeOpLowering, SqueezeOpLowering, UnqueezeOpLowering>(
-        type_converter, &context);
+    patterns
+        .add<GetDataOpLowering, AccumulateGradOpLowering, FillLikeOpLowering,
+             AddOpLowering, MulOpLowering, MatMulOpLowering, SumOpLowering,
+             BroadcastOpLowering, TransposeOpLowering, SqueezeOpLowering,
+             UnqueezeOpLowering, ReshapeOpLowering>(type_converter, &context);
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, type_converter);

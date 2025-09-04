@@ -1,3 +1,4 @@
+#include <format>
 #include <iostream>
 #include <memory>
 #include <print>
@@ -44,6 +45,61 @@ static auto createStoragefromNanobind(nb::ndarray<>& array,
   return {element_type, data_ptr, shape, stride, /*is_owned=*/true};
 }
 
+struct BroadcastInfo {
+  llvm::SmallVector<insts::Broadcast::Expansion> expansions;
+  llvm::SmallVector<int64_t> unsqueezed_shape;
+};
+
+static auto tryGetBroadcastInfo(llvm::ArrayRef<int64_t> source_shape,
+                                llvm::ArrayRef<int64_t> target_shape)
+    -> std::optional<BroadcastInfo> {
+  auto source_rank = static_cast<int64_t>(source_shape.size());
+  auto target_rank = static_cast<int64_t>(target_shape.size());
+
+  AXON_DCHECK(source_rank < target_rank, "");
+
+  BroadcastInfo broadcast_info;
+
+  for (auto i = target_rank - 1; i >= 0; i -= 1) {
+    auto source_dim =
+        i > source_rank - 1 ? 1 : source_shape[source_rank - 1 - i];
+    auto target_dim = target_shape[target_rank - 1 - i];
+
+    broadcast_info.unsqueezed_shape.push_back(source_dim);
+
+    if (source_dim == 1) {
+      broadcast_info.expansions.push_back(
+          {.dim = target_rank - 1 - i, .scale = target_dim});
+      continue;
+    }
+
+    // if `source_dim` and `target_dim` are not equal and `source_dim` is not
+    // equal to 1 then we cannot broadcast `source_shape` into the
+    // `target_shape`.
+    if (source_dim != target_dim) {
+      return std::nullopt;
+    }
+  }
+
+  return broadcast_info;
+}
+
+static auto performBroadcasting(Graph& graph, InstId source_id,
+                                llvm::ArrayRef<int64_t> source_shape,
+                                llvm::ArrayRef<int64_t> target_shape)
+    -> InstId {
+  auto broadcast_info = tryGetBroadcastInfo(source_shape, target_shape);
+  if (!broadcast_info) {
+    throw std::runtime_error(std::format("Failed to broadcast {} into {}",
+                                         source_shape, target_shape));
+  }
+
+  auto reshaped_id = graph.createOp(
+      insts::Reshape(source_id, broadcast_info->unsqueezed_shape));
+  return graph.createOp(
+      insts::Broadcast(reshaped_id, broadcast_info->expansions));
+}
+
 static thread_local std::weak_ptr<Graph> current_graph;
 
 static auto buildGraphBindings(nb::module_& m) -> void {
@@ -80,29 +136,6 @@ static auto buildGraphBindings(nb::module_& m) -> void {
         [](GraphRef graph) -> void { current_graph = graph.inner; });
 }
 
-static auto broadcastIfNecessary(Graph& graph, InstId lhs_id, InstId rhs_id)
-    -> std::pair<InstId, InstId> {
-  auto lhs_shape = graph.getShape(lhs_id);
-  auto rhs_shape = graph.getShape(rhs_id);
-
-  auto lhs_rank = lhs_shape.size();
-  auto rhs_rank = rhs_shape.size();
-
-  if (lhs_rank != rhs_rank) {
-    if (lhs_rank == 2 && rhs_rank == 3) {
-      lhs_id = graph.createOp(insts::Unsqueeze(lhs_id, 0));
-
-      insts::Broadcast::Expansion expansion;
-      expansion.dim = 0;
-      expansion.scale = rhs_shape[0];
-
-      lhs_id = graph.createOp(insts::Broadcast(lhs_id, {expansion}));
-    }
-  }
-
-  return {lhs_id, rhs_id};
-}
-
 static auto buildTensorBindings(nb::module_& m) -> void {
   nb::class_<Tensor>(m, "Tensor")
       .def_prop_ro("shape",
@@ -122,8 +155,25 @@ static auto buildTensorBindings(nb::module_& m) -> void {
       .def("__add__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
              if (auto graph = current_graph.lock()) {
-               auto inst_id =
-                   graph->createOp(insts::Add(lhs.inst_id(), rhs.inst_id()));
+               auto lhs_id = lhs.inst_id();
+               auto rhs_id = rhs.inst_id();
+
+               auto lhs_shape = graph->getShape(lhs_id);
+               auto rhs_shape = graph->getShape(rhs_id);
+
+               // try broadcast lhs to have the same shape as rhs
+               if (lhs_shape.size() < rhs_shape.size()) {
+                 lhs_id =
+                     performBroadcasting(*graph, lhs_id, lhs_shape, rhs_shape);
+               }
+
+               // try broadcast lhs to have the same shape as rhs
+               if (lhs_shape.size() > rhs_shape.size()) {
+                 rhs_id =
+                     performBroadcasting(*graph, rhs_id, rhs_shape, lhs_shape);
+               }
+
+               auto inst_id = graph->createOp(insts::Add(lhs_id, rhs_id));
                return {inst_id};
              }
              throw std::runtime_error(
@@ -135,11 +185,23 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              if (auto graph = current_graph.lock()) {
                auto lhs_id = lhs.inst_id();
                auto rhs_id = rhs.inst_id();
-               std::tie(lhs_id, rhs_id) =
-                   broadcastIfNecessary(*graph, lhs_id, rhs_id);
+
+               auto lhs_shape = graph->getShape(lhs_id);
+               auto rhs_shape = graph->getShape(rhs_id);
+
+               // try broadcast lhs to have the same shape as rhs
+               if (lhs_shape.size() < rhs_shape.size()) {
+                 lhs_id =
+                     performBroadcasting(*graph, lhs_id, lhs_shape, rhs_shape);
+               }
+
+               // try broadcast lhs to have the same shape as rhs
+               if (lhs_shape.size() > rhs_shape.size()) {
+                 rhs_id =
+                     performBroadcasting(*graph, rhs_id, rhs_shape, lhs_shape);
+               }
 
                auto inst_id = graph->createOp(insts::Mul(lhs_id, rhs_id));
-
                return {inst_id};
              }
              throw std::runtime_error(
@@ -151,8 +213,6 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              if (auto graph = current_graph.lock()) {
                auto lhs_id = lhs.inst_id();
                auto rhs_id = rhs.inst_id();
-               std::tie(lhs_id, rhs_id) =
-                   broadcastIfNecessary(*graph, lhs_id, rhs_id);
 
                auto inst_id = graph->createOp(insts::MatMul(lhs_id, rhs_id));
 

@@ -185,7 +185,17 @@ static auto codegen(insts::Unsqueeze op, CompilationContext& ctx,
 }
 
 static auto codegen(insts::Reshape op, CompilationContext& ctx, InstId inst_id)
-    -> void {}
+    -> void {
+  auto operand = ctx.values[op.operand_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+
+  auto result_type = mlir::RankedTensorType::get(op.target_shape,
+                                                 tensor_type.getElementType());
+
+  ctx.values[inst_id] =
+      ReshapeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), result_type,
+                        operand, op.target_shape);
+}
 
 static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {

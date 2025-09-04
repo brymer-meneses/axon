@@ -32,7 +32,7 @@ struct InferShapeRule<insts::MatMul> {
     auto rhs_shape = shapes.get(op.rhs_id)->get();
 
     AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
-                "op.lhs_id must have a shape already.");
+                "lhs and rhs must have the same rank.");
 
     Shape shape = lhs_shape;
     // (N, A, B) @ (N, B, C) => (N, A, C)
@@ -144,8 +144,6 @@ struct InferShapeRule<insts::Reshape> {
       -> Shape {
     AXON_DCHECK(shapes.get(op.operand_id),
                 "op.operand_id must have a shape already.");
-
-    auto operand = shapes.get(op.operand_id);
     return {op.target_shape.begin(), op.target_shape.end()};
   }
 };

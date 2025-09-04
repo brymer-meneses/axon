@@ -10,7 +10,9 @@ module;
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Verifier.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
@@ -55,8 +57,18 @@ export class CompilationUnit {
     mlir::OpBuilder builder(&context_);
 
     module_op_ = mlir::ModuleOp::create(builder.getUnknownLoc());
-
     codegenGraph(graph, builder, module_op_);
+
+    if (mlir::verify(module_op_).failed()) {
+      module_op_.walk([&](mlir::Operation* op) {
+        if (mlir::verify(op).failed()) {
+          llvm::errs() << "Verifier failed on op: " << op->getName() << "\n";
+          op->dump();
+        }
+      });
+      return mlir::failure();
+    }
+
     manager.enableVerifier();
 
     axon::buildLlvmLoweringPipeline(manager, level);

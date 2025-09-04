@@ -44,11 +44,11 @@ target_sources(axon
     axon/core/inst.cpp
     axon/core/autodiff.cpp
     axon/core/inst_kinds.cpp
-    axon/core/shape_rules.cpp
-    axon/core/backward_rules.cpp
     axon/core/ids.cpp
     axon/core/graph.cpp
     axon/core/storage.cpp
+    axon/core/rules/backward.cpp
+    axon/core/rules/shape.cpp
 
     axon/mlir/codegen.cpp
     axon/mlir/mlir.cpp
