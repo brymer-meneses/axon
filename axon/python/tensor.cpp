@@ -3,7 +3,6 @@ module;
 #include <iomanip>
 #include <memory>
 #include <optional>
-#include <print>
 #include <ranges>
 #include <sstream>
 #include <utility>
@@ -97,7 +96,8 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream, const float* ptr,
     // Base case: 1-D row
     stream << "[";
     for (int64_t i = 0; i < shape[dim]; ++i) {
-      stream << ptr[i * strides[dim]];
+      float elem = ptr[i * strides[dim]];
+      stream << std::format("{:.4f}", elem);
       if (i + 1 < shape[dim]) {
         stream << ", ";
       }

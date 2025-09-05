@@ -45,61 +45,6 @@ static auto createStoragefromNanobind(nb::ndarray<>& array,
   return {element_type, data_ptr, shape, stride, /*is_owned=*/true};
 }
 
-struct BroadcastInfo {
-  llvm::SmallVector<insts::Broadcast::Expansion> expansions;
-  llvm::SmallVector<int64_t> unsqueezed_shape;
-};
-
-static auto tryGetBroadcastInfo(llvm::ArrayRef<int64_t> source_shape,
-                                llvm::ArrayRef<int64_t> target_shape)
-    -> std::optional<BroadcastInfo> {
-  auto source_rank = static_cast<int64_t>(source_shape.size());
-  auto target_rank = static_cast<int64_t>(target_shape.size());
-
-  AXON_DCHECK(source_rank < target_rank, "");
-
-  BroadcastInfo broadcast_info;
-
-  for (auto i = target_rank - 1; i >= 0; i -= 1) {
-    auto source_dim =
-        i > source_rank - 1 ? 1 : source_shape[source_rank - 1 - i];
-    auto target_dim = target_shape[target_rank - 1 - i];
-
-    broadcast_info.unsqueezed_shape.push_back(source_dim);
-
-    if (source_dim == 1) {
-      broadcast_info.expansions.push_back(
-          {.dim = target_rank - 1 - i, .scale = target_dim});
-      continue;
-    }
-
-    // if `source_dim` and `target_dim` are not equal and `source_dim` is not
-    // equal to 1 then we cannot broadcast `source_shape` into the
-    // `target_shape`.
-    if (source_dim != target_dim) {
-      return std::nullopt;
-    }
-  }
-
-  return broadcast_info;
-}
-
-static auto performBroadcasting(Graph& graph, InstId source_id,
-                                llvm::ArrayRef<int64_t> source_shape,
-                                llvm::ArrayRef<int64_t> target_shape)
-    -> InstId {
-  auto broadcast_info = tryGetBroadcastInfo(source_shape, target_shape);
-  if (!broadcast_info) {
-    throw std::runtime_error(std::format("Failed to broadcast {} into {}",
-                                         source_shape, target_shape));
-  }
-
-  auto reshaped_id = graph.createOp(
-      insts::Reshape(source_id, broadcast_info->unsqueezed_shape));
-  return graph.createOp(
-      insts::Broadcast(reshaped_id, broadcast_info->expansions));
-}
-
 static thread_local std::weak_ptr<Graph> current_graph;
 
 static auto buildGraphBindings(nb::module_& m) -> void {
@@ -136,6 +81,160 @@ static auto buildGraphBindings(nb::module_& m) -> void {
         [](GraphRef graph) -> void { current_graph = graph.inner; });
 }
 
+struct BroadcastInfo {
+  llvm::SmallVector<insts::Broadcast::Expansion> expansions;
+  llvm::SmallVector<int64_t> unsqueezed_shape;
+};
+
+static auto tryGetBroadcastInfo(llvm::ArrayRef<int64_t> source_shape,
+                                llvm::ArrayRef<int64_t> target_shape)
+    -> std::optional<BroadcastInfo> {
+  auto source_rank = static_cast<int64_t>(source_shape.size());
+  auto target_rank = static_cast<int64_t>(target_shape.size());
+
+  AXON_DCHECK(
+      source_rank < target_rank,
+      "Expected the source shape to have lower rank than the target shape");
+
+  BroadcastInfo broadcast_info;
+
+  for (auto i = target_rank - 1; i >= 0; i -= 1) {
+    // Calculate corresponding source index (right-aligned)
+    auto source_index = i - (target_rank - source_rank);
+    auto source_dim = source_index >= 0 ? source_shape[source_index] : 1;
+    auto target_dim = target_shape[i];
+
+    broadcast_info.unsqueezed_shape.push_back(source_dim);
+
+    if (source_dim == 1) {
+      broadcast_info.expansions.push_back({.dim = i, .scale = target_dim});
+      continue;
+    }
+
+    // if `source_dim` and `target_dim` are not equal and `source_dim` is not
+    // equal to 1 then we cannot broadcast `source_shape` into the
+    // `target_shape`.
+    if (source_dim != target_dim) {
+      return std::nullopt;
+    }
+  }
+
+  std::reverse(broadcast_info.unsqueezed_shape.begin(),
+               broadcast_info.unsqueezed_shape.end());
+
+  return broadcast_info;
+}
+
+static auto performBroadcasting(Graph& graph, InstId source_id,
+                                llvm::ArrayRef<int64_t> source_shape,
+                                llvm::ArrayRef<int64_t> target_shape)
+    -> std::optional<InstId> {
+  auto broadcast_info = tryGetBroadcastInfo(source_shape, target_shape);
+  if (!broadcast_info) {
+    return std::nullopt;
+  }
+
+  auto reshaped_id = graph.createOp(
+      insts::Reshape(source_id, broadcast_info->unsqueezed_shape));
+  return graph.createOp(
+      insts::Broadcast(reshaped_id, broadcast_info->expansions));
+}
+
+template <typename ElementWiseInst>
+static auto performElementWiseOperation(Graph& graph, const Tensor& lhs,
+                                        const Tensor& rhs) -> Tensor {
+  auto lhs_id = lhs.inst_id();
+  auto rhs_id = rhs.inst_id();
+
+  auto lhs_shape = graph.getShape(lhs_id);
+  auto rhs_shape = graph.getShape(rhs_id);
+
+  // try broadcasting lhs to have the same shape as rhs
+  if (lhs_shape.size() < rhs_shape.size()) {
+    auto new_lhs_id = performBroadcasting(graph, lhs_id, lhs_shape, rhs_shape);
+    if (!new_lhs_id) {
+      throw std::runtime_error(
+          std::format("Failed to broadcast {} into {}", lhs_shape, rhs_shape));
+    }
+    lhs_id = *new_lhs_id;
+  }
+
+  // try broadcasting lhs to have the same shape as rhs
+  if (lhs_shape.size() > rhs_shape.size()) {
+    auto new_rhs_id = performBroadcasting(graph, rhs_id, rhs_shape, lhs_shape);
+    if (!new_rhs_id) {
+      throw std::runtime_error(
+          std::format("Failed to broadcast {} into {}", lhs_shape, rhs_shape));
+    }
+    rhs_id = *new_rhs_id;
+  }
+
+  auto inst_id = graph.createOp(ElementWiseInst(lhs_id, rhs_id));
+  return {inst_id};
+}
+
+static auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
+    -> Tensor {
+  static auto is_valid_matmul = [](llvm::ArrayRef<int64_t> lhs_shape,
+                                   llvm::ArrayRef<int64_t> rhs_shape) {
+    AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
+                "At this point lhs and rhs must have the same rank");
+
+    if (lhs_shape.size() == 3) {
+      return lhs_shape[2] == rhs_shape[1];
+    }
+
+    if (lhs_shape.size() == 2) {
+      return lhs_shape[1] == rhs_shape[0];
+    }
+    std::unreachable();
+  };
+
+  llvm::ArrayRef<int64_t> lhs_shape = lhs.shape();
+  llvm::ArrayRef<int64_t> rhs_shape = rhs.shape();
+
+  auto lhs_id = lhs.inst_id();
+  auto rhs_id = rhs.inst_id();
+
+  if (lhs_shape.size() > 3 || rhs_shape.size() > 3) {
+    throw std::runtime_error(
+        "Attempted to multiply tensors with more than rank of 3.");
+  }
+
+  if (lhs_shape.size() < rhs_shape.size()) {
+    if (lhs_shape.size() == 2 && rhs_shape.size() == 3) {
+      llvm::SmallVector<int64_t> target_shape(lhs_shape);
+      target_shape.insert(target_shape.begin(), rhs_shape[0]);
+
+      if (not is_valid_matmul(target_shape, rhs_shape)) {
+        throw std::runtime_error(
+            std::format("Cannot perform matrix multiplication on tensors with "
+                        "shape {} and {}",
+                        lhs_shape, rhs_shape));
+      }
+
+      lhs_id = *performBroadcasting(graph, lhs_id, lhs_shape, target_shape);
+    }
+  }
+  if (lhs_shape.size() > rhs_shape.size()) {
+    if (lhs_shape.size() == 3 && rhs_shape.size() == 2) {
+      llvm::SmallVector<int64_t> target_shape(rhs_shape);
+      target_shape.insert(target_shape.begin(), lhs_shape[0]);
+
+      if (not is_valid_matmul(lhs_shape, target_shape)) {
+        throw std::runtime_error(
+            std::format("Cannot perform matrix multiplication on tensors with "
+                        "shape {} and {}",
+                        lhs_shape, rhs_shape));
+      }
+
+      rhs_id = *performBroadcasting(graph, rhs_id, rhs_shape, target_shape);
+    }
+  }
+
+  return graph.createOp(insts::MatMul(lhs_id, rhs_id));
+}
+
 static auto buildTensorBindings(nb::module_& m) -> void {
   nb::class_<Tensor>(m, "Tensor")
       .def_prop_ro("shape",
@@ -154,74 +253,34 @@ static auto buildTensorBindings(nb::module_& m) -> void {
            })
       .def("__add__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
-             if (auto graph = current_graph.lock()) {
-               auto lhs_id = lhs.inst_id();
-               auto rhs_id = rhs.inst_id();
-
-               auto lhs_shape = graph->getShape(lhs_id);
-               auto rhs_shape = graph->getShape(rhs_id);
-
-               // try broadcast lhs to have the same shape as rhs
-               if (lhs_shape.size() < rhs_shape.size()) {
-                 lhs_id =
-                     performBroadcasting(*graph, lhs_id, lhs_shape, rhs_shape);
-               }
-
-               // try broadcast lhs to have the same shape as rhs
-               if (lhs_shape.size() > rhs_shape.size()) {
-                 rhs_id =
-                     performBroadcasting(*graph, rhs_id, rhs_shape, lhs_shape);
-               }
-
-               auto inst_id = graph->createOp(insts::Add(lhs_id, rhs_id));
-               return {inst_id};
+             auto graph = current_graph.lock();
+             if (!graph) {
+               throw std::runtime_error(
+                   "Failed to invoke add since there is no active "
+                   "graph.");
              }
-             throw std::runtime_error(
-                 "Failed to invoke add since there is no active "
-                 "graph.");
+             return performElementWiseOperation<insts::Add>(*graph, lhs, rhs);
            })
       .def("__mul__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
-             if (auto graph = current_graph.lock()) {
-               auto lhs_id = lhs.inst_id();
-               auto rhs_id = rhs.inst_id();
-
-               auto lhs_shape = graph->getShape(lhs_id);
-               auto rhs_shape = graph->getShape(rhs_id);
-
-               // try broadcast lhs to have the same shape as rhs
-               if (lhs_shape.size() < rhs_shape.size()) {
-                 lhs_id =
-                     performBroadcasting(*graph, lhs_id, lhs_shape, rhs_shape);
-               }
-
-               // try broadcast lhs to have the same shape as rhs
-               if (lhs_shape.size() > rhs_shape.size()) {
-                 rhs_id =
-                     performBroadcasting(*graph, rhs_id, rhs_shape, lhs_shape);
-               }
-
-               auto inst_id = graph->createOp(insts::Mul(lhs_id, rhs_id));
-               return {inst_id};
+             auto graph = current_graph.lock();
+             if (!graph) {
+               throw std::runtime_error(
+                   "Failed to invoke mul since there is no active "
+                   "graph.");
              }
-             throw std::runtime_error(
-                 "Failed to invoke mul since there is no active "
-                 "graph.");
+             return performElementWiseOperation<insts::Mul>(*graph, lhs, rhs);
            })
       .def("__matmul__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
-             if (auto graph = current_graph.lock()) {
-               auto lhs_id = lhs.inst_id();
-               auto rhs_id = rhs.inst_id();
-
-               auto inst_id = graph->createOp(insts::MatMul(lhs_id, rhs_id));
-
-               return {inst_id};
+             auto graph = current_graph.lock();
+             if (!graph) {
+               throw std::runtime_error(
+                   "Failed to invoke matmul since there is no active "
+                   "graph.");
              }
 
-             throw std::runtime_error(
-                 "Failed to invoke matmul since there is no active "
-                 "graph.");
+             return performMatMul(*graph, lhs, rhs);
            })
       .def("backward",
            [](const Tensor& self) -> void {

@@ -21,7 +21,7 @@ class LoweringOps:
     execute: bool = True
 
 def jit(opts: Optional[LoweringOps] = None) -> typing.Callable:
-    def decorator(func: typing.Callable) -> typing.Callable:
+    def decorator(func: typing.Callable) -> CompiledFunction:
         compiled = CompiledFunction(opts, func)
         compiled.__doc__ = func.__doc__
         compiled.__qualname__ = func.__qualname__

@@ -85,7 +85,7 @@ target_link_libraries(axon
 if (MSVC)
   target_compile_options(axon PRIVATE /W4 /WX)
 else()
-  target_compile_options(axon PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(axon PRIVATE -Wall -Wextra -Wpedantic -fsanitize=address)
 endif()
 
 set(LLVM_TARGET_DEFINITIONS axon/mlir/dialect/dialect.td)

@@ -68,9 +68,6 @@ auto TupleAccessOp::parse(mlir::OpAsmParser& parser,
 }
 
 auto ReshapeOp::verify() -> mlir::LogicalResult {
-  auto target_shape = getTargetShape();
-  auto operand = mlir::cast<mlir::RankedTensorType>(getOperand().getType());
-
   static constexpr auto compute_num_elems = [](llvm::ArrayRef<int64_t> shape) {
     int64_t elems = 1;
     for (auto dim : shape) {
@@ -79,11 +76,13 @@ auto ReshapeOp::verify() -> mlir::LogicalResult {
     return elems;
   };
 
-  auto lhs_elems = compute_num_elems(target_shape);
-  auto rhs_elems = compute_num_elems(operand.getShape());
+  auto operand = mlir::cast<mlir::RankedTensorType>(getOperand().getType());
+  auto source_elems = compute_num_elems(operand.getShape());
+  auto target_elems = compute_num_elems(getTargetShape());
 
-  if (lhs_elems != rhs_elems) {
-    emitOpError() << "Not a valid reshape.";
+  if (source_elems != target_elems) {
+    emitOpError() << std::format("{} -> {} is not a valid reshape",
+                                 operand.getShape(), getTargetShape());
     return mlir::failure();
   }
 

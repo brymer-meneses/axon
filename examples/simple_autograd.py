@@ -8,7 +8,7 @@ opts = LoweringOps(LoweringLevel.Axon)
 
 @axon.jit(opts)
 def matmul(a, b): 
-    l = a * b + a * b
+    l = a @ b + b 
     l.backward()
 
 a = axon.tensor(np.ones((2, 2), dtype=np.float32), requires_grad=True)

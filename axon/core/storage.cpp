@@ -61,6 +61,13 @@ class Storage {
     is_owned_ = other.is_owned_;
   }
 
+  ~Storage() {
+    if (is_owned_) {
+      auto bytes = reinterpret_cast<std::byte*>(data_);
+      delete[] bytes;
+    }
+  }
+
   auto operator=(Storage&& other) -> Storage& {
     if (this == &other) {
       return *this;
@@ -114,10 +121,10 @@ class Storage {
 
     if (element_type == ElementType::Float32) {
       auto* data_ptr = reinterpret_cast<float*>(data);
-      std::fill_n(data_ptr, size, value);
+      std::fill_n(data_ptr, num_elems, value);
     } else if (element_type == ElementType::Float64) {
       auto* data_ptr = reinterpret_cast<double*>(data);
-      std::fill_n(data_ptr, size, value);
+      std::fill_n(data_ptr, num_elems, value);
     }
 
     return {element_type, data, shape, strides, /*is_owned=*/true};
