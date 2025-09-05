@@ -87,6 +87,7 @@ def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure]> {
 }
 
 def Axon_AccumulateGradOp : AxonDialect_Op<"accumulate_grad", [
+  MemoryEffectsOpInterface,
   DeclareOpInterfaceMethods<MemoryEffectsOpInterface>
 ]> {
   let arguments = (ins Axon_TensorRefType:$accumulator, AnyTensor:$value);
@@ -100,7 +101,7 @@ def Axon_FillLikeOp : AxonDialect_Op<"fill_like", [
   SameOperandsAndResultElementType,
   SameOperandsAndResultType,
 ]> {
-  let arguments = (ins AnyTensor:$tensor, F64Attr:$fill_value);
+  let arguments = (ins AnyTensor:$tensor, F32Attr:$fill_value);
   let results = (outs AnyTensor:$result);
 
 

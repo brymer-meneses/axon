@@ -111,7 +111,7 @@ static auto codegen(insts::OnesLike op, CompilationContext& ctx, InstId inst_id)
   auto like = ctx.values[op.operand_id];
   ctx.values[inst_id] =
       FillLikeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like,
-                         ctx.builder.getF64FloatAttr(1.0));
+                         ctx.builder.getF32FloatAttr(1.0));
 }
 
 static auto codegen(insts::Add op, CompilationContext& ctx, InstId inst_id)

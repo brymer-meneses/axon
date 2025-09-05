@@ -97,7 +97,7 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream, const float* ptr,
     stream << "[";
     for (int64_t i = 0; i < shape[dim]; ++i) {
       float elem = ptr[i * strides[dim]];
-      stream << std::format("{:.4f}", elem);
+      stream << elem;
       if (i + 1 < shape[dim]) {
         stream << ", ";
       }

@@ -23,6 +23,21 @@ export module axon.mlir:standard_lowering;
 
 namespace axon {
 
+static auto createZerosLike(mlir::ConversionPatternRewriter& rewriter,
+                            mlir::RankedTensorType tensor_type,
+                            mlir::Location loc) -> mlir::Value {
+  auto element_type = tensor_type.getElementType();
+  auto empty_op = mlir::tensor::EmptyOp::create(
+      rewriter, loc, tensor_type.getShape(), element_type);
+  auto fill_value = mlir::arith::ConstantOp::create(
+      rewriter, loc, element_type, rewriter.getZeroAttr(element_type));
+  auto fill_op =
+      mlir::linalg::FillOp::create(rewriter, loc, mlir::ValueRange{fill_value},
+                                   mlir::ValueRange{empty_op})
+          .getResult(0);
+  return fill_op;
+}
+
 template <typename BinaryOp, typename LoweredBinaryOp>
 struct ElementWiseBinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
   using mlir::OpConversionPattern<BinaryOp>::OpConversionPattern;
@@ -33,13 +48,13 @@ struct ElementWiseBinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
 
-    auto tensor_type = mlir::cast<mlir::TensorType>(op.getResult().getType());
-    auto empty = mlir::tensor::EmptyOp::create(
-        rewriter, loc, tensor_type.getShape(), tensor_type.getElementType());
+    auto tensor_type =
+        mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
+    auto empty_op = createZerosLike(rewriter, tensor_type, loc);
 
     auto new_op = LoweredBinaryOp::create(
         rewriter, loc, mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
-        mlir::ValueRange{empty});
+        mlir::ValueRange{empty_op});
 
     rewriter.replaceOp(op, new_op.getResult(0));
     return mlir::success();
@@ -65,14 +80,12 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
       return mlir::failure();
     }
 
-    auto empty_op = mlir::tensor::EmptyOp::create(
-        rewriter, loc, result_tensor_type.getShape(),
-        result_tensor_type.getElementType());
+    auto init_op = createZerosLike(rewriter, result_tensor_type, loc);
 
     if (result_tensor_type.getRank() == 3) {
       auto new_op = mlir::linalg::BatchMatmulOp::create(
           rewriter, loc, mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
-          mlir::ValueRange{empty_op});
+          mlir::ValueRange{init_op});
       rewriter.replaceOp(op, new_op.getResult(0));
       return mlir::success();
     }
@@ -80,7 +93,7 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
     if (result_tensor_type.getRank() == 2) {
       auto new_op = mlir::linalg::MatmulOp::create(
           rewriter, loc, mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
-          mlir::ValueRange{empty_op});
+          mlir::ValueRange{init_op});
       rewriter.replaceOp(op, new_op.getResult(0));
       return mlir::success();
     }
@@ -95,6 +108,8 @@ struct BroadcastOpLowering : mlir::OpConversionPattern<BroadcastOp> {
   auto matchAndRewrite(BroadcastOp op, OpAdaptor adaptor,
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+
     auto result_tensor =
         mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
 
@@ -123,9 +138,7 @@ struct BroadcastOpLowering : mlir::OpConversionPattern<BroadcastOp> {
     llvm::SmallVector iterator_types(result_tensor.getRank(),
                                      mlir::utils::IteratorType::parallel);
 
-    auto init_op = mlir::tensor::EmptyOp::create(
-        rewriter, op.getLoc(), result_tensor.getShape(),
-        result_tensor.getElementType());
+    auto init_op = createZerosLike(rewriter, result_tensor, loc);
 
     auto broadcast_op = mlir::linalg::GenericOp::create(
         rewriter, op.getLoc(),
@@ -194,9 +207,7 @@ struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
                                      mlir::utils::IteratorType::parallel);
     iterator_types[dim_to_reduce] = mlir::utils::IteratorType::reduction;
 
-    auto init_op =
-        mlir::tensor::EmptyOp::create(rewriter, loc, result_tensor.getShape(),
-                                      result_tensor.getElementType());
+    auto init_op = createZerosLike(rewriter, result_tensor, loc);
 
     auto sum_op = mlir::linalg::GenericOp::create(
         rewriter, loc,
@@ -414,8 +425,9 @@ struct FillLikeOpLowering : mlir::OpConversionPattern<FillLikeOp> {
     auto result_buffer = mlir::tensor::EmptyOp::create(
         rewriter, loc, tensor.getShape(), tensor.getElementType());
 
-    auto fill_value = rewriter.create<mlir::arith::ConstantFloatOp>(
-        loc, rewriter.getF64Type(), op.getFillValue());
+    auto fill_value = mlir::arith::ConstantOp::create(
+        rewriter, loc, rewriter.getF32Type(),
+        rewriter.getF32FloatAttr(op.getFillValue().convertToFloat()));
 
     auto fill_op = mlir::linalg::FillOp::create(
         rewriter, loc, mlir::ValueRange{fill_value},

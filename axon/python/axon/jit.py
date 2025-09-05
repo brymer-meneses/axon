@@ -52,6 +52,7 @@ class CompiledFunction:
             self._compiled = graph.compile(self._opts.level)
 
         if self._opts.execute and self._opts.level == LoweringLevel.LLVM:
+            print("executing ..")
             return self._compiled.execute(tensors)
 
     def dump_ir(self) -> str:

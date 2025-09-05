@@ -4,15 +4,15 @@ from axon import LoweringLevel, LoweringOps
 
 import numpy as np
 
-opts = LoweringOps(LoweringLevel.Axon)
+opts = LoweringOps(LoweringLevel.LLVM)
 
 @axon.jit(opts)
 def matmul(a, b): 
-    l = a @ b + b 
+    l = a @ b
     l.backward()
 
-a = axon.ones((2, 2), dtype=axon.float32, requires_grad=True)
-b = axon.ones((5, 2, 2), dtype=axon.float32, requires_grad=True)
+a = axon.ones((2, 2), requires_grad=True)
+b = axon.ones((5, 2, 2), requires_grad=True)
 
 matmul(a,b)
 print(matmul.dump_ir())
