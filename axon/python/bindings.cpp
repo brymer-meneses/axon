@@ -1,9 +1,5 @@
 #include <format>
-#include <iostream>
 #include <memory>
-#include <print>
-#include <ranges>
-#include <sstream>
 #include <stdexcept>
 
 #include "axon/base/dcheck.h"
@@ -30,7 +26,7 @@ namespace nb = nanobind;
 using namespace axon;
 
 static auto createStoragefromNanobind(nb::ndarray<>& array,
-                                      ElementType element_type) -> Storage {
+                                      DataType element_type) -> Storage {
   // TODO: Explore ways to avoid copying the memory.
   auto buffer_size = array.size() * element_type.getSizeInBytes();
   auto* data_ptr = new std::byte[buffer_size];
@@ -39,7 +35,7 @@ static auto createStoragefromNanobind(nb::ndarray<>& array,
   auto shape = llvm::ArrayRef<int64_t>(array.shape_ptr(), array.ndim());
   auto stride = llvm::ArrayRef<int64_t>(array.stride_ptr(), array.ndim());
 
-  AXON_DCHECK(element_type == ElementType::Float32,
+  AXON_DCHECK(element_type == DataType::Float32,
               "Only float32 is supported for now.");
 
   return {element_type, data_ptr, shape, stride, /*is_owned=*/true};
@@ -67,7 +63,7 @@ static auto buildGraphBindings(nb::module_& m) -> void {
            })
       .def("create_constant",
            [](GraphRef& graph, nb::ndarray<>& array,
-              ElementType::InternalType element_type) -> Tensor {
+              DataType::InternalType element_type) -> Tensor {
              auto data = createStoragefromNanobind(array, element_type);
              auto inst_id = graph.inner->createConstant(std::move(data));
              return {inst_id};
@@ -235,6 +231,20 @@ static auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
   return graph.createOp(insts::MatMul(lhs_id, rhs_id));
 }
 
+auto computeRowMajorStrides(llvm::ArrayRef<int64_t> shape)
+    -> llvm::SmallVector<int64_t> {
+  llvm::SmallVector<int64_t> strides(shape.size());
+  int64_t stride = 1;
+
+  // Work backwards from the last dimension
+  for (int i = static_cast<int32_t>(shape.size()) - 1; i >= 0; --i) {
+    strides[i] = stride;
+    stride *= shape[i];
+  }
+
+  return strides;
+}
+
 static auto buildTensorBindings(nb::module_& m) -> void {
   nb::class_<Tensor>(m, "Tensor")
       .def_prop_ro("shape",
@@ -284,14 +294,13 @@ static auto buildTensorBindings(nb::module_& m) -> void {
            })
       .def("backward",
            [](const Tensor& self) -> void {
-             if (auto graph = current_graph.lock()) {
-               axon::backward(*graph, self.inst_id());
-               return;
+             auto graph = current_graph.lock();
+             if (!graph) {
+               throw std::runtime_error(
+                   "Failed to invoke backpropagation since there is no active "
+                   "graph.");
              }
-
-             throw std::runtime_error(
-                 "Failed to invoke backpropagation since there is no active "
-                 "graph.");
+             axon::backward(*graph, self.inst_id());
            })
       .def_prop_ro("grad",
                    [](const Tensor& self) -> std::shared_ptr<Tensor> {
@@ -308,18 +317,38 @@ static auto buildTensorBindings(nb::module_& m) -> void {
   m.def(
       "_create_tensor",
       [](nb::ndarray<>& array, bool requires_grad,
-         ElementType::InternalType element_type) -> Tensor {
+         DataType::InternalType element_type) -> Tensor {
         auto tensor = Tensor(createStoragefromNanobind(array, element_type),
                              requires_grad);
         return tensor;
       },
       nb::rv_policy::move);
+
+  m.def("_create_filled",
+        [](nb::tuple shape_object, nb::object fill_object, bool requires_grad,
+           DataType::InternalType element_type) -> Tensor {
+          llvm::SmallVector<int64_t> shape;
+          for (auto dim_object : shape_object) {
+            auto dim = nb::cast<int>(dim_object);
+            shape.push_back(dim);
+          }
+
+          if (element_type == DataType::Float32 ||
+              element_type == DataType::Float64) {
+            auto fill = nb::cast<float>(fill_object);
+            auto storage = Storage::createFilled(
+                shape, computeRowMajorStrides(shape), element_type, fill);
+            return {std::move(storage), requires_grad};
+          }
+
+          throw std::runtime_error("Unsupported ElementType");
+        });
 }
 
 NB_MODULE(axon_bindings, m) {
-  nb::enum_<ElementType::InternalType>(m, "ElementType")
-      .value("Float32", ElementType::Float32)
-      .value("Float64", ElementType::Float64)
+  nb::enum_<DataType::InternalType>(m, "dtype")
+      .value("float32", DataType::Float32)
+      .value("float64", DataType::Float64)
       .export_values();
 
   nb::enum_<LoweringLevel>(m, "LoweringLevel")

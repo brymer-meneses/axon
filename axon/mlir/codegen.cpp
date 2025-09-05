@@ -46,7 +46,7 @@ static auto codegen(insts::Constant op, CompilationContext& ctx, InstId inst_id)
   auto result_type =
       mlir::RankedTensorType::get(constant.shape(), ctx.builder.getF32Type());
 
-  if (constant.element_type() == ElementType::Float32) {
+  if (constant.data_type() == DataType::Float32) {
     auto data_ptr = reinterpret_cast<float*>(constant.data_ptr());
     auto data_ref = llvm::ArrayRef<float>(data_ptr, constant.size());
     auto data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
@@ -136,10 +136,10 @@ static auto codegen(insts::MatMul op, CompilationContext& ctx, InstId inst_id)
   auto lhs = ctx.values[op.lhs_id];
   auto rhs = ctx.values[op.rhs_id];
 
-  auto element_type =
+  auto data_type =
       mlir::cast<mlir::RankedTensorType>(lhs.getType()).getElementType();
   auto result_type =
-      mlir::RankedTensorType::get(ctx.graph.getShape(inst_id), element_type);
+      mlir::RankedTensorType::get(ctx.graph.getShape(inst_id), data_type);
 
   ctx.values[inst_id] = MatMulOp::create(
       ctx.builder, ctx.builder.getUnknownLoc(), result_type, lhs, rhs);
@@ -149,9 +149,9 @@ static auto codegen(insts::Transpose op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto operand = ctx.values[op.operand_id];
   auto result_shape = ctx.graph.getShape(inst_id);
-  auto element_type =
+  auto data_type =
       mlir::cast<mlir::RankedTensorType>(operand.getType()).getElementType();
-  auto result_type = mlir::RankedTensorType::get(result_shape, element_type);
+  auto result_type = mlir::RankedTensorType::get(result_shape, data_type);
 
   ctx.values[inst_id] =
       TransposeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), result_type,
@@ -200,11 +200,11 @@ static auto codegen(insts::Reshape op, CompilationContext& ctx, InstId inst_id)
 static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {
   llvm::SmallVector<mlir::Type> arg_types;
-  auto element_type = builder.getF32Type();
+  auto data_type = builder.getF32Type();
   for (auto& param : graph.parameters().values()) {
     auto requires_grad = param.requires_grad;
     auto shape = graph.getShape(param.inst_id);
-    auto type = TensorRefType::get(builder.getContext(), element_type, shape,
+    auto type = TensorRefType::get(builder.getContext(), data_type, shape,
                                    requires_grad);
     arg_types.emplace_back(type);
   }
