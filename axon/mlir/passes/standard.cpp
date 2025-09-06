@@ -1,6 +1,6 @@
 module;
-
 #include <algorithm>
+#include <utility>
 
 #include "axon/mlir/dialect/dialect.h"
 #include "llvm/ADT/STLExtras.h"
@@ -19,7 +19,7 @@ module;
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-export module axon.mlir:standard_lowering;
+export module axon.mlir.passes:standard_lowering;
 
 namespace axon {
 
@@ -81,11 +81,13 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
     }
 
     auto init_op = createZerosLike(rewriter, result_tensor_type, loc);
+    auto indexing_maps = getIndexingMaps(op, rewriter);
 
     if (result_tensor_type.getRank() == 3) {
       auto new_op = mlir::linalg::BatchMatmulOp::create(
           rewriter, loc, mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
           mlir::ValueRange{init_op});
+      new_op.setIndexingMapsAttr(indexing_maps);
       rewriter.replaceOp(op, new_op.getResult(0));
       return mlir::success();
     }
@@ -94,8 +96,73 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
       auto new_op = mlir::linalg::MatmulOp::create(
           rewriter, loc, mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
           mlir::ValueRange{init_op});
+
+      new_op.setIndexingMapsAttr(indexing_maps);
       rewriter.replaceOp(op, new_op.getResult(0));
       return mlir::success();
+    }
+
+    std::unreachable();
+  }
+
+  static auto getIndexingMaps(MatMulOp op,
+                              mlir::ConversionPatternRewriter& rewriter)
+      -> mlir::ArrayAttr {
+    auto context = rewriter.getContext();
+    auto rank = op.getResult().getType().getRank();
+
+    if (rank == 2) {
+      auto m = mlir::getAffineDimExpr(0, context);
+      auto n = mlir::getAffineDimExpr(1, context);
+      auto k = mlir::getAffineDimExpr(2, context);
+
+      llvm::SmallVector lhs_exprs =
+          op.getTransposeLhs() ? llvm::SmallVector<mlir::AffineExpr>{k, m}
+                               : llvm::SmallVector<mlir::AffineExpr>{m, k};
+      auto rhs_exprs = op.getTransposeRhs()
+                           ? llvm::SmallVector<mlir::AffineExpr>{n, k}
+                           : llvm::SmallVector<mlir::AffineExpr>{k, n};
+
+      for (auto dim : llvm::reverse(op.getBroadcastedLhsDims())) {
+        lhs_exprs.erase(lhs_exprs.begin() + dim);
+      }
+      for (auto dim : llvm::reverse(op.getBroadcastedRhsDims())) {
+        rhs_exprs.erase(rhs_exprs.begin() + dim);
+      }
+
+      auto result_map = mlir::AffineMap::get(3, 0, {m, n}, context);
+      auto lhs_map = mlir::AffineMap::get(3, 0, lhs_exprs, context);
+      auto rhs_map = mlir::AffineMap::get(3, 0, rhs_exprs, context);
+
+      return rewriter.getAffineMapArrayAttr({lhs_map, rhs_map, result_map});
+    }
+
+    if (rank == 3) {
+      auto b = mlir::getAffineDimExpr(0, context);
+      auto m = mlir::getAffineDimExpr(1, context);
+      auto n = mlir::getAffineDimExpr(2, context);
+      auto k = mlir::getAffineDimExpr(3, context);
+
+      auto lhs_exprs = op.getTransposeLhs()
+                           ? llvm::SmallVector<mlir::AffineExpr>{b, k, m}
+                           : llvm::SmallVector<mlir::AffineExpr>{b, m, k};
+
+      auto rhs_exprs = op.getTransposeRhs()
+                           ? llvm::SmallVector<mlir::AffineExpr>{b, n, k}
+                           : llvm::SmallVector<mlir::AffineExpr>{b, k, n};
+
+      for (auto dim : llvm::reverse(op.getBroadcastedLhsDims())) {
+        lhs_exprs.erase(lhs_exprs.begin() + dim);
+      }
+      for (auto dim : llvm::reverse(op.getBroadcastedRhsDims())) {
+        rhs_exprs.erase(rhs_exprs.begin() + dim);
+      }
+
+      auto result_map = mlir::AffineMap::get(4, 0, {b, m, n}, context);
+      auto lhs_map = mlir::AffineMap::get(4, 0, lhs_exprs, context);
+      auto rhs_map = mlir::AffineMap::get(4, 0, rhs_exprs, context);
+
+      return rewriter.getAffineMapArrayAttr({lhs_map, rhs_map, result_map});
     }
 
     std::unreachable();
@@ -347,8 +414,7 @@ struct TransposeOpLowering : mlir::OpConversionPattern<TransposeOp> {
                                      mlir::utils::IteratorType::parallel);
     llvm::SmallVector indexing_maps = {input_map, output_map};
 
-    auto init_op =
-        mlir::tensor::EmptyOp::create(rewriter, op.getLoc(), result_type, {});
+    auto init_op = adaptor.getOperand();
 
     auto transpose_op = mlir::linalg::GenericOp::create(
         rewriter, op.getLoc(), mlir::TypeRange{result_type},

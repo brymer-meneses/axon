@@ -5,6 +5,8 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Support/LLVM.h"
 
+import axon.mlir;
+
 namespace axon {
 
 auto ConstantOp::print(mlir::OpAsmPrinter& printer) -> void {
@@ -143,13 +145,11 @@ auto AccumulateGradOp::verify() -> mlir::LogicalResult {
   return mlir::success();
 }
 
-void AccumulateGradOp::getEffects(
-    llvm::SmallVectorImpl<mlir::MemoryEffects::EffectInstance>& effects) {
-  // Operand 0: accumulator (written to)
+auto AccumulateGradOp::getEffects(
+    llvm::SmallVectorImpl<mlir::MemoryEffects::EffectInstance>& effects)
+    -> void {
   effects.emplace_back(mlir::MemoryEffects::Write::get(),
                        &getAccumulatorMutable());
-
-  // Operand 1: value (read)
   effects.emplace_back(mlir::MemoryEffects::Read::get(), &getValueMutable());
 }
 

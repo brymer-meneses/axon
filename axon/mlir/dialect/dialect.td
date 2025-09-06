@@ -30,8 +30,6 @@ def Axon_TensorRefType : AxonDialect_Type<"TensorRef", "tensor_ref"> {
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
-    auto isDynamic() const -> bool { return getShape().empty(); }
-
     auto getTensorType() const -> mlir::Type { 
       return mlir::RankedTensorType::get(getShape(), getElementType());
     }
@@ -135,6 +133,8 @@ def Axon_AddOp : AxonDialect_Op<"add", [
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$lhs `,` $rhs `->` type($result) attr-dict";
+
+  let hasCanonicalizer = 1;
 }
 
 def Axon_MulOp : AxonDialect_Op<"mul", [
@@ -146,17 +146,28 @@ def Axon_MulOp : AxonDialect_Op<"mul", [
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$lhs `,` $rhs `->` type($result) attr-dict";
+
+  let hasCanonicalizer = 1;
 }
 
 def Axon_MatMulOp : AxonDialect_Op<"matmul", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
+  let arguments = (ins 
+    AnyTensor:$lhs, 
+    AnyTensor:$rhs, 
+    DefaultValuedAttr<BoolAttr, "false">:$transpose_lhs,
+    DefaultValuedAttr<BoolAttr, "false">:$transpose_rhs,
+    DefaultValuedAttr<DenseI64ArrayAttr, "{}">:$broadcasted_lhs_dims,
+    DefaultValuedAttr<DenseI64ArrayAttr, "{}">:$broadcasted_rhs_dims
+  );
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs) `->` type($result) attr-dict";
+
   let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 }
 
 def Axon_BroadcastOp : AxonDialect_Op<"broadcast", [
@@ -219,6 +230,7 @@ def Axon_TransposeOp : AxonDialect_Op<"transpose", [
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$operand `,` `(` $from `,` $to `)` type($operand) `->` type($result) attr-dict";
+  let hasCanonicalizer = 1;
 }
 
 #endif // AXON_DIALECT

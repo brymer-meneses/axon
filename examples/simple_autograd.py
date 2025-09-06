@@ -2,12 +2,12 @@ import axon
 
 from axon import LoweringLevel, LoweringOps
 
-opts = LoweringOps(LoweringLevel.LLVM)
+opts = LoweringOps(LoweringLevel.LLVM, execute=True)
 
 
 @axon.jit(opts)
 def matmul(a, b):
-    l = a @ b
+    l = a @ b + a @ b
     l.backward()
 
 

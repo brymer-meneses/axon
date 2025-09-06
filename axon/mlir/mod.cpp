@@ -27,11 +27,9 @@ module;
 export module axon.mlir;
 
 import axon.core;
+import axon.mlir.passes;
 
 export import :codegen;
-
-import :standard_lowering;
-import :llvm_lowering;
 
 export namespace axon {
 
@@ -71,6 +69,8 @@ enum class LoweringLevel {
 auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     -> void {
   if (level == LoweringLevel::Axon) {
+    manager.addPass(mlir::createCanonicalizerPass());
+    manager.addPass(mlir::createCSEPass());
     return;
   }
 

@@ -25,7 +25,7 @@ module;
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-export module axon.mlir:llvm_lowering;
+export module axon.mlir.passes:llvm_lowering;
 
 namespace axon {
 

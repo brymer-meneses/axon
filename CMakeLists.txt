@@ -36,11 +36,11 @@ add_library(axon STATIC)
 
 target_sources(axon 
   PUBLIC FILE_SET CXX_MODULES FILES
+    axon/base/mod.cpp
     axon/base/storage.cpp
     axon/base/index_base.cpp
-    axon/base/base.cpp
 
-    axon/core/core.cpp
+    axon/core/mod.cpp
     axon/core/inst.cpp
     axon/core/autodiff.cpp
     axon/core/inst_kinds.cpp
@@ -50,11 +50,14 @@ target_sources(axon
     axon/core/rules/backward.cpp
     axon/core/rules/shape.cpp
 
+    axon/mlir/mod.cpp
     axon/mlir/codegen.cpp
-    axon/mlir/mlir.cpp
-    axon/mlir/lowering/llvm.cpp
-    axon/mlir/lowering/standard.cpp
+
+    axon/mlir/passes/mod.cpp
+    axon/mlir/passes/llvm.cpp
+    axon/mlir/passes/standard.cpp
   PRIVATE
+    axon/mlir/dialect/canonicalization.cpp
     axon/mlir/dialect/dialect.cpp
     axon/mlir/dialect/types.cpp
     axon/mlir/dialect/ops.cpp
@@ -109,9 +112,9 @@ nanobind_build_library(nanobind SHARED)
 add_library(axon_bindings MODULE)
 target_sources(axon_bindings
   PUBLIC FILE_SET CXX_MODULES FILES
+    axon/python/mod.cpp
     axon/python/tensor.cpp
     axon/python/compilation_unit.cpp
-    axon/python/python.cpp
     axon/python/abi.cpp
   PUBLIC
     axon/python/bindings.cpp

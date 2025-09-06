@@ -1,5 +1,6 @@
 #include <format>
 #include <memory>
+#include <ranges>
 #include <stdexcept>
 
 #include "axon/base/dcheck.h"
