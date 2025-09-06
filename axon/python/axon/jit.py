@@ -1,72 +1,59 @@
-import typing
-import contextlib
-import contextvars
-import itertools
-
-import functools
-
-from dataclasses import dataclass
-
-from . import axon_bindings
-
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
 
 from .graph_manager import GraphManager
+from .axon_bindings import LoweringLevel, Graph, CompilationUnit
 
-from .axon_bindings import LoweringLevel, Graph, Tensor
 
-@dataclass
 class LoweringOps:
-    level: LoweringLevel = LoweringLevel.LLVM
-    execute: bool = True
+    def __init__(self, level: LoweringLevel = LoweringLevel.LLVM, execute: bool = True):
+        if level != LoweringLevel.LLVM and execute:
+            raise ValueError(
+                "Cannot execute operations that are not lowered to LLVM. "
+                "Either set level=LoweringLevel.LLVM or execute=False."
+            )
 
-def jit(opts: Optional[LoweringOps] = None) -> typing.Callable:
-    def decorator(func: typing.Callable) -> CompiledFunction:
+        self.execute = execute
+        self.level = level
+
+
+def jit(opts: Optional[LoweringOps] = None) -> Callable:
+    def decorator(func: Callable) -> CompiledFunction:
         compiled = CompiledFunction(opts, func)
         compiled.__doc__ = func.__doc__
         compiled.__qualname__ = func.__qualname__
         return compiled
+
     return decorator
+
 
 class CompiledFunction:
     def __init__(self, opts: Optional[LoweringOps], func: Callable) -> None:
-        self._func = func
-        self._opts = LoweringOps() if opts is None else opts
-        self._cached_graph = None
-        self._compiled = None
+        self._func: Callable = func
+        self._opts: LoweringOps = LoweringOps() if opts is None else opts
+        self._cached_graph: Optional[Graph] = None
+        self._compiled: Optional[CompilationUnit] = None
 
     # When `__call__` is invoked every tensor operation is recorded.
-    # a new graph is created and checked if it is equal to the 
+    # a new graph is created and checked if it is equal to the
     # current graph.
-    def __call__(self, *args, **kwargs) -> typing.Any:
+    def __call__(self, *args, **kwargs) -> Any:
         graph = Graph()
+        manager = GraphManager(graph)
 
         # trace the tensor operations
-        with GraphManager(graph):
-            tensors = _process_params(graph, *args, **kwargs)
-            axon_bindings._set_current_graph(graph)
-            result = self._func(*args, **kwargs)
+        with manager:
+            manager.trace_params(*args, **kwargs)
+            self._func(*args, **kwargs)
 
         # check if it matches the cached graph
         if graph != self._cached_graph:
             self._compiled = graph.compile(self._opts.level)
 
-        if self._opts.execute and self._opts.level == LoweringLevel.LLVM:
-            print("executing ..")
-            return self._compiled.execute(tensors)
+        if self._opts.execute:
+            assert self._compiled is not None
+            return self._compiled.execute(manager.parameters)
 
     def dump_ir(self) -> str:
-        return self._compiled.dump_ir()
-
-def _process_params(graph, *args, **kwargs):
-    tensors = []
-    for arg in args:
-        if isinstance(arg, Tensor):
-            graph.trace(arg)
-            tensors.append(arg)
-    for (key, value) in kwargs.items():
-        if isinstance(value, Tensor):
-            graph.trace(value)
-            tensors.append(value)
-    return tensors
-
+        if self._compiled is not None:
+            return self._compiled.dump_ir()
+        raise RuntimeError("Cannot dump the IR of an uncompiled function.")

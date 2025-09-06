@@ -68,9 +68,15 @@ static auto buildGraphBindings(nb::module_& m) -> void {
              auto inst_id = graph.inner->createConstant(std::move(data));
              return {inst_id};
            })
-      .def("trace", [](GraphRef& graph, Tensor& tensor) {
-        AXON_DCHECK(tensor.hasData(), "Passed tensor must have data.");
-        tensor.trace(*graph.inner);
+      .def("trace",
+           [](GraphRef& graph, Tensor& tensor) {
+             AXON_DCHECK(tensor.hasData(), "Passed tensor must have data.");
+             tensor.trace(*graph.inner);
+           })
+      .def("untrace", [](GraphRef& graph, Tensor& tensor) {
+        AXON_DCHECK(tensor.inst_id().isValid(),
+                    "Passed tensor must have a valid inst_id.");
+        tensor.untrace();
       });
 
   m.def("_set_current_graph",

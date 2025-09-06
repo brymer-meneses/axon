@@ -50,11 +50,14 @@ export class Tensor : nb::intrusive_base {
   }
 
   auto trace(Graph& graph) -> void {
+    AXON_DCHECK(not inst_id_.isValid(), "inst_id_ must not be valid.");
     inst_id_ = graph.declareParam(data_->shape(), requires_grad_);
     if (requires_grad_ && not hasGrad()) {
       zeroGrad();
     }
   }
+
+  auto untrace() -> void { inst_id_ = InstId::None; }
 
   auto requiresGrad() const -> bool { return requires_grad_; }
 

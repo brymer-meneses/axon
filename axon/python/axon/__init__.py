@@ -1,5 +1,6 @@
 from .axon_bindings import LoweringLevel, dtype
-from .tensor import tensor, ones
+from .tensor import tensor, ones, randn
+
 from .jit import jit, LoweringOps
 
 float32 = dtype.float32
@@ -10,7 +11,5 @@ __all__ = [
     "float64",
     "jit",
     "tensor",
-    "ones"
+    "ones",
 ]
-
-

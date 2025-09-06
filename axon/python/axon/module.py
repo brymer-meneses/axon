@@ -1,7 +1,7 @@
-import typing 
+import typing
+
 
 class Module:
-
     def __init__(self) -> None:
         pass
 
@@ -9,4 +9,6 @@ class Module:
         return self.forward(args, kwargs)
 
     def forward(self, *args: typing.Any, **kwargs: typing.Any) -> typing.Any:
-        raise NotImplementedError("Inherting from `axon.Module` requires the forward method to be implemented.")
+        raise NotImplementedError(
+            "Inherting from `axon.Module` requires the forward method to be implemented."
+        )

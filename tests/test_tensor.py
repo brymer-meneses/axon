@@ -1,9 +1,11 @@
 import axon
 import inspect
 
+
 def check_ir(func):
     expected_ir = inspect.cleandoc(func.__doc__)
     assert func.dump_ir().strip() == expected_ir.strip()
+
 
 @axon.jit()
 def tensor_mul(a, b):
@@ -25,6 +27,7 @@ def tensor_mul(a, b):
     l = a * b
     l.backward()
 
+
 @axon.jit()
 def tensor_add(a, b):
     """
@@ -42,6 +45,7 @@ def tensor_add(a, b):
     """
     l = a + b
     l.backward()
+
 
 def test_jit():
     a = axon.tensor([1, 2, 3], requires_grad=True)
