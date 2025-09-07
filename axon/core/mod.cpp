@@ -6,3 +6,5 @@ export import :inst_kinds;
 export import :graph;
 export import :autodiff;
 export import :storage;
+
+export import :shape_rules;

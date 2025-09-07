@@ -26,20 +26,20 @@ namespace nb = nanobind;
 
 using namespace axon;
 
-static auto createStoragefromNanobind(nb::ndarray<>& array,
-                                      DataType element_type) -> Storage {
+static auto createStoragefromNanobind(nb::ndarray<>& array, DataType data_type)
+    -> Storage {
   // TODO: Explore ways to avoid copying the memory.
-  auto buffer_size = array.size() * element_type.getSizeInBytes();
+  auto buffer_size = array.size() * data_type.getSizeInBytes();
   auto* data_ptr = new std::byte[buffer_size];
   std::memcpy(data_ptr, array.data(), buffer_size);
 
   auto shape = llvm::ArrayRef<int64_t>(array.shape_ptr(), array.ndim());
   auto stride = llvm::ArrayRef<int64_t>(array.stride_ptr(), array.ndim());
 
-  AXON_DCHECK(element_type == DataType::Float32,
+  AXON_DCHECK(data_type == DataType::Float32,
               "Only float32 is supported for now.");
 
-  return {element_type, data_ptr, shape, stride, /*is_owned=*/true};
+  return Storage::create(data_ptr, shape, data_type, /*is_owned=*/true, stride);
 }
 
 static thread_local std::weak_ptr<Graph> current_graph;
@@ -64,8 +64,8 @@ static auto buildGraphBindings(nb::module_& m) -> void {
            })
       .def("create_constant",
            [](GraphRef& graph, nb::ndarray<>& array,
-              DataType::InternalType element_type) -> Tensor {
-             auto data = createStoragefromNanobind(array, element_type);
+              DataType::InternalType data_type) -> Tensor {
+             auto data = createStoragefromNanobind(array, data_type);
              auto inst_id = graph.inner->createConstant(std::move(data));
              return {inst_id};
            })
@@ -238,20 +238,6 @@ static auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
   return graph.createOp(insts::MatMul(lhs_id, rhs_id));
 }
 
-auto computeRowMajorStrides(llvm::ArrayRef<int64_t> shape)
-    -> llvm::SmallVector<int64_t> {
-  llvm::SmallVector<int64_t> strides(shape.size());
-  int64_t stride = 1;
-
-  // Work backwards from the last dimension
-  for (int i = static_cast<int32_t>(shape.size()) - 1; i >= 0; --i) {
-    strides[i] = stride;
-    stride *= shape[i];
-  }
-
-  return strides;
-}
-
 static auto buildTensorBindings(nb::module_& m) -> void {
   nb::class_<Tensor>(m, "Tensor")
       .def_prop_ro("shape",
@@ -324,31 +310,41 @@ static auto buildTensorBindings(nb::module_& m) -> void {
   m.def(
       "_create_tensor",
       [](nb::ndarray<>& array, bool requires_grad,
-         DataType::InternalType element_type) -> Tensor {
-        auto tensor = Tensor(createStoragefromNanobind(array, element_type),
-                             requires_grad);
+         DataType::InternalType data_type) -> Tensor {
+        auto tensor =
+            Tensor(createStoragefromNanobind(array, data_type), requires_grad);
         return tensor;
       },
       nb::rv_policy::move);
+  m.def(
+      "_create_filled",
+      [](nb::tuple shape_object, nb::object fill_object, bool requires_grad,
+         DataType::InternalType data_type) -> Tensor {
+        llvm::SmallVector<int64_t> shape;
+        for (auto dim_object : shape_object) {
+          auto dim = nb::cast<int>(dim_object);
+          shape.push_back(dim);
+        }
 
-  m.def("_create_filled",
-        [](nb::tuple shape_object, nb::object fill_object, bool requires_grad,
-           DataType::InternalType element_type) -> Tensor {
+        if (data_type == DataType::Float32 || data_type == DataType::Float64) {
+          auto fill = nb::cast<float>(fill_object);
+          auto storage = Storage::createFilled(shape, fill, data_type);
+          return {std::move(storage), requires_grad};
+        }
+        throw std::runtime_error("Unsupported ElementType");
+      });
+
+  m.def("_create_randn",
+        [](nb::tuple shape_object, bool requires_grad,
+           DataType::InternalType data_type) -> Tensor {
           llvm::SmallVector<int64_t> shape;
           for (auto dim_object : shape_object) {
             auto dim = nb::cast<int>(dim_object);
             shape.push_back(dim);
           }
-
-          if (element_type == DataType::Float32 ||
-              element_type == DataType::Float64) {
-            auto fill = nb::cast<float>(fill_object);
-            auto storage = Storage::createFilled(
-                shape, computeRowMajorStrides(shape), element_type, fill);
-            return {std::move(storage), requires_grad};
-          }
-
-          throw std::runtime_error("Unsupported ElementType");
+          auto storage = Storage::createDistributed(
+              shape, /*mean=*/0, /*standard_deviation=*/1.0, data_type);
+          return Tensor(std::move(storage), requires_grad);
         });
 }
 

@@ -29,6 +29,4 @@ def ones(shape: Shape, requires_grad=False, dtype=dtype.float32) -> Tensor:
 
 
 def randn(shape: Shape, requires_grad=False, dtype=dtype.float32) -> Tensor:
-    # TODO: we really should use our own function here.
-    array = np.random.randn(*shape).astype(np.float32)
-    return axon_bindings._create_tensor(array, requires_grad, dtype)
+    return axon_bindings._create_randn(shape, requires_grad, dtype)
