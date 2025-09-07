@@ -2,7 +2,7 @@ import axon
 
 from axon import LoweringLevel, LoweringOps
 
-opts = LoweringOps(LoweringLevel.LLVM, execute=True)
+opts = LoweringOps(LoweringLevel.Axon, execute=False)
 
 
 @axon.jit(opts)

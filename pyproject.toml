@@ -8,12 +8,10 @@ dependencies = [
 
 [tool.setuptools]
 package-dir = {"" = "axon/python"}
-
-[tool.setuptools.packages.find]
-where = ["axon/python"]
+packages = ["axon", "axon.nn"]
 
 [tool.setuptools.package-data]
-"*" = ["*.so", "*.pyd", "*.dll"]
+"*" = ["*.so", "*.pyd", "*.dll", "*.pyi", "py.typed"]
 
 [dependency-groups]
 dev = [

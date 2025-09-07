@@ -1,7 +1,7 @@
 from typing import Callable, Optional, Any
 
 from .graph_manager import GraphManager
-from .axon_bindings import LoweringLevel, Graph, CompilationUnit
+from ._core import LoweringLevel, Graph, CompilationUnit
 
 
 class LoweringOps:

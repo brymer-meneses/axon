@@ -1,10 +1,10 @@
 import contextvars
 import typing
 
-from . import axon_bindings
+from . import _core
 
 from typing import List, Optional
-from .axon_bindings import Graph, Tensor
+from ._core import Graph, Tensor
 
 
 class GraphManager:
@@ -19,7 +19,7 @@ class GraphManager:
 
     def __enter__(self, *args, **kwargs) -> "GraphManager":
         self._token = GraphManager._current_graph.set(self._graph)
-        axon_bindings._set_current_graph(self._graph)
+        _core._set_current_graph(self._graph)
         return self
 
     def __exit__(self, *args, **kwargs) -> None:

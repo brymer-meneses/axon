@@ -3,15 +3,21 @@
 #include <exception>
 #include <print>
 
-#if !defined(NDEBUG)
-#define AXON_DCHECK(condition, msg, ...)                                 \
-  do {                                                                   \
-    if (not(condition)) [[unlikely]] {                                   \
-      std::println(stderr, "{}:{} DCHECK failed `" #condition "`: " msg, \
-                   __FILE_NAME__, __LINE__ __VA_OPT__(, ) __VA_ARGS__);  \
-      std::terminate();                                                  \
-    }                                                                    \
+#if !defined(ENABLE_DCHECK)
+#define AXON_DCHECK(condition, ...)                                        \
+  do {                                                                     \
+    if (not(condition)) [[unlikely]] {                                     \
+      if constexpr (sizeof(#__VA_ARGS__) > 1) {                            \
+        std::println(stderr,                                               \
+                     "{}:{} DCHECK failed `" #condition "`: " __VA_ARGS__, \
+                     __FILE_NAME__, __LINE__);                             \
+      } else {                                                             \
+        std::println(stderr, "{}:{} DCHECK failed `" #condition "`",       \
+                     __FILE_NAME__, __LINE__);                             \
+      }                                                                    \
+      std::terminate();                                                    \
+    }                                                                      \
   } while (0)
 #else
-#define AXON_DCHECK(condition, msg, ...) ((void)0)
+#define AXON_DCHECK(condition, ...) ((void)0)
 #endif

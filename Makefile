@@ -1,5 +1,6 @@
 CXX := clang++
 CMAKE_BUILD_TYPE ?= RelWithDebInfo
+ENABLE_ASAN := ON
 
 .PHONY: test clean build 
 
@@ -9,7 +10,8 @@ build/build.ninja: CMakeLists.txt cmake/dependencies.cmake
 		-DCMAKE_CXX_COMPILER=$(CXX) \
 		-DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
 		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-		-DCMAKE_COLOR_DIAGNOSTICS=ON
+		-DCMAKE_COLOR_DIAGNOSTICS=ON \
+		-DENABLE_ASAN=$(ENABLE_ASAN)
 
 build: build/build.ninja
 	cmake --build build

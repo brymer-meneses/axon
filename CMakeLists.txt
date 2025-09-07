@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 4.0.2)
 
 project(axon)
 
+option(ENABLE_ASAN "Enable Address Sanitizers" OFF)
+option(ENABLE_DCHECK "Enable Debug Checks" ON)
+
 include(cmake/dependencies.cmake)
 
 add_library(mlir INTERFACE)
@@ -89,10 +92,15 @@ if (MSVC)
   target_compile_options(axon PRIVATE /W4 /WX)
 else()
   target_compile_options(axon PRIVATE -Wall -Wextra -Wpedantic)
+  if (ENABLE_ASAN)
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
+    add_compile_options(-fno-omit-frame-pointer)
+  endif()
+endif()
 
-  add_compile_options(-fsanitize=address)
-  add_link_options(-fsanitize=address)
-  add_compile_options(-fno-omit-frame-pointer)
+if(ENABLE_DCHECK)
+  add_compile_definitions(ENABLE_DCHECK=1)
 endif()
 
 set(LLVM_TARGET_DEFINITIONS axon/mlir/dialect/dialect.td)
@@ -109,8 +117,8 @@ add_dependencies(axon AxonDialectIncGen)
 set_target_properties(axon PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 nanobind_build_library(nanobind SHARED)
-add_library(axon_bindings MODULE)
-target_sources(axon_bindings
+add_library(_core MODULE)
+target_sources(_core
   PUBLIC FILE_SET CXX_MODULES FILES
     axon/python/mod.cpp
     axon/python/tensor.cpp
@@ -119,36 +127,28 @@ target_sources(axon_bindings
   PUBLIC
     axon/python/bindings.cpp
 )
-target_include_directories(axon_bindings
+target_include_directories(_core
  PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(axon_bindings 
+target_link_libraries(_core 
   PRIVATE 
     axon
     xtensor
     xtensor-blas
     Python::Module
+    nanobind
 )
 
-# target_compile_features(axon_bindings PUBLIC cxx_std_23)
-set_target_properties(axon_bindings
+target_compile_features(_core PUBLIC cxx_std_23)
+set_target_properties(_core
   PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/axon/python/axon"
 )
 
-# target_compile_options(axon_bindings PRIVATE -fno-rtti)
-# nanobind_disable_stack_protector(axon_bindings)
-nanobind_lto(axon_bindings)
-nanobind_set_visibility(axon_bindings)
-nanobind_extension(axon_bindings)
+# target_compile_options(_core PRIVATE -fno-rtti)
+# nanobind_disable_stack_protector(_core)
+nanobind_lto(_core)
+nanobind_set_visibility(_core)
+nanobind_extension(_core)
 
-# nanobind_add_stub(
-#   axon_bindings_stub
-#   MODULE axon_bindings
-#   OUTPUT axon_bindings.pyi
-#   PYTHON_PATH $<TARGET_FILE_DIR:axon_bindings>
-#   DEPENDS axon_bindings
-# )
-
-# include_directories(${MLIR_INCLUDE_DIRS})

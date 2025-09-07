@@ -1,9 +1,9 @@
 import numpy as np
 from typing import Tuple, TypeAlias
 
-from . import axon_bindings
+from . import _core
 
-from .axon_bindings import dtype, Tensor
+from ._core import dtype, Tensor
 from .graph_manager import GraphManager
 
 Shape: TypeAlias = Tuple[int, ...]
@@ -21,12 +21,16 @@ def tensor(ndarray, requires_grad=False, dtype=dtype.float32) -> Tensor:
     if not isinstance(ndarray, np.ndarray):
         ndarray = np.array(ndarray, dtype=np.float32)
 
-    return axon_bindings._create_tensor(ndarray, requires_grad, dtype)
+    return _core._create_tensor(ndarray, requires_grad, dtype)
 
 
 def ones(shape: Shape, requires_grad=False, dtype=dtype.float32) -> Tensor:
-    return axon_bindings._create_filled(shape, 1, requires_grad, dtype)
+    return _core._create_filled(shape, 1, requires_grad, dtype)
+
+
+def zeros(shape: Shape, requires_grad=False, dtype=dtype.float32) -> Tensor:
+    return _core._create_filled(shape, 0, requires_grad, dtype)
 
 
 def randn(shape: Shape, requires_grad=False, dtype=dtype.float32) -> Tensor:
-    return axon_bindings._create_randn(shape, requires_grad, dtype)
+    return _core._create_randn(shape, requires_grad, dtype)

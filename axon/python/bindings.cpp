@@ -241,8 +241,12 @@ static auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
 static auto buildTensorBindings(nb::module_& m) -> void {
   nb::class_<Tensor>(m, "Tensor")
       .def_prop_ro("shape",
-                   [](const Tensor& self) -> std::vector<int64_t> {
-                     return self.shape();
+                   [](const Tensor& self) -> nb::tuple {
+                     nb::list temp;
+                     for (const auto& item : self.shape()) {
+                       temp.append(nb::cast(item));
+                     }
+                     return nb::tuple(temp);
                    })
       .def_prop_ro(
           "requires_grad",
@@ -295,16 +299,8 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              }
              axon::backward(*graph, self.inst_id());
            })
-      .def_prop_ro("grad",
-                   [](const Tensor& self) -> std::shared_ptr<Tensor> {
-                     return self.grad();
-                   })
-      .def_prop_ro("shape", [](const Tensor& self) -> std::vector<int64_t> {
-        if (auto graph = current_graph.lock()) {
-          return graph->getShape(self.inst_id());
-        }
-
-        return self.shape().vec();
+      .def_prop_ro("grad", [](const Tensor& self) -> std::shared_ptr<Tensor> {
+        return self.grad();
       });
 
   m.def(
@@ -316,6 +312,7 @@ static auto buildTensorBindings(nb::module_& m) -> void {
         return tensor;
       },
       nb::rv_policy::move);
+
   m.def(
       "_create_filled",
       [](nb::tuple shape_object, nb::object fill_object, bool requires_grad,
@@ -326,29 +323,38 @@ static auto buildTensorBindings(nb::module_& m) -> void {
           shape.push_back(dim);
         }
 
-        if (data_type == DataType::Float32 || data_type == DataType::Float64) {
+        if (data_type == DataType::Float32) {
           auto fill = nb::cast<float>(fill_object);
           auto storage = Storage::createFilled(shape, fill, data_type);
           return {std::move(storage), requires_grad};
+        } else if (data_type == DataType::Float64) {
+          auto fill = nb::cast<double>(fill_object);
+          auto storage = Storage::createFilled(shape, fill, data_type);
+          return {std::move(storage), requires_grad};
         }
-        throw std::runtime_error("Unsupported ElementType");
-      });
 
-  m.def("_create_randn",
-        [](nb::tuple shape_object, bool requires_grad,
-           DataType::InternalType data_type) -> Tensor {
-          llvm::SmallVector<int64_t> shape;
-          for (auto dim_object : shape_object) {
-            auto dim = nb::cast<int>(dim_object);
-            shape.push_back(dim);
-          }
-          auto storage = Storage::createDistributed(
-              shape, /*mean=*/0, /*standard_deviation=*/1.0, data_type);
-          return Tensor(std::move(storage), requires_grad);
-        });
+        throw std::runtime_error("Unsupported DataType");
+      },
+      nb::rv_policy::move);
+
+  m.def(
+      "_create_randn",
+      [](nb::tuple shape_object, bool requires_grad,
+         DataType::InternalType data_type) -> Tensor {
+        llvm::SmallVector<int64_t> shape;
+        for (auto dim_object : shape_object) {
+          auto dim = nb::cast<int>(dim_object);
+          shape.push_back(dim);
+        }
+
+        auto storage = Storage::createDistributed(
+            shape, /*mean=*/0, /*standard_deviation=*/1.0, data_type);
+        return {std::move(storage), requires_grad};
+      },
+      nb::rv_policy::move);
 }
 
-NB_MODULE(axon_bindings, m) {
+NB_MODULE(_core, m) {
   nb::enum_<DataType::InternalType>(m, "dtype")
       .value("float32", DataType::Float32)
       .value("float64", DataType::Float64)
