@@ -61,10 +61,11 @@ export class Graph {
     return gradients_.containsKey(inst_id);
   }
 
-  auto createOp(Inst inst, bool emit_grad = true) -> InstId {
-    auto inst_id = insts_.emplace(inst);
+  auto createOp(Inst&& inst, bool emit_grad = true) -> InstId {
+    auto parents = inst.parents();
+    auto inst_id = insts_.emplace(std::move(inst));
+
     if (emit_grad) {
-      auto parents = inst.parents();
       auto requires_grad = std::ranges::any_of(
           parents,
           [this](InstId parent_id) { return checkRequiresGrad(parent_id); });
@@ -97,7 +98,7 @@ export class Graph {
   auto inferShape(InstId inst_id) -> void {
     auto inst = insts_.get(inst_id);
 
-    inst.visit([&](const auto op) {
+    inst.visit([&](const auto& op) {
       using InstType = std::decay_t<decltype(op)>;
 
       if constexpr (HasInferShapeRule<InstType>) {

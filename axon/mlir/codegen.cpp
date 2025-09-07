@@ -70,7 +70,7 @@ static auto codegen(insts::Sum op, CompilationContext& ctx, InstId inst_id)
                     operand, op.axis, op.keepdims);
 }
 
-static auto codegen(insts::Broadcast op, CompilationContext& ctx,
+static auto codegen(insts::ExpandDims op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto operand = ctx.values[op.operand_id];
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
@@ -79,13 +79,13 @@ static auto codegen(insts::Broadcast op, CompilationContext& ctx,
   llvm::SmallVector<int64_t> result_shape{tensor_type.getShape()};
 
   // Create an array attribute for each (dim, scale) pair
-  for (auto expansion : op.expansions) {
+  for (auto mapping : op.mappings) {
     llvm::SmallVector<mlir::Attribute, 2> pair = {
-        ctx.builder.getI64IntegerAttr(expansion.dim),
-        ctx.builder.getI64IntegerAttr(expansion.scale),
+        ctx.builder.getI64IntegerAttr(mapping.dim),
+        ctx.builder.getI64IntegerAttr(mapping.scale),
     };
     expansions.push_back(ctx.builder.getArrayAttr(pair));
-    result_shape[expansion.dim] = expansion.scale;
+    result_shape[mapping.dim] = mapping.scale;
   }
 
   auto result_type =
@@ -93,8 +93,8 @@ static auto codegen(insts::Broadcast op, CompilationContext& ctx,
   auto expansions_attr = ctx.builder.getArrayAttr(expansions);
 
   ctx.values[inst_id] =
-      BroadcastOp::create(ctx.builder, ctx.builder.getUnknownLoc(), result_type,
-                          operand, expansions_attr);
+      ExpandDimsOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
+                           result_type, operand, expansions_attr);
 }
 
 static auto codegen(insts::GetParameter op, CompilationContext& ctx,

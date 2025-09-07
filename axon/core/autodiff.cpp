@@ -32,7 +32,7 @@ auto backward(Graph& graph, InstId output_id, InstId grad_id = InstId::None)
     // This should take by copy since `graph.insts` will grow.
     auto inst = graph.insts().get(dep.inst_id);
 
-    inst.visit([&, dep](const auto op) {
+    inst.visit([&, dep](const auto& op) {
       using InstType = std::decay_t<decltype(op)>;
       if constexpr (HasBackwardRule<InstType>) {
         auto new_deps = BackwardRule<InstType>::apply(op, dep.grad_id, ctx);

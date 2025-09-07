@@ -112,31 +112,31 @@ struct FuseTransposePattern : mlir::OpRewritePattern<MatMulOp> {
   }
 };
 
-struct FuseBroadcastPattern : mlir::OpRewritePattern<MatMulOp> {
+struct FuseExpandedDimsPattern : mlir::OpRewritePattern<MatMulOp> {
   using mlir::OpRewritePattern<MatMulOp>::OpRewritePattern;
 
   auto matchAndRewrite(MatMulOp op, mlir::PatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
 
-    auto get_broadcast_info = [](mlir::Value op)
+    auto get_expand_dims_info = [](mlir::Value op)
         -> std::pair<mlir::Value, llvm::SmallVector<int64_t>> {
       llvm::SmallVector<int64_t> dims;
-      if (auto broadcast_op = op.getDefiningOp<BroadcastOp>()) {
-        for (auto expansion : broadcast_op.getExpansions()) {
-          auto pair = mlir::cast<mlir::ArrayAttr>(expansion);
+      if (auto expand_dims_op = op.getDefiningOp<ExpandDimsOp>()) {
+        for (auto mapping : expand_dims_op.getMappings()) {
+          auto pair = mlir::cast<mlir::ArrayAttr>(mapping);
           auto dim = mlir::cast<mlir::IntegerAttr>(pair[0]).getInt();
           dims.push_back(dim);
         }
-        op = broadcast_op.getOperand();
+        op = expand_dims_op.getOperand();
       }
       return {op, dims};
     };
 
-    auto [lhs_op, lhs_broadcasted_dims] = get_broadcast_info(op.getLhs());
-    auto [rhs_op, rhs_broadcasted_dims] = get_broadcast_info(op.getRhs());
+    auto [lhs_op, lhs_expanded_dims] = get_expand_dims_info(op.getLhs());
+    auto [rhs_op, rhs_expanded_dims] = get_expand_dims_info(op.getRhs());
 
-    if (lhs_broadcasted_dims.empty() && rhs_broadcasted_dims.empty()) {
+    if (lhs_expanded_dims.empty() && rhs_expanded_dims.empty()) {
       return mlir::failure();
     }
 
@@ -146,7 +146,7 @@ struct FuseBroadcastPattern : mlir::OpRewritePattern<MatMulOp> {
 
     auto new_matmul_op = MatMulOp::create(
         rewriter, loc, result_type, lhs_op, rhs_op, should_transpose_lhs,
-        should_transpose_rhs, lhs_broadcasted_dims, rhs_broadcasted_dims);
+        should_transpose_rhs, lhs_expanded_dims, rhs_expanded_dims);
 
     rewriter.replaceOp(op, new_matmul_op);
     return mlir::success();
@@ -173,7 +173,7 @@ auto TransposeOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
 
 auto MatMulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                            mlir::MLIRContext* context) -> void {
-  patterns.add<FuseTransposePattern, FuseBroadcastPattern>(context);
+  patterns.add<FuseTransposePattern, FuseExpandedDimsPattern>(context);
 }
 
 }  // namespace axon

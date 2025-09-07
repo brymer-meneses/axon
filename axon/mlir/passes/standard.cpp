@@ -123,10 +123,10 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
                            ? llvm::SmallVector<mlir::AffineExpr>{n, k}
                            : llvm::SmallVector<mlir::AffineExpr>{k, n};
 
-      for (auto dim : llvm::reverse(op.getBroadcastedLhsDims())) {
+      for (auto dim : llvm::reverse(op.getExpandedLhsDims())) {
         lhs_exprs.erase(lhs_exprs.begin() + dim);
       }
-      for (auto dim : llvm::reverse(op.getBroadcastedRhsDims())) {
+      for (auto dim : llvm::reverse(op.getExpandedRhsDims())) {
         rhs_exprs.erase(rhs_exprs.begin() + dim);
       }
 
@@ -151,10 +151,10 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
                            ? llvm::SmallVector<mlir::AffineExpr>{b, n, k}
                            : llvm::SmallVector<mlir::AffineExpr>{b, k, n};
 
-      for (auto dim : llvm::reverse(op.getBroadcastedLhsDims())) {
+      for (auto dim : llvm::reverse(op.getExpandedLhsDims())) {
         lhs_exprs.erase(lhs_exprs.begin() + dim);
       }
-      for (auto dim : llvm::reverse(op.getBroadcastedRhsDims())) {
+      for (auto dim : llvm::reverse(op.getExpandedRhsDims())) {
         rhs_exprs.erase(rhs_exprs.begin() + dim);
       }
 
@@ -169,10 +169,10 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
   }
 };
 
-struct BroadcastOpLowering : mlir::OpConversionPattern<BroadcastOp> {
-  using mlir::OpConversionPattern<BroadcastOp>::OpConversionPattern;
+struct ExpandDimsOpLowering : mlir::OpConversionPattern<ExpandDimsOp> {
+  using mlir::OpConversionPattern<ExpandDimsOp>::OpConversionPattern;
 
-  auto matchAndRewrite(BroadcastOp op, OpAdaptor adaptor,
+  auto matchAndRewrite(ExpandDimsOp op, OpAdaptor adaptor,
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
@@ -181,7 +181,7 @@ struct BroadcastOpLowering : mlir::OpConversionPattern<BroadcastOp> {
         mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
 
     llvm::SmallVector<int64_t> dimensions_to_expand;
-    for (auto [i, attr] : llvm::enumerate(op.getExpansions())) {
+    for (auto attr : op.getMappings()) {
       auto pair = mlir::cast<mlir::ArrayAttr>(attr);
       auto dim = mlir::cast<mlir::IntegerAttr>(pair[0]).getInt();
       dimensions_to_expand.push_back(dim);
@@ -550,7 +550,7 @@ struct AxonToStandardLoweringPass
                          mlir::BuiltinDialect, mlir::tensor::TensorDialect>();
     target.addLegalOp<TupleAccessOp>();
     target.addIllegalOp<GetDataOp, AccumulateGradOp, FillLikeOp, AddOp, MulOp,
-                        MatMulOp, SumOp, BroadcastOp, TransposeOp, SqueezeOp,
+                        MatMulOp, SumOp, ExpandDimsOp, TransposeOp, SqueezeOp,
                         UnsqueezeOp, ReshapeOp>();
 
     AxonToStandardTypeConverter type_converter{&context};
@@ -559,7 +559,7 @@ struct AxonToStandardLoweringPass
     patterns
         .add<GetDataOpLowering, AccumulateGradOpLowering, FillLikeOpLowering,
              AddOpLowering, MulOpLowering, MatMulOpLowering, SumOpLowering,
-             BroadcastOpLowering, TransposeOpLowering, SqueezeOpLowering,
+             ExpandDimsOpLowering, TransposeOpLowering, SqueezeOpLowering,
              UnqueezeOpLowering, ReshapeOpLowering>(type_converter, &context);
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(

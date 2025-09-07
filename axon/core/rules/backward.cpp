@@ -25,8 +25,8 @@ class BackwardContext {
     return graph_.checkRequiresGrad(inst_id);
   }
 
-  auto createOp(Inst inst) -> InstId {
-    return graph_.createOp(inst, /*emit_grad=*/false);
+  auto createOp(Inst&& inst) -> InstId {
+    return graph_.createOp(std::move(inst), /*emit_grad=*/false);
   }
 
   auto accumulateGrad(Dependency dep) -> void {
@@ -126,15 +126,15 @@ struct BackwardRule<insts::Mul> {
 };
 
 template <>
-struct BackwardRule<insts::Broadcast> {
-  static auto apply(const insts::Broadcast& op, InstId grad_id,
+struct BackwardRule<insts::ExpandDims> {
+  static auto apply(const insts::ExpandDims& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
     if (!ctx.checkRequiresGrad(op.operand_id)) {
       return {};
     }
-    for (auto expansion : op.expansions) {
+    for (auto mapping : op.mappings) {
       grad_id =
-          ctx.createOp(insts::Sum(grad_id, expansion.dim, /*keepdims=*/true));
+          ctx.createOp(insts::Sum(grad_id, mapping.dim, /*keepdims=*/true));
     }
     return {{op.operand_id, grad_id}};
   }
@@ -163,6 +163,24 @@ struct BackwardRule<insts::Reshape> {
 
     llvm::SmallVector<int64_t> target_shape(ctx.getShape(op.operand_id));
     grad_id = ctx.createOp(insts::Reshape(grad_id, std::move(target_shape)));
+    return {{op.operand_id, grad_id}};
+  }
+};
+
+template <>
+struct BackwardRule<insts::Sum> {
+  static auto apply(const insts::Sum& op, InstId grad_id, BackwardContext& ctx)
+      -> llvm::SmallVector<Dependency> {
+    if (!ctx.checkRequiresGrad(op.operand_id)) {
+      return {};
+    }
+
+    llvm::SmallVector<insts::ExpandDims::Mapping, 1> expansions;
+    auto scale = ctx.getShape(op.operand_id)[op.axis];
+
+    expansions.push_back({.dim = op.axis, .scale = scale});
+
+    grad_id = ctx.createOp(insts::ExpandDims(grad_id, std::move(expansions)));
     return {{op.operand_id, grad_id}};
   }
 };

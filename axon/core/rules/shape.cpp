@@ -109,7 +109,6 @@ struct InferShapeRule<insts::Sum> {
                 "op.operand_id must have a shape already.");
 
     Shape shape = shapes.get(op.operand_id)->get();
-    auto rank = static_cast<int32_t>(shape.size());
 
     if (op.keepdims) {
       AXON_DCHECK(op.axis < rank, "Axis must not exceed rank");
@@ -122,15 +121,15 @@ struct InferShapeRule<insts::Sum> {
 };
 
 template <>
-struct InferShapeRule<insts::Broadcast> {
-  static auto apply(const insts::Broadcast& op, const ShapeMapping& shapes)
+struct InferShapeRule<insts::ExpandDims> {
+  static auto apply(const insts::ExpandDims& op, const ShapeMapping& shapes)
       -> Shape {
     AXON_DCHECK(shapes.get(op.operand_id),
                 "op.operand_id must have a shape already.");
 
     Shape shape = shapes.get(op.operand_id)->get();
     auto rank = static_cast<int32_t>(shape.size());
-    for (auto expansion : op.expansions) {
+    for (auto expansion : op.mappings) {
       AXON_DCHECK(expansion.dim < rank, "Dim exceeded the rank");
       shape[expansion.dim] = expansion.scale;
     }

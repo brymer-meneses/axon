@@ -54,13 +54,9 @@ class Inst {
   auto parents() const -> llvm::SmallVector<InstId> {
     constexpr auto visitor = [](const auto& op) -> llvm::SmallVector<InstId> {
       using InstType = std::decay_t<decltype(op)>;
-      if constexpr (llvm::is_one_of<InstType, insts::Add, insts::Mul,
-                                    insts::MatMul>()) {
-        auto [lhs, rhs] = op;
-        return {lhs, rhs};
-      } else if constexpr (llvm::is_one_of<InstType, insts::Squeeze, insts::Sum,
-                                           insts::Unsqueeze, insts::Broadcast,
-                                           insts::Reshape>()) {
+      if constexpr (InstIsBinary<InstType>) {
+        return {op.lhs_id, op.rhs_id};
+      } else if constexpr (InstIsUnary<InstType>) {
         return {op.operand_id};
       }
       return {};

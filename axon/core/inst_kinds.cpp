@@ -26,14 +26,14 @@ struct Sum {
   bool keepdims;
 };
 
-struct Broadcast {
-  struct Expansion {
+struct ExpandDims {
+  struct Mapping {
     int64_t dim;
     int64_t scale;
   };
 
   InstId operand_id;
-  llvm::SmallVector<Expansion> expansions;
+  llvm::SmallVector<Mapping> mappings;
 };
 
 struct Unsqueeze {
@@ -92,7 +92,7 @@ using InstInternalType =
       insts::Mul, 
       insts::MatMul,
       insts::Sum,
-      insts::Broadcast,
+      insts::ExpandDims,
       insts::Unsqueeze,
       insts::Squeeze,
       insts::Transpose,
@@ -102,6 +102,25 @@ using InstInternalType =
       insts::OnesLike,
       insts::Reshape
     >;
+
+template <typename InstType>
+constexpr bool InstIsUnary =
+    llvm::is_one_of<InstType, 
+      insts::Sum,
+      insts::Squeeze,
+      insts::Unsqueeze,
+      insts::ExpandDims, 
+      insts::Transpose,
+      insts::Reshape
+  >();
+
+template <typename InstType>
+constexpr bool InstIsBinary =
+    llvm::is_one_of<InstType, 
+      insts::Add,
+      insts::MatMul,
+      insts::Mul
+  >();
 // clang-format on:
 
 }  // namespace axon

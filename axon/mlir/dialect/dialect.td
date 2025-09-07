@@ -159,8 +159,8 @@ def Axon_MatMulOp : AxonDialect_Op<"matmul", [
     AnyTensor:$rhs, 
     DefaultValuedAttr<BoolAttr, "false">:$transpose_lhs,
     DefaultValuedAttr<BoolAttr, "false">:$transpose_rhs,
-    DefaultValuedAttr<DenseI64ArrayAttr, "{}">:$broadcasted_lhs_dims,
-    DefaultValuedAttr<DenseI64ArrayAttr, "{}">:$broadcasted_rhs_dims
+    DefaultValuedAttr<DenseI64ArrayAttr, "{}">:$expanded_lhs_dims,
+    DefaultValuedAttr<DenseI64ArrayAttr, "{}">:$expanded_rhs_dims
   );
   let results = (outs AnyTensor:$result);
 
@@ -170,11 +170,11 @@ def Axon_MatMulOp : AxonDialect_Op<"matmul", [
   let hasCanonicalizer = 1;
 }
 
-def Axon_BroadcastOp : AxonDialect_Op<"broadcast", [
+def Axon_ExpandDimsOp : AxonDialect_Op<"expand_dims", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, ArrayAttr:$expansions);
+  let arguments = (ins AnyTensor:$operand, ArrayAttr:$mappings);
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";

@@ -85,7 +85,7 @@ static auto buildGraphBindings(nb::module_& m) -> void {
 }
 
 struct BroadcastInfo {
-  llvm::SmallVector<insts::Broadcast::Expansion> expansions;
+  llvm::SmallVector<insts::ExpandDims::Mapping> expand_dim_mappings;
   llvm::SmallVector<int64_t> unsqueezed_shape;
 };
 
@@ -110,7 +110,8 @@ static auto tryGetBroadcastInfo(llvm::ArrayRef<int64_t> source_shape,
     broadcast_info.unsqueezed_shape.push_back(source_dim);
 
     if (source_dim == 1) {
-      broadcast_info.expansions.push_back({.dim = i, .scale = target_dim});
+      broadcast_info.expand_dim_mappings.push_back(
+          {.dim = i, .scale = target_dim});
       continue;
     }
 
@@ -140,7 +141,7 @@ static auto performBroadcasting(Graph& graph, InstId source_id,
   auto reshaped_id = graph.createOp(
       insts::Reshape(source_id, broadcast_info->unsqueezed_shape));
   return graph.createOp(
-      insts::Broadcast(reshaped_id, broadcast_info->expansions));
+      insts::ExpandDims(reshaped_id, broadcast_info->expand_dim_mappings));
 }
 
 template <typename ElementWiseInst>
