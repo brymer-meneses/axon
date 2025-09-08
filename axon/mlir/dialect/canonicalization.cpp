@@ -5,6 +5,7 @@ namespace axon {
 
 namespace {
 
+// 1 * x => x
 struct EliminateIdentityMulPattern : mlir::OpRewritePattern<MulOp> {
   using mlir::OpRewritePattern<MulOp>::OpRewritePattern;
   auto matchAndRewrite(MulOp op, mlir::PatternRewriter& rewriter) const
@@ -32,6 +33,7 @@ struct EliminateIdentityMulPattern : mlir::OpRewritePattern<MulOp> {
   }
 };
 
+// 0 + x => x and x + 0 => x
 struct EliminateIdentityAddPattern : mlir::OpRewritePattern<AddOp> {
   using mlir::OpRewritePattern<AddOp>::OpRewritePattern;
 
@@ -60,6 +62,7 @@ struct EliminateIdentityAddPattern : mlir::OpRewritePattern<AddOp> {
   }
 };
 
+// (x^T)^T => x
 struct EliminateRedundantTransposePattern
     : mlir::OpRewritePattern<TransposeOp> {
   using mlir::OpRewritePattern<TransposeOp>::OpRewritePattern;
@@ -100,6 +103,26 @@ struct EliminateSelfSubtractionPattern : mlir::OpRewritePattern<SubOp> {
   }
 };
 
+/// sink += 0
+struct EliminateZeroAccumulationPattern : mlir::OpRewritePattern<AccumulateOp> {
+  using mlir::OpRewritePattern<AccumulateOp>::OpRewritePattern;
+
+  auto matchAndRewrite(AccumulateOp op, mlir::PatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto source = op.getSource().getDefiningOp<FillOp>();
+    if (!source) {
+      return mlir::failure();
+    }
+
+    if (source.getFillValue().isExactlyValue(0)) {
+      rewriter.eraseOp(op);
+      return mlir::success();
+    }
+
+    return mlir::failure();
+  }
+};
+
 struct SimplifyZeroSubtractionPattern : mlir::OpRewritePattern<SubOp> {
   using mlir::OpRewritePattern<SubOp>::OpRewritePattern;
 
@@ -130,14 +153,38 @@ struct SimplifyMultiplicationOfFillOpPattern : mlir::OpRewritePattern<MulOp> {
       return mlir::failure();
     }
 
-    // FIXME: These conversions can overflow.
-    auto lhs_value = lhs.getFillValue().convertToDouble();
-    auto rhs_value = lhs.getFillValue().convertToDouble();
+    auto lhs_value = lhs.getFillValue();
+    auto rhs_value = lhs.getFillValue();
 
     auto loc = op.getLoc();
     auto prod = lhs_value * rhs_value;
-    auto fill_op = FillOp::create(rewriter, loc, op.getResult().getType(),
-                                  rewriter.getF64FloatAttr(prod));
+    auto fill_op =
+        FillOp::create(rewriter, loc, op.getResult().getType(), prod);
+
+    rewriter.replaceOp(op, fill_op);
+    return mlir::success();
+  }
+};
+
+struct SimplifyAdditionOfFillOpPattern : mlir::OpRewritePattern<AddOp> {
+  using mlir::OpRewritePattern<AddOp>::OpRewritePattern;
+
+  auto matchAndRewrite(AddOp op, mlir::PatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto lhs = op.getLhs().getDefiningOp<FillOp>();
+    auto rhs = op.getRhs().getDefiningOp<FillOp>();
+    if (!lhs || !rhs) {
+      return mlir::failure();
+    }
+
+    // FIXME: These conversions can overflow.
+    llvm::APFloat lhs_value = lhs.getFillValue();
+    llvm::APFloat rhs_value = rhs.getFillValue();
+
+    auto loc = op.getLoc();
+    auto addition = lhs_value + rhs_value;
+    auto fill_op =
+        FillOp::create(rewriter, loc, op.getResult().getType(), addition);
 
     rewriter.replaceOp(op, fill_op);
     return mlir::success();
@@ -282,7 +329,8 @@ auto MulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
 
 auto AddOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                         mlir::MLIRContext* context) -> void {
-  patterns.add<EliminateIdentityAddPattern>(context);
+  patterns.add<EliminateIdentityAddPattern, SimplifyAdditionOfFillOpPattern>(
+      context);
 }
 
 auto TransposeOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
@@ -311,6 +359,11 @@ auto ScalarMulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                               mlir::MLIRContext* context)
     -> void {
   patterns.add<SimplifyScalarMultiplicationPattern>(context);
+}
+
+auto AccumulateOp::getCanonicalizationPatterns(
+    mlir::RewritePatternSet& patterns, mlir::MLIRContext* context) -> void {
+  patterns.add<EliminateZeroAccumulationPattern>(context);
 }
 
 }  // namespace axon

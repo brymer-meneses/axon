@@ -522,18 +522,14 @@ struct FillOpLowering : mlir::OpConversionPattern<FillOp> {
     auto loc = op.getLoc();
     auto tensor = mlir::cast<mlir::TensorType>(op.getResult().getType());
 
-    auto result_buffer = mlir::tensor::EmptyOp::create(
-        rewriter, loc, tensor.getShape(), tensor.getElementType());
-
     auto fill_value = mlir::arith::ConstantOp::create(
         rewriter, loc, rewriter.getF32Type(),
         rewriter.getF32FloatAttr(op.getFillValue().convertToFloat()));
 
-    auto fill_op = mlir::linalg::FillOp::create(
-        rewriter, loc, mlir::ValueRange{fill_value},
-        mlir::ValueRange{result_buffer});
+    auto fill_op =
+        mlir::tensor::SplatOp::create(rewriter, loc, fill_value, tensor);
 
-    rewriter.replaceOp(op, fill_op.getResult(0));
+    rewriter.replaceOp(op, fill_op);
     return mlir::success();
   }
 };

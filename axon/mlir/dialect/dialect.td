@@ -43,7 +43,7 @@ def Axon_TensorRefType : AxonDialect_Type<"TensorRef", "tensor_ref"> {
 
 class AxonDialect_Op<string mnemonic, list<Trait> traits = []> : Op<AxonDialect, mnemonic, traits>;
 
-def Axon_GetDataOp : AxonDialect_Op<"get_data"> {
+def Axon_GetDataOp : AxonDialect_Op<"get_data", [Pure]> {
   let summary = "Extract the data tensor from a tensor";
 
   let arguments = (ins Axon_TensorRefType:$input);
@@ -64,7 +64,7 @@ def Axon_GetDataOp : AxonDialect_Op<"get_data"> {
   }];
 }
 
-def Axon_GetGradOp : AxonDialect_Op<"get_grad"> {
+def Axon_GetGradOp : AxonDialect_Op<"get_grad", [Pure]> {
   let summary = "Extract the gradient tensor from a tensor";
 
   let arguments = (ins Axon_TensorRefType:$input);
@@ -99,10 +99,12 @@ def Axon_AccumulateOp : AxonDialect_Op<"accumulate", [
 
   let extraClassDeclaration = [{
     auto getEffects(llvm::SmallVectorImpl<mlir::MemoryEffects::EffectInstance> &effects) -> void{
-      effects.emplace_back(mlir::MemoryEffects::Write::get());
-      effects.emplace_back(mlir::MemoryEffects::Read::get());
+      effects.emplace_back(mlir::MemoryEffects::Write::get(), &getSinkMutable());
+      effects.emplace_back(mlir::MemoryEffects::Read::get(), &getSourceMutable());
     }
   }];
+
+  let hasCanonicalizer = 1;
 }
 
 def Axon_FillOp : AxonDialect_Op<"fill_like", [Pure]> {
