@@ -62,20 +62,36 @@ export class Graph {
   }
 
   auto createOp(Inst&& inst, bool emit_grad = true) -> InstId {
-    auto parents = inst.parents();
-    auto inst_id = insts_.emplace(std::move(inst));
-
-    if (emit_grad) {
-      auto requires_grad = std::ranges::any_of(
-          parents,
-          [this](InstId parent_id) { return checkRequiresGrad(parent_id); });
-
-      if (requires_grad) {
-        gradients_.set(inst_id, InstId::Pending);
-      }
+    if (not emit_grad) {
+      auto inst_id = insts_.emplace(std::move(inst));
+      inferShape(inst_id);
+      return inst_id;
     }
 
+    constexpr static auto get_parents =
+        [](const auto& op) -> llvm::SmallVector<InstId> {
+      using InstType = std::decay_t<decltype(op)>;
+      if constexpr (!InstType::traits.differentiable) {
+        return {};
+      } else if constexpr (InstType::traits.num_operands == 2) {
+        return {op.lhs_id, op.rhs_id};
+      } else if constexpr (InstType::traits.num_operands == 1) {
+        return {op.operand_id};
+      }
+      return {};
+    };
+
+    auto parents = inst.visit(get_parents);
+    auto requires_grad = std::ranges::any_of(parents, [this](InstId parent_id) {
+      return checkRequiresGrad(parent_id);
+    });
+
+    auto inst_id = insts_.emplace(std::move(inst));
     inferShape(inst_id);
+    if (requires_grad) {
+      gradients_.set(inst_id, InstId::Pending);
+    }
+
     return inst_id;
   }
 
@@ -101,24 +117,22 @@ export class Graph {
     inst.visit([&](const auto& op) {
       using InstType = std::decay_t<decltype(op)>;
 
-      if constexpr (HasInferShapeRule<InstType>) {
+      if constexpr (InstType::traits.shape_rule == ShapeInfo::SameAsOperands) {
+        if constexpr (InstType::traits.num_operands == 2) {
+          auto [lhs_id, rhs_id] = op;
+          Shape shape = *shapes_.get(lhs_id);
+          shapes_.set(inst_id, std::move(shape));
+        } else if constexpr (InstType::traits.num_operands == 1) {
+          Shape shape = *shapes_.get(op.operand_id);
+          shapes_.set(inst_id, std::move(shape));
+        }
+      } else if constexpr (InstType::traits.shape_rule == ShapeInfo::Custom) {
         auto shape = InferShapeRule<InstType>::apply(op, shapes_);
         shapes_.set(inst_id, std::move(shape));
-      } else if constexpr (llvm::is_one_of<InstType, insts::Mul, insts::Add,
-                                           insts::Sub>()) {
-        auto [lhs_id, rhs_id] = op;
-        Shape shape = *shapes_.get(lhs_id);
-        shapes_.set(inst_id, std::move(shape));
-      } else if constexpr (llvm::is_one_of<InstType, insts::OnesLike,
-                                           insts::Sum, insts::ScalarMul,
-                                           insts::Neg>()) {
-        Shape shape = *shapes_.get(op.operand_id);
-        shapes_.set(inst_id, std::move(shape));
-      } else if constexpr (llvm::is_one_of<InstType, insts::GetParameter,
-                                           insts::AccumulateGrad>()) {
+      } else if constexpr (InstType::traits.shape_rule == ShapeInfo::None) {
         // do nothing
       } else {
-        std::println("Unhandled operation {}", inst.index());
+        static_assert(false, "Unhandled operation");
       }
     });
   }

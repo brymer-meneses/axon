@@ -51,19 +51,6 @@ class Inst {
 
   auto index() const -> size_t { return value_.index(); }
 
-  auto parents() const -> llvm::SmallVector<InstId> {
-    constexpr auto visitor = [](const auto& op) -> llvm::SmallVector<InstId> {
-      using InstType = std::decay_t<decltype(op)>;
-      if constexpr (InstIsBinary<InstType>) {
-        return {op.lhs_id, op.rhs_id};
-      } else if constexpr (InstIsUnary<InstType>) {
-        return {op.operand_id};
-      }
-      return {};
-    };
-    return std::visit(visitor, value_);
-  }
-
  private:
   InstInternalType value_;
 };

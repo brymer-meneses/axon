@@ -11,14 +11,30 @@ import :ids;
 
 export namespace axon {
 
-namespace insts {
-
-struct MatMul {
-  InstId lhs_id;
-  InstId rhs_id;
+enum class ShapeInfo {
+  Custom,
+  None,
+  SameAsOperands,
 };
 
+struct InstTraits {
+  /// number of tensor operands
+  int8_t num_operands = 0;
+  /// shape inference rule
+  ShapeInfo shape_rule = ShapeInfo::Custom;
+  /// whether this inst has a backward function
+  bool differentiable = false;
+};
+
+namespace insts {
+
 struct Sum {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::Custom,
+      .differentiable = true,
+  };
+
   InstId operand_id;
   // axis to sum
   int32_t axis;
@@ -27,6 +43,12 @@ struct Sum {
 };
 
 struct ExpandDims {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::Custom,
+      .differentiable = true,
+  };
+
   struct Mapping {
     int64_t dim;
     int64_t scale;
@@ -37,16 +59,34 @@ struct ExpandDims {
 };
 
 struct Unsqueeze {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::Custom,
+      .differentiable = true,
+  };
+
   InstId operand_id;
   int32_t dim;
 };
 
 struct Squeeze {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::Custom,
+      .differentiable = true,
+  };
+
   InstId operand_id;
   int32_t dim;
 };
 
 struct Transpose {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::Custom,
+      .differentiable = true,
+  };
+
   InstId operand_id;
 
   uint32_t from;
@@ -54,46 +94,117 @@ struct Transpose {
 };
 
 struct Reshape {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::Custom,
+      .differentiable = true,
+  };
+
   InstId operand_id;
   llvm::SmallVector<int64_t> target_shape;
 };
 
+struct MatMul {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 2,
+      .shape_rule = ShapeInfo::Custom,
+      .differentiable = true,
+  };
+
+  InstId lhs_id;
+  InstId rhs_id;
+};
+
 struct Add {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 2,
+      .shape_rule = ShapeInfo::SameAsOperands,
+      .differentiable = true,
+  };
+
   InstId lhs_id;
   InstId rhs_id;
 };
 
 struct Sub {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 2,
+      .shape_rule = ShapeInfo::SameAsOperands,
+      .differentiable = true,
+  };
+
   InstId lhs_id;
   InstId rhs_id;
 };
 
 struct Mul {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 2,
+      .shape_rule = ShapeInfo::SameAsOperands,
+      .differentiable = true,
+  };
+
   InstId lhs_id;
   InstId rhs_id;
 };
 
 struct ScalarMul {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::SameAsOperands,
+      .differentiable = true,
+  };
+
   InstId operand_id;
   double scalar;
 };
 
 struct Neg {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::SameAsOperands,
+      .differentiable = true,
+  };
+
   InstId operand_id;
 };
 
-struct Constant {};
+struct Constant {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 0,
+      .shape_rule = ShapeInfo::SameAsOperands,
+      .differentiable = false,
+  };
+};
 
 struct AccumulateGrad {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 2,
+      .shape_rule = ShapeInfo::SameAsOperands,
+      .differentiable = false,
+  };
+
   InstId inst_id;
   InstId value_id;
 };
 
 struct GetParameter {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 0,
+      .shape_rule = ShapeInfo::None,
+      .differentiable = false,
+  };
+
   ParamId param_id;
 };
 
 struct OnesLike {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::SameAsOperands,
+      .differentiable = false,
+  };
+
   InstId operand_id;
 };
 
@@ -120,27 +231,6 @@ using InstInternalType =
       insts::Reshape
     >;
 
-template <typename InstType>
-constexpr bool InstIsUnary =
-    llvm::is_one_of<InstType, 
-      insts::Sum,
-      insts::Squeeze,
-      insts::Unsqueeze,
-      insts::ExpandDims, 
-      insts::Transpose,
-      insts::Reshape,
-      insts::ScalarMul,
-      insts::Neg
-  >();
-
-template <typename InstType>
-constexpr bool InstIsBinary =
-    llvm::is_one_of<InstType, 
-      insts::Add,
-      insts::MatMul,
-      insts::Mul,
-      insts::Sub
-  >();
 // clang-format on:
 
 }  // namespace axon
