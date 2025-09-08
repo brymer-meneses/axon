@@ -82,12 +82,18 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
 
     manager.addPass(
         mlir::bufferization::createOneShotBufferizePass(bufferization_options));
+
+    manager.addPass(mlir::createCanonicalizerPass());
+    manager.addPass(mlir::createCSEPass());
   }
 
   if (level >= LoweringLevel::Linalg) {
     manager.addPass(mlir::createConvertElementwiseToLinalgPass());
     manager.addPass(mlir::createLinalgElementwiseOpFusionPass());
     manager.addPass(mlir::createLinalgFoldIntoElementwisePass());
+
+    manager.addPass(mlir::createCanonicalizerPass());
+    manager.addPass(mlir::createCSEPass());
 
     manager.addNestedPass<mlir::func::FuncOp>(
         mlir::bufferization::createEmptyTensorEliminationPass());
@@ -107,6 +113,9 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     manager.addNestedPass<mlir::func::FuncOp>(
         mlir::bufferization::createPromoteBuffersToStackPass());
 
+    manager.addPass(mlir::createCanonicalizerPass());
+    manager.addPass(mlir::createCSEPass());
+
     mlir::bufferization::BufferDeallocationPipelineOptions deallocation_options;
     mlir::bufferization::buildBufferDeallocationPipeline(manager,
                                                          deallocation_options);
@@ -124,6 +133,9 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
         mlir::affine::createSimplifyAffineStructuresPass());
     manager.addNestedPass<mlir::func::FuncOp>(
         mlir::affine::createAffineLoopInvariantCodeMotionPass());
+
+    manager.addPass(mlir::createCanonicalizerPass());
+    manager.addPass(mlir::createCSEPass());
 
     manager.addNestedPass<mlir::func::FuncOp>(
         mlir::bufferization::createBufferHoistingPass());
@@ -145,6 +157,7 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     manager.addPass(axon::createLlvmLoweringPass());
     manager.addPass(mlir::createReconcileUnrealizedCastsPass());
     manager.addPass(mlir::createCanonicalizerPass());
+    manager.addPass(mlir::createCSEPass());
   }
 }
 

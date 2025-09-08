@@ -44,9 +44,12 @@ auto backward(Graph& graph, InstId output_id, InstId grad_id = InstId::None)
   }
 
   for (auto& param : graph.parameters().values()) {
-    if (param.requires_grad) {
-      auto grad_id = graph.gradients().get(param.inst_id);
-      AXON_DCHECK(grad_id.isValid());
+    if (!param.requires_grad) {
+      continue;
+    }
+
+    auto grad_id = graph.gradients().get(param.inst_id);
+    if (grad_id.isValid()) {
       graph.insts().emplace(insts::AccumulateGrad(param.inst_id, grad_id));
     }
   }

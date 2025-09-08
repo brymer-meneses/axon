@@ -108,6 +108,24 @@ struct BackwardRule<insts::Add> {
 };
 
 template <>
+struct BackwardRule<insts::Sub> {
+  static auto apply(const insts::Sub& op, InstId grad_id, BackwardContext& ctx)
+      -> llvm::SmallVector<Dependency> {
+    llvm::SmallVector<Dependency, 2> deps;
+    if (ctx.checkRequiresGrad(op.lhs_id)) {
+      deps.emplace_back(op.lhs_id, grad_id);
+    }
+
+    if (ctx.checkRequiresGrad(op.rhs_id)) {
+      auto negated = ctx.createOp(insts::Neg(grad_id));
+      deps.emplace_back(op.rhs_id, negated);
+    }
+
+    return deps;
+  }
+};
+
+template <>
 struct BackwardRule<insts::Mul> {
   static auto apply(const insts::Mul& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
@@ -175,12 +193,41 @@ struct BackwardRule<insts::Sum> {
       return {};
     }
 
+    if (op.keepdims) {
+      grad_id = ctx.createOp(insts::Unsqueeze(grad_id, op.axis));
+    }
+
     llvm::SmallVector<insts::ExpandDims::Mapping, 1> expansions;
     auto scale = ctx.getShape(op.operand_id)[op.axis];
-
     expansions.push_back({.dim = op.axis, .scale = scale});
 
     grad_id = ctx.createOp(insts::ExpandDims(grad_id, std::move(expansions)));
+    return {{op.operand_id, grad_id}};
+  }
+};
+
+template <>
+struct BackwardRule<insts::Neg> {
+  static auto apply(const insts::Neg& op, InstId grad_id, BackwardContext& ctx)
+      -> llvm::SmallVector<Dependency> {
+    if (!ctx.checkRequiresGrad(op.operand_id)) {
+      return {};
+    }
+
+    grad_id = ctx.createOp(insts::Neg(grad_id));
+    return {{op.operand_id, grad_id}};
+  }
+};
+
+template <>
+struct BackwardRule<insts::ScalarMul> {
+  static auto apply(const insts::ScalarMul& op, InstId grad_id,
+                    BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
+    if (!ctx.checkRequiresGrad(op.operand_id)) {
+      return {};
+    }
+
+    grad_id = ctx.createOp(insts::ScalarMul(grad_id, op.scalar));
     return {{op.operand_id, grad_id}};
   }
 };

@@ -269,6 +269,16 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              }
              return performElementWiseOperation<insts::Add>(*graph, lhs, rhs);
            })
+      .def("__sub__",
+           [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
+             auto graph = current_graph.lock();
+             if (!graph) {
+               throw std::runtime_error(
+                   "Failed to invoke sub since there is no active "
+                   "graph.");
+             }
+             return performElementWiseOperation<insts::Sub>(*graph, lhs, rhs);
+           })
       .def("__mul__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
              auto graph = current_graph.lock();
@@ -279,6 +289,36 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              }
              return performElementWiseOperation<insts::Mul>(*graph, lhs, rhs);
            })
+      .def("__mul__",
+           [](const Tensor& self, double scalar) -> Tensor {
+             auto graph = current_graph.lock();
+             if (!graph) {
+               throw std::runtime_error(
+                   "Failed to invoke mul since there is no active "
+                   "graph.");
+             }
+             return graph->createOp(insts::ScalarMul(self.inst_id(), scalar));
+           })
+      .def("__rmul__",
+           [](const Tensor& self, double scalar) -> Tensor {
+             auto graph = current_graph.lock();
+             if (!graph) {
+               throw std::runtime_error(
+                   "Failed to invoke mul since there is no active "
+                   "graph.");
+             }
+             return graph->createOp(insts::ScalarMul(self.inst_id(), scalar));
+           })
+      .def("__neg__",
+           [](const Tensor& self) -> Tensor {
+             auto graph = current_graph.lock();
+             if (!graph) {
+               throw std::runtime_error(
+                   "Failed to invoke neg since there is no active "
+                   "graph.");
+             }
+             return graph->createOp(insts::Neg(self.inst_id()));
+           })
       .def("__matmul__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
              auto graph = current_graph.lock();
@@ -287,7 +327,6 @@ static auto buildTensorBindings(nb::module_& m) -> void {
                    "Failed to invoke matmul since there is no active "
                    "graph.");
              }
-
              return performMatMul(*graph, lhs, rhs);
            })
       .def("backward",

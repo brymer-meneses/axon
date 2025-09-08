@@ -65,6 +65,7 @@ struct ElementWiseBinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
 
 using AddOpLowering = ElementWiseBinaryOpLowering<AddOp, mlir::linalg::AddOp>;
 using MulOpLowering = ElementWiseBinaryOpLowering<MulOp, mlir::linalg::MulOp>;
+using SubOpLowering = ElementWiseBinaryOpLowering<SubOp, mlir::linalg::SubOp>;
 
 struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
   using mlir::OpConversionPattern<MatMulOp>::OpConversionPattern;
@@ -281,7 +282,6 @@ struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
     auto sum_op = mlir::linalg::GenericOp::create(
         rewriter, loc,
         /*resultTensorTypes=*/mlir::TypeRange{op.getResult().getType()},
-
         /*inputs=*/mlir::ValueRange{adaptor.getOperand()},
         /*outputs=*/mlir::ValueRange{init_op},
 
@@ -513,14 +513,14 @@ struct AccumulateOpLowering : mlir::OpConversionPattern<AccumulateOp> {
   }
 };
 
-struct FillLikeOpLowering : mlir::OpConversionPattern<FillLikeOp> {
-  using mlir::OpConversionPattern<FillLikeOp>::OpConversionPattern;
+struct FillOpLowering : mlir::OpConversionPattern<FillOp> {
+  using mlir::OpConversionPattern<FillOp>::OpConversionPattern;
 
-  auto matchAndRewrite(FillLikeOp op, OpAdaptor adaptor,
+  auto matchAndRewrite(FillOp op, OpAdaptor adaptor,
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
-    auto tensor = mlir::cast<mlir::TensorType>(op.getTensor().getType());
+    auto tensor = mlir::cast<mlir::TensorType>(op.getResult().getType());
 
     auto result_buffer = mlir::tensor::EmptyOp::create(
         rewriter, loc, tensor.getShape(), tensor.getElementType());
@@ -534,6 +534,63 @@ struct FillLikeOpLowering : mlir::OpConversionPattern<FillLikeOp> {
         mlir::ValueRange{result_buffer});
 
     rewriter.replaceOp(op, fill_op.getResult(0));
+    return mlir::success();
+  }
+};
+
+struct NegOpLowering : mlir::OpConversionPattern<NegOp> {
+  using mlir::OpConversionPattern<NegOp>::OpConversionPattern;
+
+  auto matchAndRewrite(NegOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+    auto tensor = mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
+
+    auto init_op = createZerosLike(rewriter, tensor, loc);
+
+    auto neg_op = mlir::linalg::NegFOp::create(
+        rewriter, loc, mlir::ValueRange{adaptor.getOperand()},
+        mlir::ValueRange{init_op});
+
+    rewriter.replaceOp(op, neg_op.getResult(0));
+    return mlir::success();
+  }
+};
+
+struct ScalarMulOpLowering : mlir::OpConversionPattern<ScalarMulOp> {
+  using mlir::OpConversionPattern<ScalarMulOp>::OpConversionPattern;
+
+  auto matchAndRewrite(ScalarMulOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+    auto tensor = op.getOperand().getType();
+
+    auto scalar_attr =
+        rewriter.getF64FloatAttr(op.getScalar().convertToDouble());
+
+    auto scalar_constant =
+        mlir::arith::ConstantOp::create(rewriter, loc, scalar_attr).getResult();
+
+    llvm::SmallVector iterator_types(tensor.getRank(),
+                                     mlir::utils::IteratorType::parallel);
+    llvm::SmallVector indexing_maps = {mlir::AffineMap::getMultiDimIdentityMap(
+        tensor.getRank(), op.getContext())};
+
+    auto scalar_mul_op = mlir::linalg::GenericOp::create(
+        rewriter, loc, mlir::TypeRange{tensor},
+        mlir::ValueRange{adaptor.getOperand()},
+        mlir::ValueRange{adaptor.getOperand()}, indexing_maps, iterator_types,
+        [scalar_constant](mlir::OpBuilder& builder, mlir::Location loc,
+                          mlir::ValueRange args) -> void {
+          auto mul_op = mlir::arith::MulFOp::create(builder, loc, args[0],
+                                                    scalar_constant)
+                            .getResult();
+          mlir::linalg::YieldOp::create(builder, loc, mul_op);
+        });
+
+    rewriter.replaceOp(op, scalar_mul_op.getResult(0));
     return mlir::success();
   }
 };
@@ -582,17 +639,36 @@ struct AxonToStandardLoweringPass
                          mlir::memref::MemRefDialect, mlir::arith::ArithDialect,
                          mlir::bufferization::BufferizationDialect,
                          mlir::BuiltinDialect, mlir::tensor::TensorDialect>();
+
     target.addLegalOp<TupleAccessOp>();
     target.addIllegalDialect<AxonDialect>();
 
     AxonToStandardTypeConverter type_converter{&context};
 
     mlir::RewritePatternSet patterns{&context};
-    patterns.add<GetDataOpLowering, AccumulateOpLowering, FillLikeOpLowering,
-                 AddOpLowering, MulOpLowering, MatMulOpLowering, SumOpLowering,
-                 ExpandDimsOpLowering, TransposeOpLowering, SqueezeOpLowering,
-                 UnqueezeOpLowering, ReshapeOpLowering, GetGradOpLowering>(
-        type_converter, &context);
+
+    // clang-format off
+    patterns.add<
+      GetDataOpLowering, 
+      GetGradOpLowering,
+      AccumulateOpLowering, 
+
+      AddOpLowering, 
+      MulOpLowering, 
+      SubOpLowering,
+      MatMulOpLowering, 
+      NegOpLowering,
+      TransposeOpLowering, 
+      SumOpLowering,
+      ScalarMulOpLowering,
+
+      FillOpLowering,
+      ExpandDimsOpLowering, 
+      SqueezeOpLowering,
+      UnqueezeOpLowering, 
+      ReshapeOpLowering
+    >(type_converter, &context);
+    // clang-format on
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, type_converter);

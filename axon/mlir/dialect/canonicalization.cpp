@@ -9,7 +9,7 @@ struct EliminateIdentityMulPattern : mlir::OpRewritePattern<MulOp> {
   using mlir::OpRewritePattern<MulOp>::OpRewritePattern;
   auto matchAndRewrite(MulOp op, mlir::PatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
-    auto lhs = op.getLhs().getDefiningOp<FillLikeOp>();
+    auto lhs = op.getLhs().getDefiningOp<FillOp>();
     if (!lhs) {
       return mlir::failure();
     }
@@ -19,7 +19,7 @@ struct EliminateIdentityMulPattern : mlir::OpRewritePattern<MulOp> {
       return mlir::success();
     }
 
-    auto rhs = op.getLhs().getDefiningOp<FillLikeOp>();
+    auto rhs = op.getLhs().getDefiningOp<FillOp>();
     if (!rhs) {
       return mlir::failure();
     }
@@ -37,7 +37,7 @@ struct EliminateIdentityAddPattern : mlir::OpRewritePattern<AddOp> {
 
   auto matchAndRewrite(AddOp op, mlir::PatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
-    auto lhs = op.getLhs().getDefiningOp<FillLikeOp>();
+    auto lhs = op.getLhs().getDefiningOp<FillOp>();
     if (!lhs) {
       return mlir::failure();
     }
@@ -47,7 +47,7 @@ struct EliminateIdentityAddPattern : mlir::OpRewritePattern<AddOp> {
       return mlir::success();
     }
 
-    auto rhs = op.getLhs().getDefiningOp<FillLikeOp>();
+    auto rhs = op.getLhs().getDefiningOp<FillOp>();
     if (!rhs) {
       return mlir::failure();
     }
@@ -77,6 +77,124 @@ struct EliminateRedundantTransposePattern
     }
 
     return mlir::failure();
+  }
+};
+
+/// x - x => x
+struct EliminateSelfSubtractionPattern : mlir::OpRewritePattern<SubOp> {
+  using mlir::OpRewritePattern<SubOp>::OpRewritePattern;
+
+  auto matchAndRewrite(SubOp op, mlir::PatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    if (op.getLhs() != op.getRhs()) {
+      return mlir::failure();
+    }
+
+    auto loc = op.getLoc();
+    auto fill_type = op.getLhs().getType();
+    auto zero =
+        FillOp::create(rewriter, loc, fill_type, rewriter.getF32FloatAttr(0.0));
+
+    rewriter.replaceOp(op, zero);
+    return mlir::success();
+  }
+};
+
+struct SimplifyZeroSubtractionPattern : mlir::OpRewritePattern<SubOp> {
+  using mlir::OpRewritePattern<SubOp>::OpRewritePattern;
+
+  auto matchAndRewrite(SubOp op, mlir::PatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto lhs = op.getLhs().getDefiningOp<FillOp>();
+    if (!lhs) {
+      return mlir::failure();
+    }
+    if (!lhs.getFillValue().isExactlyValue(0.0)) {
+      return mlir::failure();
+    }
+
+    auto neg_op = NegOp::create(rewriter, op.getLoc(), op.getRhs());
+    rewriter.replaceOp(op, neg_op);
+    return mlir::success();
+  }
+};
+
+struct SimplifyMultiplicationOfFillOpPattern : mlir::OpRewritePattern<MulOp> {
+  using mlir::OpRewritePattern<MulOp>::OpRewritePattern;
+
+  auto matchAndRewrite(MulOp op, mlir::PatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto lhs = op.getLhs().getDefiningOp<FillOp>();
+    auto rhs = op.getRhs().getDefiningOp<FillOp>();
+    if (!lhs || !rhs) {
+      return mlir::failure();
+    }
+
+    // FIXME: These conversions can overflow.
+    auto lhs_value = lhs.getFillValue().convertToDouble();
+    auto rhs_value = lhs.getFillValue().convertToDouble();
+
+    auto loc = op.getLoc();
+    auto prod = lhs_value * rhs_value;
+    auto fill_op = FillOp::create(rewriter, loc, op.getResult().getType(),
+                                  rewriter.getF64FloatAttr(prod));
+
+    rewriter.replaceOp(op, fill_op);
+    return mlir::success();
+  }
+};
+
+struct SimplifyNegationOfFillOpPattern : mlir::OpRewritePattern<NegOp> {
+  using mlir::OpRewritePattern<NegOp>::OpRewritePattern;
+
+  auto matchAndRewrite(NegOp op, mlir::PatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto operand = op.getOperand().getDefiningOp<FillOp>();
+    if (!operand) {
+      return mlir::failure();
+    }
+
+    llvm::APFloat scalar = operand.getFillValue();
+    scalar.changeSign();
+
+    auto fill_op =
+        FillOp::create(rewriter, op.getLoc(), op.getResult().getType(), scalar);
+    rewriter.replaceOp(op, fill_op);
+    return mlir::success();
+  }
+};
+
+struct SimplifyScalarMultiplicationPattern
+    : mlir::OpRewritePattern<ScalarMulOp> {
+  using mlir::OpRewritePattern<ScalarMulOp>::OpRewritePattern;
+
+  auto matchAndRewrite(ScalarMulOp op, mlir::PatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto fill_op = op.getOperand().getDefiningOp<FillOp>();
+    if (!fill_op) {
+      return mlir::failure();
+    }
+
+    auto loc = op.getLoc();
+    if (fill_op.getFillValue().isExactlyValue(-1)) {
+      auto neg_op = NegOp::create(rewriter, loc, op.getOperand());
+      rewriter.replaceOp(op, neg_op);
+      return mlir::success();
+    }
+
+    llvm::APFloat scalar = op.getScalar();
+    llvm::APFloat fill_value = fill_op.getFillValue();
+    auto status =
+        scalar.multiply(fill_value, llvm::RoundingMode::NearestTiesToEven);
+    if (status != llvm::detail::opStatus::opOK) {
+      return mlir::failure();
+    }
+
+    // we use `scalar` here since the multiply result is stored on the lhs.
+    auto new_fill_op =
+        FillOp::create(rewriter, loc, op.getResult().getType(), scalar);
+    rewriter.replaceOp(op, new_fill_op);
+    return mlir::success();
   }
 };
 
@@ -157,7 +275,9 @@ struct FuseExpandedDimsPattern : mlir::OpRewritePattern<MatMulOp> {
 
 auto MulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                         mlir::MLIRContext* context) -> void {
-  patterns.add<EliminateIdentityMulPattern>(context);
+  patterns
+      .add<EliminateIdentityMulPattern, SimplifyMultiplicationOfFillOpPattern>(
+          context);
 }
 
 auto AddOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
@@ -174,6 +294,23 @@ auto TransposeOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
 auto MatMulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                            mlir::MLIRContext* context) -> void {
   patterns.add<FuseTransposePattern, FuseExpandedDimsPattern>(context);
+}
+
+auto SubOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
+                                        mlir::MLIRContext* context) -> void {
+  patterns.add<EliminateSelfSubtractionPattern, SimplifyZeroSubtractionPattern>(
+      context);
+}
+
+auto NegOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
+                                        mlir::MLIRContext* context) -> void {
+  patterns.add<SimplifyNegationOfFillOpPattern>(context);
+}
+
+auto ScalarMulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
+                                              mlir::MLIRContext* context)
+    -> void {
+  patterns.add<SimplifyScalarMultiplicationPattern>(context);
 }
 
 }  // namespace axon

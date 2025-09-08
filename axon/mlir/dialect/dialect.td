@@ -105,16 +105,11 @@ def Axon_AccumulateOp : AxonDialect_Op<"accumulate", [
   }];
 }
 
-def Axon_FillLikeOp : AxonDialect_Op<"fill_like", [
-  Pure,
-  SameOperandsAndResultElementType,
-  SameOperandsAndResultType,
-]> {
-  let arguments = (ins AnyTensor:$tensor, F32Attr:$fill_value);
+def Axon_FillOp : AxonDialect_Op<"fill_like", [Pure]> {
+  let arguments = (ins F32Attr:$fill_value);
   let results = (outs AnyTensor:$result);
 
-
-  let assemblyFormat = "$tensor `,` $fill_value `->` type($result) attr-dict";
+  let assemblyFormat = "$fill_value `->` type($result) attr-dict";
 }
 
 def Axon_TupleAccessOp : AxonDialect_Op<"tuple_access", [
@@ -138,7 +133,8 @@ def Axon_TupleAccessOp : AxonDialect_Op<"tuple_access", [
 def Axon_AddOp : AxonDialect_Op<"add", [
   Pure, 
   SameOperandsAndResultType, 
-  SameOperandsAndResultElementType
+  SameOperandsAndResultElementType,
+  Commutative
 ]> {
   let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
   let results = (outs AnyTensor:$result);
@@ -151,7 +147,22 @@ def Axon_AddOp : AxonDialect_Op<"add", [
 def Axon_MulOp : AxonDialect_Op<"mul", [
   Pure, 
   SameOperandsAndResultType,
-  SameOperandsAndResultElementType
+  SameOperandsAndResultElementType,
+  Commutative
+]> {
+  let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs `->` type($result) attr-dict";
+
+  let hasCanonicalizer = 1;
+}
+
+def Axon_SubOp : AxonDialect_Op<"sub", [
+  Pure,
+  SameOperandsAndResultType,
+  SameOperandsAndResultElementType,
+  Commutative
 ]> {
   let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
   let results = (outs AnyTensor:$result);
@@ -189,6 +200,33 @@ def Axon_ExpandDimsOp : AxonDialect_Op<"expand_dims", [
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+}
+
+def Axon_NegOp: AxonDialect_Op<"neg", [
+  Pure,
+  SameOperandsAndResultType,
+  SameOperandsAndResultElementType,
+  Involution // f(f(x)) = x
+]> {
+  let arguments = (ins AnyTensor:$operand);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `->` type($result) attr-dict";
+
+  let hasCanonicalizer = 1;
+}
+
+def Axon_ScalarMulOp: AxonDialect_Op<"scalar_mul", [
+  Pure,
+  SameOperandsAndResultType,
+  SameOperandsAndResultElementType,
+]> {
+  let arguments = (ins AnyTensor:$operand, F64Attr:$scalar);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `*` $scalar `->` type($result) attr-dict";
+
+  let hasCanonicalizer = 1;
 }
 
 def Axon_SqueezeOp : AxonDialect_Op<"squeeze", [

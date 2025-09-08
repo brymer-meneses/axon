@@ -63,9 +63,23 @@ struct Add {
   InstId rhs_id;
 };
 
+struct Sub {
+  InstId lhs_id;
+  InstId rhs_id;
+};
+
 struct Mul {
   InstId lhs_id;
   InstId rhs_id;
+};
+
+struct ScalarMul {
+  InstId operand_id;
+  double scalar;
+};
+
+struct Neg {
+  InstId operand_id;
 };
 
 struct Constant {};
@@ -90,6 +104,9 @@ using InstInternalType =
     std::variant<
       insts::Add, 
       insts::Mul, 
+      insts::Sub,
+      insts::Neg,
+      insts::ScalarMul,
       insts::MatMul,
       insts::Sum,
       insts::ExpandDims,
@@ -111,7 +128,9 @@ constexpr bool InstIsUnary =
       insts::Unsqueeze,
       insts::ExpandDims, 
       insts::Transpose,
-      insts::Reshape
+      insts::Reshape,
+      insts::ScalarMul,
+      insts::Neg
   >();
 
 template <typename InstType>
@@ -119,7 +138,8 @@ constexpr bool InstIsBinary =
     llvm::is_one_of<InstType, 
       insts::Add,
       insts::MatMul,
-      insts::Mul
+      insts::Mul,
+      insts::Sub
   >();
 // clang-format on:
 

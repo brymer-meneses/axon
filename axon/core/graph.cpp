@@ -104,13 +104,14 @@ export class Graph {
       if constexpr (HasInferShapeRule<InstType>) {
         auto shape = InferShapeRule<InstType>::apply(op, shapes_);
         shapes_.set(inst_id, std::move(shape));
-      } else if constexpr (llvm::is_one_of<InstType, insts::Mul,
-                                           insts::Add>()) {
+      } else if constexpr (llvm::is_one_of<InstType, insts::Mul, insts::Add,
+                                           insts::Sub>()) {
         auto [lhs_id, rhs_id] = op;
         Shape shape = *shapes_.get(lhs_id);
         shapes_.set(inst_id, std::move(shape));
       } else if constexpr (llvm::is_one_of<InstType, insts::OnesLike,
-                                           insts::Sum, insts::Transpose>()) {
+                                           insts::Sum, insts::ScalarMul,
+                                           insts::Neg>()) {
         Shape shape = *shapes_.get(op.operand_id);
         shapes_.set(inst_id, std::move(shape));
       } else if constexpr (llvm::is_one_of<InstType, insts::GetParameter,
