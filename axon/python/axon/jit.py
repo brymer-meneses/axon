@@ -5,12 +5,17 @@ from ._core import LoweringLevel, Graph, CompilationUnit
 
 
 class LoweringOps:
-    def __init__(self, level: LoweringLevel = LoweringLevel.LLVM, execute: bool = True):
+    def __init__(
+        self, level: LoweringLevel = LoweringLevel.LLVM, execute: Optional[bool] = None
+    ):
         if level != LoweringLevel.LLVM and execute:
             raise ValueError(
                 "Cannot execute operations that are not lowered to LLVM. "
                 "Either set level=LoweringLevel.LLVM or execute=False."
             )
+
+        if execute is None:
+            execute = LoweringLevel.LLVM == level
 
         self.execute = execute
         self.level = level

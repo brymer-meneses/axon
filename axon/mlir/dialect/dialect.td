@@ -67,8 +67,12 @@ def Axon_GetDataOp : AxonDialect_Op<"get_data"> {
 def Axon_GetGradOp : AxonDialect_Op<"get_grad"> {
   let summary = "Extract the gradient tensor from a tensor";
 
-  let arguments = (ins Axon_TensorRefType:$tensor);
-  let results = (outs AnyTensor);
+  let arguments = (ins Axon_TensorRefType:$input);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` qualified(type($input)) `->` type($result)
+  }];
 }
 
 def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure]> {
@@ -84,14 +88,21 @@ def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure]> {
   let hasCustomAssemblyFormat = 1;
 }
 
-def Axon_AccumulateGradOp : AxonDialect_Op<"accumulate_grad", [
+def Axon_AccumulateOp : AxonDialect_Op<"accumulate", [
   MemoryEffectsOpInterface,
-  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>
 ]> {
-  let arguments = (ins Axon_TensorRefType:$accumulator, AnyTensor:$value);
-  let assemblyFormat = "$accumulator `,` $value `:` qualified(type($accumulator)) `,` type($value)  attr-dict";
+  let arguments = (ins AnyTensor:$sink, AnyTensor:$source);
+
+  let assemblyFormat = "$sink `,` $source `:` qualified(type($sink)) `,` type($source) attr-dict";
 
   let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    auto getEffects(llvm::SmallVectorImpl<mlir::MemoryEffects::EffectInstance> &effects) -> void{
+      effects.emplace_back(mlir::MemoryEffects::Write::get());
+      effects.emplace_back(mlir::MemoryEffects::Read::get());
+    }
+  }];
 }
 
 def Axon_FillLikeOp : AxonDialect_Op<"fill_like", [

@@ -1,5 +1,6 @@
 module;
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 #include "axon/mlir/dialect/dialect.h"
@@ -15,6 +16,7 @@ module;
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Utils/ReshapeOpsUtils.h"
 #include "mlir/IR/AffineExpr.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -420,8 +422,8 @@ struct TransposeOpLowering : mlir::OpConversionPattern<TransposeOp> {
         rewriter, op.getLoc(), mlir::TypeRange{result_type},
         mlir::ValueRange{adaptor.getOperand()}, mlir::ValueRange{init_op},
         indexing_maps, iterator_types,
-        [&](mlir::OpBuilder& builder, mlir::Location loc,
-            mlir::ValueRange args) {
+        [](mlir::OpBuilder& builder, mlir::Location loc,
+           mlir::ValueRange args) {
           mlir::linalg::YieldOp::create(builder, loc, args[0]);
         });
 
@@ -445,36 +447,68 @@ struct GetDataOpLowering : mlir::OpConversionPattern<GetDataOp> {
         rewriter, loc, tensor_ref.getTensorType(), memref,
         /*restrict=*/true,
         /*writable=*/false);
+
     rewriter.replaceOp(op, new_op);
     return mlir::success();
   }
 };
 
-struct AccumulateGradOpLowering : mlir::OpConversionPattern<AccumulateGradOp> {
-  using mlir::OpConversionPattern<AccumulateGradOp>::OpConversionPattern;
+struct GetGradOpLowering : mlir::OpConversionPattern<GetGradOp> {
+  using mlir::OpConversionPattern<GetGradOp>::OpConversionPattern;
 
-  auto matchAndRewrite(AccumulateGradOp op, OpAdaptor adaptor,
+  auto matchAndRewrite(GetGradOp op, OpAdaptor adaptor,
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
+    auto tensor_ref = mlir::cast<TensorRefType>(op.getInput().getType());
+    auto memref =
+        TupleAccessOp::create(rewriter, loc, adaptor.getInput(), 1).getResult();
 
-    auto tensor_type =
-        llvm::dyn_cast<TensorRefType>(op.getAccumulator().getType());
+    auto new_op = mlir::bufferization::ToTensorOp::create(
+        rewriter, loc, tensor_ref.getTensorType(), memref,
+        /*restrict=*/true,
+        /*writable=*/true);
 
-    // `adaptor.getAccumulator` is originally a TensorRefType, but gets lowered
-    // to a `tuple<memref, memref>`, the first element being the data and the
-    // second being the gradient. That's why we invoke a tuple access here to
-    // get the underlying gradient.
-    auto grad_ref =
-        TupleAccessOp::create(rewriter, loc, adaptor.getAccumulator(), 1);
-    auto value_as_memref = mlir::bufferization::ToBufferOp::create(
-        rewriter, loc, tensor_type.getMemRefType(), adaptor.getValue());
+    rewriter.replaceOp(op, new_op);
+    return mlir::success();
+  }
+};
 
-    mlir::linalg::AddOp::create(rewriter, loc,
-                                mlir::ValueRange{grad_ref, value_as_memref},
-                                mlir::ValueRange{grad_ref});
+struct AccumulateOpLowering : mlir::OpConversionPattern<AccumulateOp> {
+  using mlir::OpConversionPattern<AccumulateOp>::OpConversionPattern;
 
-    rewriter.eraseOp(op);
+  auto matchAndRewrite(AccumulateOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+    auto sink = adaptor.getSink();
+    auto sink_tensor_type =
+        mlir::cast<mlir::RankedTensorType>(adaptor.getSink().getType());
+
+    llvm::SmallVector iterator_types(sink_tensor_type.getRank(),
+                                     mlir::utils::IteratorType::parallel);
+    llvm::SmallVector indexing_maps(
+        3, mlir::AffineMap::getMultiDimIdentityMap(sink_tensor_type.getRank(),
+                                                   op.getContext()));
+    auto source = adaptor.getSource();
+    auto accumulation_op =
+        mlir::linalg::GenericOp::create(
+            rewriter, loc, mlir::TypeRange{sink_tensor_type},
+            mlir::ValueRange{sink, source}, mlir::ValueRange{sink},
+            indexing_maps, iterator_types,
+            [](mlir::OpBuilder& builder, mlir::Location loc,
+               mlir::ValueRange args) {
+              auto addition =
+                  mlir::arith::AddFOp::create(builder, loc, args[0], args[1]);
+              mlir::linalg::YieldOp::create(builder, loc, addition.getResult());
+            })
+            .getResult(0);
+
+    auto materialize_op =
+        mlir::bufferization::MaterializeInDestinationOp::create(
+            rewriter, loc, accumulation_op, sink);
+
+    rewriter.replaceOp(op, materialize_op.getResult());
     return mlir::success();
   }
 };
@@ -549,18 +583,16 @@ struct AxonToStandardLoweringPass
                          mlir::bufferization::BufferizationDialect,
                          mlir::BuiltinDialect, mlir::tensor::TensorDialect>();
     target.addLegalOp<TupleAccessOp>();
-    target.addIllegalOp<GetDataOp, AccumulateGradOp, FillLikeOp, AddOp, MulOp,
-                        MatMulOp, SumOp, ExpandDimsOp, TransposeOp, SqueezeOp,
-                        UnsqueezeOp, ReshapeOp>();
+    target.addIllegalDialect<AxonDialect>();
 
     AxonToStandardTypeConverter type_converter{&context};
 
     mlir::RewritePatternSet patterns{&context};
-    patterns
-        .add<GetDataOpLowering, AccumulateGradOpLowering, FillLikeOpLowering,
-             AddOpLowering, MulOpLowering, MatMulOpLowering, SumOpLowering,
-             ExpandDimsOpLowering, TransposeOpLowering, SqueezeOpLowering,
-             UnqueezeOpLowering, ReshapeOpLowering>(type_converter, &context);
+    patterns.add<GetDataOpLowering, AccumulateOpLowering, FillLikeOpLowering,
+                 AddOpLowering, MulOpLowering, MatMulOpLowering, SumOpLowering,
+                 ExpandDimsOpLowering, TransposeOpLowering, SqueezeOpLowering,
+                 UnqueezeOpLowering, ReshapeOpLowering, GetGradOpLowering>(
+        type_converter, &context);
 
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, type_converter);

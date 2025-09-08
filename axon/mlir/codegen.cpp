@@ -32,11 +32,15 @@ struct CompilationContext {
 
 static auto codegen(insts::AccumulateGrad op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto from = ctx.tensor_refs[op.inst_id];
-  auto value = ctx.values[op.value_id];
+  auto tensor_ref = ctx.tensor_refs[op.inst_id];
+  auto tensor_ref_type = mlir::cast<TensorRefType>(tensor_ref.getType());
 
-  AccumulateGradOp::create(ctx.builder, ctx.builder.getUnknownLoc(), from,
-                           value);
+  auto source = ctx.values[op.value_id];
+
+  auto sink = GetGradOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
+                                tensor_ref_type.getTensorType(), tensor_ref);
+
+  AccumulateOp::create(ctx.builder, ctx.builder.getUnknownLoc(), sink, source);
 }
 
 static auto codegen(insts::Constant op, CompilationContext& ctx, InstId inst_id)

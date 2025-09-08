@@ -125,32 +125,17 @@ auto MatMulOp::verify() -> mlir::LogicalResult {
   return mlir::failure();
 }
 
-auto AccumulateGradOp::verify() -> mlir::LogicalResult {
-  auto requires_grad = getAccumulator().getType().getRequiresGrad();
+auto AccumulateOp::verify() -> mlir::LogicalResult {
+  auto sink_shape = getSink().getType().getShape();
+  auto source_shape = getSource().getType().getShape();
 
-  auto accum_shape = getAccumulator().getType().getShape();
-  auto value_shape = getValue().getType().getShape();
-
-  if (!requires_grad) {
-    emitOpError() << "The accumulator must require gradients";
-    return mlir::failure();
-  }
-
-  if (accum_shape != value_shape) {
+  if (sink_shape != source_shape) {
     emitOpError()
         << "The shape of the value tensor must be equal to the accumulator";
     return mlir::failure();
   }
 
   return mlir::success();
-}
-
-auto AccumulateGradOp::getEffects(
-    llvm::SmallVectorImpl<mlir::MemoryEffects::EffectInstance>& effects)
-    -> void {
-  effects.emplace_back(mlir::MemoryEffects::Write::get(),
-                       &getAccumulatorMutable());
-  effects.emplace_back(mlir::MemoryEffects::Read::get(), &getValueMutable());
 }
 
 }  // namespace axon

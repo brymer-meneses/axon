@@ -14,16 +14,14 @@ float64: dtype = dtype.float64
 class LoweringLevel(enum.Enum):
     Axon = 0
     Standard = 1
-    Bufferization = 3
-    Affine = 4
     Linalg = 2
-    LLVM = 5
+    Loops = 3
+    LLVM = 4
 
 Axon: LoweringLevel = LoweringLevel.Axon
 Standard: LoweringLevel = LoweringLevel.Standard
-Bufferization: LoweringLevel = LoweringLevel.Bufferization
-Affine: LoweringLevel = LoweringLevel.Affine
 Linalg: LoweringLevel = LoweringLevel.Linalg
+Loops: LoweringLevel = LoweringLevel.Loops
 LLVM: LoweringLevel = LoweringLevel.LLVM
 
 Shape: TypeAlias = Tuple[int, ...]

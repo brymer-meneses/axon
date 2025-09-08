@@ -61,8 +61,7 @@ enum class LoweringLevel {
   Axon,
   Standard,
   Linalg,
-  Bufferization,
-  Affine,
+  Loops,
   LLVM,
 };
 
@@ -76,8 +75,13 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
 
   if (level >= LoweringLevel::Standard) {
     manager.addPass(axon::createStandardLoweringPass());
-    manager.addPass(mlir::createCanonicalizerPass());
-    manager.addPass(mlir::createCSEPass());
+
+    mlir::bufferization::OneShotBufferizePassOptions bufferization_options;
+    bufferization_options.checkParallelRegions = true;
+    bufferization_options.allowReturnAllocsFromLoops = true;
+
+    manager.addPass(
+        mlir::bufferization::createOneShotBufferizePass(bufferization_options));
   }
 
   if (level >= LoweringLevel::Linalg) {
@@ -87,24 +91,15 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
 
     manager.addNestedPass<mlir::func::FuncOp>(
         mlir::bufferization::createEmptyTensorEliminationPass());
-  }
 
-  if (level >= LoweringLevel::Bufferization) {
-    mlir::bufferization::OneShotBufferizePassOptions bufferization_options;
-    bufferization_options.checkParallelRegions = true;
-
-    manager.addPass(
-        mlir::bufferization::createOneShotBufferizePass(bufferization_options));
     manager.addPass(mlir::createCanonicalizerPass());
     manager.addPass(mlir::createCSEPass());
 
-    // Now cleanup memrefs.
     manager.addPass(mlir::memref::createExpandStridedMetadataPass());
     manager.addPass(mlir::memref::createFoldMemRefAliasOpsPass());
     manager.addPass(
         mlir::bufferization::createDropEquivalentBufferResultsPass());
 
-    // Allocation optimizations: hoist + promote *before* lowering dealloc.
     manager.addNestedPass<mlir::func::FuncOp>(
         mlir::bufferization::createBufferHoistingPass());
     manager.addNestedPass<mlir::func::FuncOp>(
@@ -112,7 +107,6 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     manager.addNestedPass<mlir::func::FuncOp>(
         mlir::bufferization::createPromoteBuffersToStackPass());
 
-    // Now lower deallocs.
     mlir::bufferization::BufferDeallocationPipelineOptions deallocation_options;
     mlir::bufferization::buildBufferDeallocationPipeline(manager,
                                                          deallocation_options);
@@ -121,12 +115,30 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     manager.addPass(mlir::createCSEPass());
   }
 
-  if (level >= LoweringLevel::Affine) {
+  if (level >= LoweringLevel::Loops) {
     manager.addPass(mlir::createConvertLinalgToAffineLoopsPass());
-    // manager.addPass(mlir::createConvertLinalgToLoopsPass());
+
+    manager.addNestedPass<mlir::func::FuncOp>(
+        mlir::affine::createAffineScalarReplacementPass());
+    manager.addNestedPass<mlir::func::FuncOp>(
+        mlir::affine::createSimplifyAffineStructuresPass());
+    manager.addNestedPass<mlir::func::FuncOp>(
+        mlir::affine::createAffineLoopInvariantCodeMotionPass());
+
+    manager.addNestedPass<mlir::func::FuncOp>(
+        mlir::bufferization::createBufferHoistingPass());
+    manager.addNestedPass<mlir::func::FuncOp>(
+        mlir::bufferization::createBufferLoopHoistingPass());
+    manager.addNestedPass<mlir::func::FuncOp>(
+        mlir::bufferization::createPromoteBuffersToStackPass());
+
     manager.addPass(mlir::createCanonicalizerPass());
-    // TODO: fix the memory aliasing bug
-    // manager.addPass(mlir::affine::createLoopFusionPass());
+    manager.addPass(mlir::createCSEPass());
+
+    manager.addPass(mlir::affine::createLoopFusionPass());
+
+    manager.addPass(mlir::createCanonicalizerPass());
+    manager.addPass(mlir::createCSEPass());
   }
 
   if (level >= LoweringLevel::LLVM) {

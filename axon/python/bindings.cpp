@@ -364,9 +364,8 @@ NB_MODULE(_core, m) {
   nb::enum_<LoweringLevel>(m, "LoweringLevel")
       .value("Axon", LoweringLevel::Axon)
       .value("Standard", LoweringLevel::Standard)
-      .value("Bufferization", LoweringLevel::Bufferization)
-      .value("Affine", LoweringLevel::Affine)
       .value("Linalg", LoweringLevel::Linalg)
+      .value("Loops", LoweringLevel::Loops)
       .value("LLVM", LoweringLevel::LLVM)
       .export_values();
 
