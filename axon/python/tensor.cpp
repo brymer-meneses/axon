@@ -31,7 +31,7 @@ export class Tensor : nb::intrusive_base {
   Tensor(Storage&& data, bool requires_grad)
       : data_(std::move(data)), requires_grad_(requires_grad) {}
 
-  Tensor(InstId inst_id) : inst_id_(inst_id) {}
+  explicit Tensor(InstId inst_id) : inst_id_(inst_id) {}
 
   auto hasData() const -> bool { return data_.has_value(); }
   auto hasGrad() const -> bool { return grad_ != nullptr; }

@@ -205,10 +205,22 @@ static auto codegen(const insts::Reshape& op, CompilationContext& ctx,
 static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto operand = ctx.values[op.operand_id];
+  auto data_type = op.scalar.data_type();
 
-  ctx.values[inst_id] =
-      ScalarMulOp::create(ctx.builder, ctx.builder.getUnknownLoc(), operand,
-                          ctx.builder.getF64FloatAttr(op.scalar));
+  mlir::Attribute attr;
+  switch (data_type.kind()) {
+    case DataType::Float32: {
+      attr = ctx.builder.getF32FloatAttr(op.scalar.as<f32>());
+      break;
+    }
+    case DataType::Float64: {
+      attr = ctx.builder.getF64FloatAttr(op.scalar.as<f64>());
+      break;
+    }
+  }
+
+  ctx.values[inst_id] = ScalarMulOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), operand, attr);
 };
 
 static auto codegen(const insts::Sub& op, CompilationContext& ctx,

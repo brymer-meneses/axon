@@ -1,11 +1,11 @@
-#include <llvm/ADT/APFloat.h>
-#include <mlir/IR/BuiltinAttributeInterfaces.h>
-#include <mlir/IR/BuiltinAttributes.h>
-
 #include <utility>
 
+#include "axon/base/dcheck.h"
 #include "axon/mlir/dialect/dialect.h"
+#include "llvm/ADT/APFloat.h"
 #include "mlir/Dialect/CommonFolders.h"
+#include "mlir/IR/BuiltinAttributeInterfaces.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Support/LLVM.h"
@@ -163,23 +163,23 @@ struct FuseExpandedDimsPattern : mlir::OpRewritePattern<MatMulOp> {
 
 auto AddOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                         mlir::MLIRContext* context) -> void {
-  patterns.add<EliminateAdditionOfSelfNegative>(context);
+  // patterns.add<EliminateAdditionOfSelfNegative>(context);
 }
 
 auto TransposeOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                               mlir::MLIRContext* context)
     -> void {
-  patterns.add<EliminateRedundantTransposePattern>(context);
+  // patterns.add<EliminateRedundantTransposePattern>(context);
 }
 
 auto MatMulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                            mlir::MLIRContext* context) -> void {
-  patterns.add<FuseTransposePattern, FuseExpandedDimsPattern>(context);
+  // patterns.add<FuseTransposePattern, FuseExpandedDimsPattern>(context);
 }
 
 auto SubOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                         mlir::MLIRContext* context) -> void {
-  patterns.add<EliminateSelfSubtractionPattern>(context);
+  // patterns.add<EliminateSelfSubtractionPattern>(context);
 }
 
 auto AccumulateOp::canonicalize(AccumulateOp op,
@@ -334,12 +334,17 @@ auto ScalarMulOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
   }
 
   auto scalar = adaptor.getScalar();
-  auto element_type = getType().getElementType();
-  if (element_type.isFloat()) {
+
+  if (auto float_attr = mlir::dyn_cast_if_present<mlir::FloatAttr>(scalar)) {
+    auto value = float_attr.getValue();
+    auto elems = elements.getValues<llvm::APFloat>()[0];
+
+    AXON_DCHECK(&value.getSemantics() == &elems.getSemantics(),
+                "ScalarMulOp::fold: mismatched APFloat semantics");
     return constFoldUnaryOp<mlir::FloatAttr, mlir::APFloat, PoisonAttr>(
         adaptor.getOperands(),
-        [&scalar](const mlir::APFloat& elem) -> mlir::APFloat {
-          return elem * scalar;
+        [value](const mlir::APFloat& elem) -> mlir::APFloat {
+          return elem * value;
         });
   }
   return nullptr;

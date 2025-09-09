@@ -522,15 +522,25 @@ struct FillOpLowering : mlir::OpConversionPattern<FillOp> {
     auto loc = op.getLoc();
     auto tensor = mlir::cast<mlir::TensorType>(op.getResult().getType());
 
-    auto fill_value = mlir::arith::ConstantOp::create(
-        rewriter, loc, rewriter.getF32Type(),
-        rewriter.getF32FloatAttr(op.getFillValue().convertToFloat()));
+    if (auto float_attr = mlir::dyn_cast<mlir::FloatAttr>(op.getFillValue())) {
+      auto fill_value =
+          mlir::arith::ConstantOp::create(rewriter, loc, float_attr);
+      auto fill_op =
+          mlir::tensor::SplatOp::create(rewriter, loc, fill_value, tensor);
+      rewriter.replaceOp(op, fill_op);
+      return mlir::success();
+    }
 
-    auto fill_op =
-        mlir::tensor::SplatOp::create(rewriter, loc, fill_value, tensor);
+    if (auto int_attr = mlir::dyn_cast<mlir::IntegerAttr>(op.getFillValue())) {
+      auto fill_value =
+          mlir::arith::ConstantOp::create(rewriter, loc, int_attr);
+      auto fill_op =
+          mlir::tensor::SplatOp::create(rewriter, loc, fill_value, tensor);
+      rewriter.replaceOp(op, fill_op);
+      return mlir::success();
+    }
 
-    rewriter.replaceOp(op, fill_op);
-    return mlir::success();
+    return mlir::failure();
   }
 };
 
@@ -563,21 +573,24 @@ struct ScalarMulOpLowering : mlir::OpConversionPattern<ScalarMulOp> {
     auto loc = op.getLoc();
     auto result_type = op.getOperand().getType();
 
-    auto scalar_attr =
-        rewriter.getF64FloatAttr(op.getScalar().convertToDouble());
-    auto scalar_constant =
-        mlir::arith::ConstantOp::create(rewriter, loc, scalar_attr).getResult();
-    auto scalar_tensor = mlir::tensor::SplatOp::create(
-        rewriter, loc, scalar_constant, result_type);
+    if (auto float_attr = mlir::dyn_cast<mlir::FloatAttr>(op.getScalar())) {
+      auto scalar_constant =
+          mlir::arith::ConstantOp::create(rewriter, loc, float_attr)
+              .getResult();
+      auto scalar_tensor = mlir::tensor::SplatOp::create(
+          rewriter, loc, scalar_constant, result_type);
 
-    auto empty_op =
-        mlir::tensor::EmptyOp::create(rewriter, loc, result_type, {});
-    auto prod = mlir::linalg::MulOp::create(
-        rewriter, loc, mlir::ValueRange{scalar_tensor, adaptor.getOperand()},
-        mlir::ValueRange{empty_op});
+      auto empty_op =
+          mlir::tensor::EmptyOp::create(rewriter, loc, result_type, {});
+      auto prod = mlir::linalg::MulOp::create(
+          rewriter, loc, mlir::ValueRange{scalar_tensor, adaptor.getOperand()},
+          mlir::ValueRange{empty_op});
 
-    rewriter.replaceOp(op, prod.getResult(0));
-    return mlir::success();
+      rewriter.replaceOp(op, prod.getResult(0));
+      return mlir::success();
+    }
+
+    return mlir::failure();
   }
 };
 

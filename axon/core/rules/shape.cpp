@@ -65,11 +65,7 @@ struct InferShapeRule<insts::Transpose> {
                 "op.from must not exceed the rank of the tensor");
     AXON_DCHECK(op.to < shape.size(),
                 "op.to must not exceed the rank of the tensor");
-
-    auto tmp = shape[op.from];
-    shape[op.from] = shape[op.to];
-    shape[op.to] = tmp;
-
+    std::swap(shape[op.from], shape[op.to]);
     return shape;
   }
 };
@@ -109,6 +105,7 @@ struct InferShapeRule<insts::Sum> {
                 "op.operand_id must have a shape already.");
 
     Shape shape = shapes.get(op.operand_id)->get();
+    auto rank = static_cast<int32_t>(shape.size());
 
     if (op.keepdims) {
       AXON_DCHECK(op.axis < rank, "Axis must not exceed rank");

@@ -2,6 +2,7 @@
 #include <memory>
 #include <ranges>
 #include <stdexcept>
+#include <type_traits>
 
 #include "axon/base/dcheck.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -18,6 +19,7 @@
 #include "xtensor/containers/xarray.hpp"
 #include "xtensor/io/xio.hpp"
 
+import axon.base;
 import axon.core;
 import axon.python;
 import axon.mlir;
@@ -67,7 +69,7 @@ static auto buildGraphBindings(nb::module_& m) -> void {
               DataType::InternalType data_type) -> Tensor {
              auto data = createStoragefromNanobind(array, data_type);
              auto inst_id = graph.inner->createConstant(std::move(data));
-             return {inst_id};
+             return Tensor(inst_id);
            })
       .def("trace",
            [](GraphRef& graph, Tensor& tensor) {
@@ -174,7 +176,7 @@ static auto performElementWiseOperation(Graph& graph, const Tensor& lhs,
   }
 
   auto inst_id = graph.createOp(ElementWiseInst(lhs_id, rhs_id));
-  return {inst_id};
+  return Tensor(inst_id);
 }
 
 static auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
@@ -236,7 +238,7 @@ static auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
     }
   }
 
-  return graph.createOp(insts::MatMul(lhs_id, rhs_id));
+  return Tensor(graph.createOp(insts::MatMul(lhs_id, rhs_id)));
 }
 
 static auto buildTensorBindings(nb::module_& m) -> void {
@@ -249,9 +251,11 @@ static auto buildTensorBindings(nb::module_& m) -> void {
                      }
                      return nb::tuple(temp);
                    })
+
       .def_prop_ro(
           "requires_grad",
           [](const Tensor& self) -> bool { return self.requiresGrad(); })
+
       .def("__repr__",
            [](const Tensor& self) -> std::string {
              if (not self.hasData()) {
@@ -259,6 +263,7 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              }
              return dumpTensor(self);
            })
+
       .def("__add__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
              auto graph = current_graph.lock();
@@ -269,6 +274,7 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              }
              return performElementWiseOperation<insts::Add>(*graph, lhs, rhs);
            })
+
       .def("__sub__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
              auto graph = current_graph.lock();
@@ -279,6 +285,7 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              }
              return performElementWiseOperation<insts::Sub>(*graph, lhs, rhs);
            })
+
       .def("__mul__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {
              auto graph = current_graph.lock();
@@ -289,26 +296,33 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              }
              return performElementWiseOperation<insts::Mul>(*graph, lhs, rhs);
            })
+
       .def("__mul__",
-           [](const Tensor& self, double scalar) -> Tensor {
+           [](const Tensor& self, f32 scalar) -> Tensor {
              auto graph = current_graph.lock();
              if (!graph) {
                throw std::runtime_error(
                    "Failed to invoke mul since there is no active "
                    "graph.");
              }
-             return graph->createOp(insts::ScalarMul(self.inst_id(), scalar));
+             return Tensor(graph->createOp(
+                 insts::ScalarMul(self.inst_id(), Scalar(scalar))));
            })
+
+      // FIXME: changing this to a f64 results to invalid folding due to APFloat
+      // having different semantics.
       .def("__rmul__",
-           [](const Tensor& self, double scalar) -> Tensor {
+           [](const Tensor& self, f32 scalar) -> Tensor {
              auto graph = current_graph.lock();
              if (!graph) {
                throw std::runtime_error(
                    "Failed to invoke mul since there is no active "
                    "graph.");
              }
-             return graph->createOp(insts::ScalarMul(self.inst_id(), scalar));
+             return Tensor(graph->createOp(
+                 insts::ScalarMul(self.inst_id(), Scalar(scalar))));
            })
+
       .def("__neg__",
            [](const Tensor& self) -> Tensor {
              auto graph = current_graph.lock();
@@ -317,7 +331,7 @@ static auto buildTensorBindings(nb::module_& m) -> void {
                    "Failed to invoke neg since there is no active "
                    "graph.");
              }
-             return graph->createOp(insts::Neg(self.inst_id()));
+             return Tensor(graph->createOp(insts::Neg(self.inst_id())));
            })
       .def("__matmul__",
            [](const Tensor& lhs, const Tensor& rhs) -> Tensor {

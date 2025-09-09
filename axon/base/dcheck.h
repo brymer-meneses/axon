@@ -3,7 +3,7 @@
 #include <exception>
 #include <print>
 
-#if !defined(ENABLE_DCHECK)
+#if defined(ENABLE_DCHECK)
 #define AXON_DCHECK(condition, ...)                                        \
   do {                                                                     \
     if (not(condition)) [[unlikely]] {                                     \

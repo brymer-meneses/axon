@@ -7,7 +7,7 @@ opts = LoweringOps(LoweringLevel.Axon)
 
 @axon.jit(opts)
 def matmul(a, b):
-    l = a @ b - (a - b)
+    l = 2 * a * b
     l.backward()
 
 
@@ -16,6 +16,7 @@ b = axon.ones((5, 2, 2), requires_grad=True)
 
 matmul(a, b)
 print(matmul.dump_ir())
-#
-print(a.grad)
-print(b.grad)
+
+if opts.execute:
+    print(a.grad)
+    print(b.grad)

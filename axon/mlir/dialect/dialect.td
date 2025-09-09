@@ -111,7 +111,7 @@ def Axon_AccumulateOp : AxonDialect_Op<"accumulate", [
 }
 
 def Axon_FillOp : AxonDialect_Op<"fill_like", [Pure]> {
-  let arguments = (ins F32Attr:$fill_value);
+  let arguments = (ins AnyAttr:$fill_value);
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$fill_value `->` type($result) attr-dict";
@@ -230,7 +230,7 @@ def Axon_ScalarMulOp: AxonDialect_Op<"scalar_mul", [
   SameOperandsAndResultType,
   SameOperandsAndResultElementType,
 ]> {
-  let arguments = (ins AnyTensor:$operand, F64Attr:$scalar);
+  let arguments = (ins AnyTensor:$operand, AnyAttr:$scalar);
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$operand `*` $scalar `->` type($result) attr-dict";

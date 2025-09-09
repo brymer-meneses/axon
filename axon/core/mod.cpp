@@ -8,3 +8,4 @@ export import :autodiff;
 export import :storage;
 
 export import :shape_rules;
+export import :scalar;

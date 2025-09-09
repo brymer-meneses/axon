@@ -50,6 +50,7 @@ target_sources(axon
     axon/core/ids.cpp
     axon/core/graph.cpp
     axon/core/storage.cpp
+    axon/core/scalar.cpp
     axon/core/rules/backward.cpp
     axon/core/rules/shape.cpp
 

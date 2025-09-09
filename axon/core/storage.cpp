@@ -1,10 +1,12 @@
 module;
 
 #include <algorithm>
+#include <cstdint>
 #include <exception>
 #include <print>
 #include <random>
 #include <ranges>
+#include <type_traits>
 #include <utility>
 
 #include "axon/base/dcheck.h"
@@ -13,17 +15,19 @@ module;
 
 export module axon.core:storage;
 
+import axon.base;
+
 namespace axon {
 
 export class DataType {
  public:
-  enum InternalType {
+  enum InternalType : uint8_t {
     Float32,
     Float64,
   };
 
-  DataType(InternalType type) : type_(type) {}
-  DataType() = default;
+  constexpr DataType(InternalType type) : type_(type) {}
+  constexpr DataType() = default;
 
   auto operator==(DataType other) const -> bool { return type_ == other.type_; }
 
@@ -36,7 +40,19 @@ export class DataType {
     }
   }
 
-  auto value() -> InternalType { return type_; }
+  auto kind() -> InternalType { return type_; }
+
+  template <typename T>
+  static consteval auto fromType() -> DataType {
+    if constexpr (std::is_same_v<T, f32>) {
+      return DataType::Float32;
+    } else if constexpr (std::is_same_v<T, f64>) {
+      return DataType::Float64;
+    } else {
+      static_assert("Passed template parameter has no corresponding DataType");
+      std::unreachable();
+    }
+  }
 
  private:
   InternalType type_;
@@ -106,7 +122,7 @@ export class Storage {
     auto size = num_elems * data_type.getSizeInBytes();
     auto* data = new std::byte[size];
 
-    switch (data_type.value()) {
+    switch (data_type.kind()) {
       case DataType::Float32: {
         auto* data_ptr = reinterpret_cast<float*>(data);
         std::fill_n(data_ptr, num_elems, value);
@@ -139,7 +155,7 @@ export class Storage {
     auto type_erased_ptr = new std::byte[size_in_bytes];
     auto strides = computeStrides(shape, layout);
 
-    switch (data_type.value()) {
+    switch (data_type.kind()) {
       case DataType::Float32: {
         std::normal_distribution<float> distribution(mean, standard_deviation);
         auto data_ptr = reinterpret_cast<float*>(type_erased_ptr);
@@ -223,21 +239,20 @@ export class Storage {
   auto data_type() const -> DataType { return data_type_; }
 
  private:
-  Storage(DataType element_type, std::byte* data, llvm::ArrayRef<int64_t> shape,
+  Storage(DataType data_type, std::byte* data, llvm::ArrayRef<int64_t> shape,
           llvm::ArrayRef<int64_t> strides, bool is_owned)
       : data_(data),
         shape_(shape),
         strides_(strides),
-        data_type_(element_type),
+        data_type_(data_type),
         is_owned_(is_owned) {}
 
-  Storage(DataType element_type, std::byte* data,
-          llvm::SmallVector<int64_t> shape, llvm::SmallVector<int64_t> strides,
-          bool is_owned)
+  Storage(DataType data_type, std::byte* data, llvm::SmallVector<int64_t> shape,
+          llvm::SmallVector<int64_t> strides, bool is_owned)
       : data_(data),
         shape_(std::move(shape)),
         strides_(std::move(strides)),
-        data_type_(element_type),
+        data_type_(data_type),
         is_owned_(is_owned) {}
 
   std::byte* data_;

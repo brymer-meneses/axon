@@ -8,6 +8,7 @@ module;
 export module axon.core:inst_kinds;
 
 import :ids;
+import :scalar;
 
 export namespace axon {
 
@@ -156,7 +157,7 @@ struct ScalarMul {
   };
 
   InstId operand_id;
-  double scalar;
+  Scalar scalar;
 };
 
 struct Neg {
