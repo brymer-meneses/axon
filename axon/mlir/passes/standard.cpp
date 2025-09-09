@@ -561,33 +561,68 @@ struct ScalarMulOpLowering : mlir::OpConversionPattern<ScalarMulOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
-    auto tensor = op.getOperand().getType();
+    auto result_type = op.getOperand().getType();
 
     auto scalar_attr =
         rewriter.getF64FloatAttr(op.getScalar().convertToDouble());
-
     auto scalar_constant =
         mlir::arith::ConstantOp::create(rewriter, loc, scalar_attr).getResult();
+    auto scalar_tensor = mlir::tensor::SplatOp::create(
+        rewriter, loc, scalar_constant, result_type);
 
-    llvm::SmallVector iterator_types(tensor.getRank(),
-                                     mlir::utils::IteratorType::parallel);
-    llvm::SmallVector indexing_maps = {mlir::AffineMap::getMultiDimIdentityMap(
-        tensor.getRank(), op.getContext())};
+    auto empty_op =
+        mlir::tensor::EmptyOp::create(rewriter, loc, result_type, {});
+    auto prod = mlir::linalg::MulOp::create(
+        rewriter, loc, mlir::ValueRange{scalar_tensor, adaptor.getOperand()},
+        mlir::ValueRange{empty_op});
 
-    auto scalar_mul_op = mlir::linalg::GenericOp::create(
-        rewriter, loc, mlir::TypeRange{tensor},
-        mlir::ValueRange{adaptor.getOperand()},
-        mlir::ValueRange{adaptor.getOperand()}, indexing_maps, iterator_types,
-        [scalar_constant](mlir::OpBuilder& builder, mlir::Location loc,
-                          mlir::ValueRange args) -> void {
-          auto mul_op = mlir::arith::MulFOp::create(builder, loc, args[0],
-                                                    scalar_constant)
-                            .getResult();
-          mlir::linalg::YieldOp::create(builder, loc, mul_op);
-        });
-
-    rewriter.replaceOp(op, scalar_mul_op.getResult(0));
+    rewriter.replaceOp(op, prod.getResult(0));
     return mlir::success();
+  }
+};
+
+struct ConstantOpLowering : mlir::OpConversionPattern<ConstantOp> {
+  using mlir::OpConversionPattern<ConstantOp>::OpConversionPattern;
+
+  auto matchAndRewrite(ConstantOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto constant_value = op.getValue();
+    if (constant_value.isSplat()) {
+      return handleSplatLowering(op, constant_value, rewriter);
+    }
+    return rewriter.notifyMatchFailure(
+        op.getLoc(), "Non-splat constant tensors are not supported yet");
+  }
+
+  auto handleSplatLowering(ConstantOp op, mlir::ElementsAttr constant_value,
+                           mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult {
+    auto element_type = op.getValue().getElementType();
+    auto loc = op.getLoc();
+    if (element_type.isFloat()) {
+      auto value = constant_value.getSplatValue<llvm::APFloat>();
+      auto scalar_constant = mlir::arith::ConstantFloatOp::create(
+          rewriter, op.getLoc(), rewriter.getFloatAttr(element_type, value));
+
+      auto splat = mlir::tensor::SplatOp::create(rewriter, loc, scalar_constant,
+                                                 op.getResult().getType());
+
+      rewriter.replaceOp(op, splat);
+      return mlir::success();
+    } else if (element_type.isInteger()) {
+      auto value = constant_value.getSplatValue<llvm::APInt>();
+      auto scalar_constant = mlir::arith::ConstantIntOp::create(
+          rewriter, op.getLoc(), rewriter.getIntegerAttr(element_type, value));
+
+      auto splat = mlir::tensor::SplatOp::create(rewriter, loc, scalar_constant,
+                                                 op.getResult().getType());
+
+      rewriter.replaceOp(op, splat);
+      return mlir::success();
+    }
+
+    return mlir::failure();
   }
 };
 
@@ -658,6 +693,7 @@ struct AxonToStandardLoweringPass
       SumOpLowering,
       ScalarMulOpLowering,
 
+      ConstantOpLowering,
       FillOpLowering,
       ExpandDimsOpLowering, 
       SqueezeOpLowering,

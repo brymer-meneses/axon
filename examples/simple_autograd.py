@@ -7,7 +7,7 @@ opts = LoweringOps(LoweringLevel.Axon)
 
 @axon.jit(opts)
 def matmul(a, b):
-    l = a + b - (a + b)
+    l = a @ b - (a - b)
     l.backward()
 
 

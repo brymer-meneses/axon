@@ -172,7 +172,7 @@ struct Neg {
 struct Constant {
   constexpr static auto traits = InstTraits{
       .num_operands = 0,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .shape_rule = ShapeInfo::None,
       .differentiable = false,
   };
 };

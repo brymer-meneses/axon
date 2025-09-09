@@ -14,6 +14,8 @@ def AxonDialect : Dialect {
   let name = "axon";
   let cppNamespace = "axon";
   let useDefaultTypePrinterParser = 1;
+
+  let hasConstantMaterializer = 1;
 }
 
 class AxonDialect_Type<string name, string typeMnemonic, list<Trait> traits = []>
@@ -75,7 +77,7 @@ def Axon_GetGradOp : AxonDialect_Op<"get_grad", [Pure]> {
   }];
 }
 
-def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure]> {
+def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure, ConstantLike]> {
   let arguments = (ins ElementsAttr:$value);
   let results = (outs AnyTensor:$result);
 
@@ -85,6 +87,7 @@ def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure]> {
     }]>,
   ];
 
+  let hasFolder = 1;
   let hasCustomAssemblyFormat = 1;
 }
 
@@ -104,7 +107,7 @@ def Axon_AccumulateOp : AxonDialect_Op<"accumulate", [
     }
   }];
 
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def Axon_FillOp : AxonDialect_Op<"fill_like", [Pure]> {
@@ -112,6 +115,7 @@ def Axon_FillOp : AxonDialect_Op<"fill_like", [Pure]> {
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$fill_value `->` type($result) attr-dict";
+  let hasFolder = 1;
 }
 
 def Axon_TupleAccessOp : AxonDialect_Op<"tuple_access", [
@@ -143,6 +147,7 @@ def Axon_AddOp : AxonDialect_Op<"add", [
 
   let assemblyFormat = "$lhs `,` $rhs `->` type($result) attr-dict";
 
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
 
@@ -157,7 +162,7 @@ def Axon_MulOp : AxonDialect_Op<"mul", [
 
   let assemblyFormat = "$lhs `,` $rhs `->` type($result) attr-dict";
 
-  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 def Axon_SubOp : AxonDialect_Op<"sub", [
@@ -171,6 +176,7 @@ def Axon_SubOp : AxonDialect_Op<"sub", [
 
   let assemblyFormat = "$lhs `,` $rhs `->` type($result) attr-dict";
 
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
 
@@ -190,6 +196,7 @@ def Axon_MatMulOp : AxonDialect_Op<"matmul", [
 
   let assemblyFormat = "$lhs `,` $rhs `:` type($lhs) `,` type($rhs) `->` type($result) attr-dict";
 
+  let hasFolder = 1;
   let hasVerifier = 1;
   let hasCanonicalizer = 1;
 }
@@ -215,7 +222,7 @@ def Axon_NegOp: AxonDialect_Op<"neg", [
 
   let assemblyFormat = "$operand `->` type($result) attr-dict";
 
-  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 def Axon_ScalarMulOp: AxonDialect_Op<"scalar_mul", [
@@ -228,7 +235,7 @@ def Axon_ScalarMulOp: AxonDialect_Op<"scalar_mul", [
 
   let assemblyFormat = "$operand `*` $scalar `->` type($result) attr-dict";
 
-  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 def Axon_SqueezeOp : AxonDialect_Op<"squeeze", [
@@ -260,6 +267,7 @@ def Axon_ReshapeOp : AxonDialect_Op<"reshape", [
 
   let assemblyFormat = "$operand `,` type($operand) `->` type($result) attr-dict";
 
+  let hasFolder = 1;
   let hasVerifier = 1;
 }
 

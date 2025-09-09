@@ -7,11 +7,13 @@ from . import nn
 
 __all__ = [
     "nn",
-    "float32",
-    "float64",
-    "dtype",
     "randn",
     "jit",
     "tensor",
     "ones",
+    "dtype",
+    "float32",
+    "float64",
+    "LoweringLevel",
+    "LoweringOps",
 ]

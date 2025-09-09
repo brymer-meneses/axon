@@ -1,66 +1,18 @@
+#include <llvm/ADT/APFloat.h>
+#include <mlir/IR/BuiltinAttributeInterfaces.h>
+#include <mlir/IR/BuiltinAttributes.h>
+
+#include <utility>
+
 #include "axon/mlir/dialect/dialect.h"
+#include "mlir/Dialect/CommonFolders.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/Support/LLVM.h"
 
 namespace axon {
 
 namespace {
-
-// 1 * x => x
-struct EliminateIdentityMulPattern : mlir::OpRewritePattern<MulOp> {
-  using mlir::OpRewritePattern<MulOp>::OpRewritePattern;
-  auto matchAndRewrite(MulOp op, mlir::PatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto lhs = op.getLhs().getDefiningOp<FillOp>();
-    if (!lhs) {
-      return mlir::failure();
-    }
-
-    if (lhs.getFillValue().isExactlyValue(1.0)) {
-      rewriter.replaceOp(op, op.getRhs());
-      return mlir::success();
-    }
-
-    auto rhs = op.getLhs().getDefiningOp<FillOp>();
-    if (!rhs) {
-      return mlir::failure();
-    }
-    if (rhs.getFillValue().isExactlyValue(1.0)) {
-      rewriter.replaceOp(op, op.getLhs());
-      return mlir::success();
-    }
-
-    return mlir::failure();
-  }
-};
-
-// 0 + x => x and x + 0 => x
-struct EliminateIdentityAddPattern : mlir::OpRewritePattern<AddOp> {
-  using mlir::OpRewritePattern<AddOp>::OpRewritePattern;
-
-  auto matchAndRewrite(AddOp op, mlir::PatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto lhs = op.getLhs().getDefiningOp<FillOp>();
-    if (!lhs) {
-      return mlir::failure();
-    }
-
-    if (lhs.getFillValue().isExactlyValue(0.0)) {
-      rewriter.replaceOp(op, op.getRhs());
-      return mlir::success();
-    }
-
-    auto rhs = op.getLhs().getDefiningOp<FillOp>();
-    if (!rhs) {
-      return mlir::failure();
-    }
-    if (rhs.getFillValue().isExactlyValue(0.0)) {
-      rewriter.replaceOp(op, op.getLhs());
-      return mlir::success();
-    }
-
-    return mlir::failure();
-  }
-};
 
 // (x^T)^T => x
 struct EliminateRedundantTransposePattern
@@ -83,7 +35,7 @@ struct EliminateRedundantTransposePattern
   }
 };
 
-/// x - x => x
+/// x - x => 0
 struct EliminateSelfSubtractionPattern : mlir::OpRewritePattern<SubOp> {
   using mlir::OpRewritePattern<SubOp>::OpRewritePattern;
 
@@ -103,145 +55,34 @@ struct EliminateSelfSubtractionPattern : mlir::OpRewritePattern<SubOp> {
   }
 };
 
-/// sink += 0
-struct EliminateZeroAccumulationPattern : mlir::OpRewritePattern<AccumulateOp> {
-  using mlir::OpRewritePattern<AccumulateOp>::OpRewritePattern;
-
-  auto matchAndRewrite(AccumulateOp op, mlir::PatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto source = op.getSource().getDefiningOp<FillOp>();
-    if (!source) {
-      return mlir::failure();
-    }
-
-    if (source.getFillValue().isExactlyValue(0)) {
-      rewriter.eraseOp(op);
-      return mlir::success();
-    }
-
-    return mlir::failure();
-  }
-};
-
-struct SimplifyZeroSubtractionPattern : mlir::OpRewritePattern<SubOp> {
-  using mlir::OpRewritePattern<SubOp>::OpRewritePattern;
-
-  auto matchAndRewrite(SubOp op, mlir::PatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto lhs = op.getLhs().getDefiningOp<FillOp>();
-    if (!lhs) {
-      return mlir::failure();
-    }
-    if (!lhs.getFillValue().isExactlyValue(0.0)) {
-      return mlir::failure();
-    }
-
-    auto neg_op = NegOp::create(rewriter, op.getLoc(), op.getRhs());
-    rewriter.replaceOp(op, neg_op);
-    return mlir::success();
-  }
-};
-
-struct SimplifyMultiplicationOfFillOpPattern : mlir::OpRewritePattern<MulOp> {
-  using mlir::OpRewritePattern<MulOp>::OpRewritePattern;
-
-  auto matchAndRewrite(MulOp op, mlir::PatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto lhs = op.getLhs().getDefiningOp<FillOp>();
-    auto rhs = op.getRhs().getDefiningOp<FillOp>();
-    if (!lhs || !rhs) {
-      return mlir::failure();
-    }
-
-    auto lhs_value = lhs.getFillValue();
-    auto rhs_value = lhs.getFillValue();
-
-    auto loc = op.getLoc();
-    auto prod = lhs_value * rhs_value;
-    auto fill_op =
-        FillOp::create(rewriter, loc, op.getResult().getType(), prod);
-
-    rewriter.replaceOp(op, fill_op);
-    return mlir::success();
-  }
-};
-
-struct SimplifyAdditionOfFillOpPattern : mlir::OpRewritePattern<AddOp> {
+/// x + (-x) => 0
+/// (-x) + x => 0
+struct EliminateAdditionOfSelfNegative : mlir::OpRewritePattern<AddOp> {
   using mlir::OpRewritePattern<AddOp>::OpRewritePattern;
 
   auto matchAndRewrite(AddOp op, mlir::PatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
-    auto lhs = op.getLhs().getDefiningOp<FillOp>();
-    auto rhs = op.getRhs().getDefiningOp<FillOp>();
-    if (!lhs || !rhs) {
-      return mlir::failure();
+    if (auto lhs_neg = op.getLhs().getDefiningOp<NegOp>()) {
+      if (lhs_neg.getOperand() == op.getRhs()) {
+        auto fill_type = op.getResult().getType();
+        auto zero = FillOp::create(rewriter, op.getLoc(), fill_type,
+                                   rewriter.getF32FloatAttr(0.0));
+        rewriter.replaceOp(op, zero);
+        return mlir::success();
+      }
     }
 
-    // FIXME: These conversions can overflow.
-    llvm::APFloat lhs_value = lhs.getFillValue();
-    llvm::APFloat rhs_value = rhs.getFillValue();
-
-    auto loc = op.getLoc();
-    auto addition = lhs_value + rhs_value;
-    auto fill_op =
-        FillOp::create(rewriter, loc, op.getResult().getType(), addition);
-
-    rewriter.replaceOp(op, fill_op);
-    return mlir::success();
-  }
-};
-
-struct SimplifyNegationOfFillOpPattern : mlir::OpRewritePattern<NegOp> {
-  using mlir::OpRewritePattern<NegOp>::OpRewritePattern;
-
-  auto matchAndRewrite(NegOp op, mlir::PatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto operand = op.getOperand().getDefiningOp<FillOp>();
-    if (!operand) {
-      return mlir::failure();
+    if (auto rhs_neg = op.getLhs().getDefiningOp<NegOp>()) {
+      if (rhs_neg.getOperand() == op.getLhs()) {
+        auto fill_type = op.getResult().getType();
+        auto zero = FillOp::create(rewriter, op.getLoc(), fill_type,
+                                   rewriter.getF32FloatAttr(0.0));
+        rewriter.replaceOp(op, zero);
+        return mlir::success();
+      }
     }
 
-    llvm::APFloat scalar = operand.getFillValue();
-    scalar.changeSign();
-
-    auto fill_op =
-        FillOp::create(rewriter, op.getLoc(), op.getResult().getType(), scalar);
-    rewriter.replaceOp(op, fill_op);
-    return mlir::success();
-  }
-};
-
-struct SimplifyScalarMultiplicationPattern
-    : mlir::OpRewritePattern<ScalarMulOp> {
-  using mlir::OpRewritePattern<ScalarMulOp>::OpRewritePattern;
-
-  auto matchAndRewrite(ScalarMulOp op, mlir::PatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto fill_op = op.getOperand().getDefiningOp<FillOp>();
-    if (!fill_op) {
-      return mlir::failure();
-    }
-
-    auto loc = op.getLoc();
-    if (fill_op.getFillValue().isExactlyValue(-1)) {
-      auto neg_op = NegOp::create(rewriter, loc, op.getOperand());
-      rewriter.replaceOp(op, neg_op);
-      return mlir::success();
-    }
-
-    llvm::APFloat scalar = op.getScalar();
-    llvm::APFloat fill_value = fill_op.getFillValue();
-    auto status =
-        scalar.multiply(fill_value, llvm::RoundingMode::NearestTiesToEven);
-    if (status != llvm::detail::opStatus::opOK) {
-      return mlir::failure();
-    }
-
-    // we use `scalar` here since the multiply result is stored on the lhs.
-    auto new_fill_op =
-        FillOp::create(rewriter, loc, op.getResult().getType(), scalar);
-    rewriter.replaceOp(op, new_fill_op);
-    return mlir::success();
+    return mlir::failure();
   }
 };
 
@@ -320,17 +161,9 @@ struct FuseExpandedDimsPattern : mlir::OpRewritePattern<MatMulOp> {
 
 }  // namespace
 
-auto MulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
-                                        mlir::MLIRContext* context) -> void {
-  patterns
-      .add<EliminateIdentityMulPattern, SimplifyMultiplicationOfFillOpPattern>(
-          context);
-}
-
 auto AddOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                         mlir::MLIRContext* context) -> void {
-  patterns.add<EliminateIdentityAddPattern, SimplifyAdditionOfFillOpPattern>(
-      context);
+  patterns.add<EliminateAdditionOfSelfNegative>(context);
 }
 
 auto TransposeOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
@@ -346,24 +179,193 @@ auto MatMulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
 
 auto SubOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                         mlir::MLIRContext* context) -> void {
-  patterns.add<EliminateSelfSubtractionPattern, SimplifyZeroSubtractionPattern>(
-      context);
+  patterns.add<EliminateSelfSubtractionPattern>(context);
 }
 
-auto NegOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
-                                        mlir::MLIRContext* context) -> void {
-  patterns.add<SimplifyNegationOfFillOpPattern>(context);
+auto AccumulateOp::canonicalize(AccumulateOp op,
+                                mlir::PatternRewriter& rewriter)
+    -> mlir::LogicalResult {
+  auto element_type = op.getSource().getType().getElementType();
+  auto constant_op = op.getSource().getDefiningOp<ConstantOp>();
+  if (!constant_op) {
+    return mlir::failure();
+  }
+
+  auto value = constant_op.getValue();
+  if (!value.isSplat()) {
+    return mlir::failure();
+  }
+
+  if (element_type.isFloat()) {
+    auto float_value = value.getSplatValue<llvm::APFloat>();
+    if (float_value.isZero()) {
+      rewriter.eraseOp(op);
+      return mlir::success();
+    }
+  }
+
+  return mlir::failure();
 }
 
-auto ScalarMulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
-                                              mlir::MLIRContext* context)
-    -> void {
-  patterns.add<SimplifyScalarMultiplicationPattern>(context);
+using PoisonAttr = void;
+
+template <typename Op, typename Callback>
+static auto handleElementWiseBinaryFold(typename Op::FoldAdaptor adaptor,
+                                        mlir::Type element_type,
+                                        Callback callback)
+    -> mlir::OpFoldResult {
+  auto lhs =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+  auto rhs =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+  if (!lhs || !rhs) {
+    return nullptr;
+  }
+
+  if (element_type.isFloat()) {
+    return constFoldBinaryOp<mlir::FloatAttr, mlir::APFloat, PoisonAttr>(
+        adaptor.getOperands(), callback);
+  } else if (element_type.isInteger()) {
+    return constFoldBinaryOp<mlir::IntegerAttr, mlir::APInt, PoisonAttr>(
+        adaptor.getOperands(), callback);
+  }
+
+  return nullptr;
 }
 
-auto AccumulateOp::getCanonicalizationPatterns(
-    mlir::RewritePatternSet& patterns, mlir::MLIRContext* context) -> void {
-  patterns.add<EliminateZeroAccumulationPattern>(context);
+static auto isSplatWithValue(mlir::DenseElementsAttr attr, double value) {
+  auto element_type = attr.getElementType();
+  if (!attr.isSplat()) {
+    return false;
+  }
+
+  if (element_type.isInteger()) {
+    return attr.getSplatValue<llvm::APInt>() == static_cast<int64_t>(value);
+  } else if (element_type.isFloat()) {
+    return attr.getSplatValue<llvm::APFloat>().isExactlyValue(value);
+  }
+  return false;
 }
+
+auto FillOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
+  return mlir::DenseElementsAttr::get(getType(), adaptor.getFillValueAttr());
+}
+
+auto ConstantOp::fold(FoldAdaptor) -> mlir::OpFoldResult { return getValue(); }
+
+auto AddOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
+  auto fill_type = getResult().getType();
+  if (auto lhs_neg = getLhs().getDefiningOp<NegOp>()) {
+    if (lhs_neg.getOperand() == getRhs()) {
+      return mlir::DenseElementsAttr::get(fill_type, 0.0);
+    }
+  }
+  if (auto rhs_neg = getLhs().getDefiningOp<NegOp>()) {
+    if (rhs_neg.getOperand() == getLhs()) {
+      return mlir::DenseElementsAttr::get(fill_type, 0.0);
+    }
+  }
+
+  return handleElementWiseBinaryFold<AddOp>(
+      adaptor, getType().getElementType(),
+      [](auto lhs, auto rhs) { return lhs + rhs; });
+}
+
+auto MulOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
+  auto lhs =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+  auto rhs =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+  if (!lhs || !rhs) {
+    return nullptr;
+  }
+
+  if (isSplatWithValue(lhs, 0) || isSplatWithValue(rhs, 0)) {
+    return mlir::DenseElementsAttr::get(getResult().getType(), 0.0);
+  }
+
+  if (isSplatWithValue(lhs, 1)) {
+    return getRhs();
+  }
+  if (isSplatWithValue(rhs, 1)) {
+    return getLhs();
+  }
+
+  return handleElementWiseBinaryFold<MulOp>(
+      adaptor, getType().getElementType(),
+      [](auto lhs, auto rhs) { return lhs * rhs; });
+}
+
+auto MatMulOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
+  auto lhs =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+  auto rhs =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+  if (!lhs || !rhs) {
+    return nullptr;
+  }
+
+  if (isSplatWithValue(lhs, 0) || isSplatWithValue(rhs, 0)) {
+    return mlir::DenseElementsAttr::get(getResult().getType(), 0.0);
+  }
+
+  return nullptr;
+}
+
+auto SubOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
+  auto lhs =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+  auto rhs =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+  if (!lhs || !rhs) {
+    return nullptr;
+  }
+
+  return handleElementWiseBinaryFold<SubOp>(
+      adaptor, getType().getElementType(),
+      [](auto lhs, auto rhs) { return lhs - rhs; });
+}
+
+auto ScalarMulOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
+  auto elements =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getOperand());
+  if (!elements) {
+    return nullptr;
+  }
+
+  auto scalar = adaptor.getScalar();
+  auto element_type = getType().getElementType();
+  if (element_type.isFloat()) {
+    return constFoldUnaryOp<mlir::FloatAttr, mlir::APFloat, PoisonAttr>(
+        adaptor.getOperands(),
+        [&scalar](const mlir::APFloat& elem) -> mlir::APFloat {
+          return elem * scalar;
+        });
+  }
+  return nullptr;
+};
+
+auto ReshapeOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
+  auto elements =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getOperand());
+  if (!elements) {
+    return nullptr;
+  }
+  auto shape_type = mlir::RankedTensorType::get(adaptor.getTargetShape(),
+                                                elements.getElementType());
+  return elements.reshape(shape_type);
+}
+
+auto NegOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
+  auto elements =
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getOperand());
+  if (!elements) {
+    return nullptr;
+  }
+
+  return constFoldUnaryOp<mlir::FloatAttr, mlir::APFloat, PoisonAttr>(
+      adaptor.getOperand(),
+      [](const mlir::APFloat& elem) -> mlir::APFloat { return -elem; });
+};
 
 }  // namespace axon
