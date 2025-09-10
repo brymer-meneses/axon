@@ -193,16 +193,18 @@ static auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
     if (lhs_shape.size() == 2) {
       return lhs_shape[1] == rhs_shape[0];
     }
-    std::unreachable();
+
+    return false;
   };
 
-  llvm::ArrayRef<int64_t> lhs_shape = lhs.shape();
-  llvm::ArrayRef<int64_t> rhs_shape = rhs.shape();
+  llvm::ArrayRef<int64_t> lhs_shape = graph.getShape(lhs.inst_id());
+  llvm::ArrayRef<int64_t> rhs_shape = graph.getShape(rhs.inst_id());
 
   auto lhs_id = lhs.inst_id();
   auto rhs_id = rhs.inst_id();
 
-  if (lhs_shape.size() > 3 || rhs_shape.size() > 3) {
+  if (lhs_shape.size() > 3 || rhs_shape.size() > 3 || lhs_shape.size() < 1 ||
+      rhs_shape.size() < 1) {
     throw std::runtime_error(
         "Attempted to multiply tensors with more than rank of 3.");
   }
@@ -219,7 +221,13 @@ static auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
                         lhs_shape, rhs_shape));
       }
 
-      lhs_id = *performBroadcasting(graph, lhs_id, lhs_shape, target_shape);
+      auto new_lhs_id =
+          performBroadcasting(graph, lhs_id, lhs_shape, target_shape);
+      if (!new_lhs_id) {
+        throw std::runtime_error(std::format("Failed to broadcast {} into {}",
+                                             lhs_shape, target_shape));
+      }
+      lhs_id = *new_lhs_id;
     }
   }
   if (lhs_shape.size() > rhs_shape.size()) {
@@ -233,8 +241,14 @@ static auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
                         "shape {} and {}",
                         lhs_shape, rhs_shape));
       }
+      auto new_rhs_id =
+          performBroadcasting(graph, rhs_id, rhs_shape, target_shape);
+      if (!new_rhs_id) {
+        throw std::runtime_error(std::format("Failed to broadcast {} into {}",
+                                             rhs_shape, target_shape));
+      }
 
-      rhs_id = *performBroadcasting(graph, rhs_id, rhs_shape, target_shape);
+      rhs_id = *new_rhs_id;
     }
   }
 
