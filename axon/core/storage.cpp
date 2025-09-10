@@ -12,10 +12,13 @@ module;
 #include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "nanobind/ndarray.h"
 
 export module axon.core:storage;
 
 import axon.base;
+
+namespace nb = nanobind;
 
 namespace axon {
 
@@ -41,6 +44,11 @@ export class DataType {
   }
 
   auto kind() -> InternalType { return type_; }
+
+  template <typename T>
+  auto isSameAs() const -> bool {
+    return fromType<T>() == type_;
+  }
 
   template <typename T>
   static consteval auto fromType() -> DataType {
@@ -135,6 +143,23 @@ export class Storage {
     }
 
     return {data_type, data, shape, strides, /*is_owned=*/true};
+  }
+
+  static auto createFromNanobind(nb::ndarray<>& array, DataType data_type)
+      -> Storage {
+    // TODO: Explore ways to avoid copying the memory.
+    auto buffer_size = array.size() * data_type.getSizeInBytes();
+    auto* data_ptr = new std::byte[buffer_size];
+    std::memcpy(data_ptr, array.data(), buffer_size);
+
+    auto shape = llvm::ArrayRef<i64>(array.shape_ptr(), array.ndim());
+    auto stride = llvm::ArrayRef<i64>(array.stride_ptr(), array.ndim());
+
+    AXON_DCHECK(data_type == DataType::Float32,
+                "Only float32 is supported for now.");
+
+    return Storage::create(data_ptr, shape, data_type, /*is_owned=*/true,
+                           stride);
   }
 
   static auto createFilled(llvm::ArrayRef<int64_t> shape, auto value,
@@ -232,6 +257,18 @@ export class Storage {
   }
 
   auto data_ptr() const -> std::byte* { return data_; }
+
+  template <typename T>
+  auto as() const -> const T* {
+    AXON_DCHECK(data_type_.isSameAs<T>());
+    return reinterpret_cast<T*>(data_);
+  }
+
+  template <typename T>
+  auto as() -> T* {
+    AXON_DCHECK(data_type_.isSameAs<T>());
+    return reinterpret_cast<T*>(data_);
+  }
 
   auto shape() const -> llvm::ArrayRef<int64_t> { return shape_; }
   auto strides() const -> llvm::ArrayRef<int64_t> { return strides_; }

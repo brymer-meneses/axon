@@ -19,8 +19,9 @@ uv run examples/simple_autograd.py
 
 ```python
 import axon
+from axon import nn, optim
 
-class Model(axon.Module):
+class Model(nn.Module):
     def __init__(self, in_features, out_features):
         super().__init__()
         self.W = axon.randn((in_features, out_features), requires_grad=True)
@@ -39,7 +40,7 @@ def training_step(x, y, model):
     l.backward()
     return l
 
-optim = axon.SGD(model.parameters(), lr=0.01)
+optim = optim.SGD(model.parameters(), lr=0.01)
 for (x, y) in dataset:
     l = training_step(x, y, model)
     optim.zero_grad()

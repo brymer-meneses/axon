@@ -127,7 +127,8 @@ struct InferShapeRule<insts::ExpandDims> {
     Shape shape = shapes.get(op.operand_id)->get();
     auto rank = static_cast<int32_t>(shape.size());
     for (auto expansion : op.mappings) {
-      AXON_DCHECK(expansion.dim < rank, "Dim exceeded the rank");
+      AXON_DCHECK(expansion.dim < rank, "Dim {} exceeded the rank {}",
+                  expansion.dim, rank);
       shape[expansion.dim] = expansion.scale;
     }
     return shape;

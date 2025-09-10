@@ -8,7 +8,7 @@ dependencies = [
 
 [tool.setuptools]
 package-dir = {"" = "axon/python"}
-packages = ["axon", "axon.nn"]
+packages = ["axon", "axon.nn", "axon.testing"]
 
 [tool.setuptools.package-data]
 "*" = ["*.so", "*.pyd", "*.dll", "*.pyi", "py.typed"]
@@ -16,5 +16,5 @@ packages = ["axon", "axon.nn"]
 [dependency-groups]
 dev = [
     "pytest>=8.4.1",
-    "pytest-clarity>=1.0.1",
+    "torch>=2.8.0",
 ]

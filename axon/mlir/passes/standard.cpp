@@ -314,7 +314,7 @@ struct SqueezeOpLowering : mlir::OpConversionPattern<SqueezeOp> {
         mlir::getReassociationIndicesForReshape(input_tensor, result_tensor);
     if (!reassociation_indices) {
       op.emitError(
-          std::format("Failed to compute reassociation indices for {} and {}",
+          std::format("Failed to compute reassociation indices for {} -> {}",
                       input_tensor.getShape(), result_tensor.getShape()));
       return mlir::failure();
     }
@@ -651,7 +651,7 @@ struct AxonToStandardTypeConverter : mlir::TypeConverter {
         return mlir::TupleType::get(ctx,
                                     mlir::TypeRange{memref_type, memref_type});
       }
-      return memref_type;
+      return mlir::TupleType::get(ctx, {memref_type});
     });
   }
 };

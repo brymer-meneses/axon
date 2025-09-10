@@ -1,0 +1,6 @@
+from axon import Tensor
+import axon._core as _core
+
+
+def is_equal(left: Tensor, right) -> bool:
+    return _core._is_equal(left, right)

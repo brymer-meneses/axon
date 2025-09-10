@@ -1,6 +1,7 @@
 #include <format>
 #include <memory>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <type_traits>
 
@@ -28,22 +29,6 @@ namespace nb = nanobind;
 
 using namespace axon;
 
-static auto createStoragefromNanobind(nb::ndarray<>& array, DataType data_type)
-    -> Storage {
-  // TODO: Explore ways to avoid copying the memory.
-  auto buffer_size = array.size() * data_type.getSizeInBytes();
-  auto* data_ptr = new std::byte[buffer_size];
-  std::memcpy(data_ptr, array.data(), buffer_size);
-
-  auto shape = llvm::ArrayRef<int64_t>(array.shape_ptr(), array.ndim());
-  auto stride = llvm::ArrayRef<int64_t>(array.stride_ptr(), array.ndim());
-
-  AXON_DCHECK(data_type == DataType::Float32,
-              "Only float32 is supported for now.");
-
-  return Storage::create(data_ptr, shape, data_type, /*is_owned=*/true, stride);
-}
-
 static thread_local std::weak_ptr<Graph> current_graph;
 
 static auto buildGraphBindings(nb::module_& m) -> void {
@@ -67,7 +52,7 @@ static auto buildGraphBindings(nb::module_& m) -> void {
       .def("create_constant",
            [](GraphRef& graph, nb::ndarray<>& array,
               DataType::InternalType data_type) -> Tensor {
-             auto data = createStoragefromNanobind(array, data_type);
+             auto data = Storage::createFromNanobind(array, data_type);
              auto inst_id = graph.inner->createConstant(std::move(data));
              return Tensor(inst_id);
            })
@@ -84,175 +69,6 @@ static auto buildGraphBindings(nb::module_& m) -> void {
 
   m.def("_set_current_graph",
         [](GraphRef graph) -> void { current_graph = graph.inner; });
-}
-
-struct BroadcastInfo {
-  llvm::SmallVector<insts::ExpandDims::Mapping> expand_dim_mappings;
-  llvm::SmallVector<int64_t> unsqueezed_shape;
-};
-
-static auto tryGetBroadcastInfo(llvm::ArrayRef<int64_t> source_shape,
-                                llvm::ArrayRef<int64_t> target_shape)
-    -> std::optional<BroadcastInfo> {
-  auto source_rank = static_cast<int64_t>(source_shape.size());
-  auto target_rank = static_cast<int64_t>(target_shape.size());
-
-  AXON_DCHECK(
-      source_rank < target_rank,
-      "Expected the source shape to have lower rank than the target shape");
-
-  BroadcastInfo broadcast_info;
-
-  for (auto i = target_rank - 1; i >= 0; i -= 1) {
-    // Calculate corresponding source index (right-aligned)
-    auto source_index = i - (target_rank - source_rank);
-    auto source_dim = source_index >= 0 ? source_shape[source_index] : 1;
-    auto target_dim = target_shape[i];
-
-    broadcast_info.unsqueezed_shape.push_back(source_dim);
-
-    if (source_dim == 1) {
-      broadcast_info.expand_dim_mappings.push_back(
-          {.dim = i, .scale = target_dim});
-      continue;
-    }
-
-    // if `source_dim` and `target_dim` are not equal and `source_dim` is not
-    // equal to 1 then we cannot broadcast `source_shape` into the
-    // `target_shape`.
-    if (source_dim != target_dim) {
-      return std::nullopt;
-    }
-  }
-
-  std::reverse(broadcast_info.unsqueezed_shape.begin(),
-               broadcast_info.unsqueezed_shape.end());
-
-  return broadcast_info;
-}
-
-static auto performBroadcasting(Graph& graph, InstId source_id,
-                                llvm::ArrayRef<int64_t> source_shape,
-                                llvm::ArrayRef<int64_t> target_shape)
-    -> std::optional<InstId> {
-  auto broadcast_info = tryGetBroadcastInfo(source_shape, target_shape);
-  if (!broadcast_info) {
-    return std::nullopt;
-  }
-
-  auto reshaped_id = graph.createOp(
-      insts::Reshape(source_id, broadcast_info->unsqueezed_shape));
-  return graph.createOp(
-      insts::ExpandDims(reshaped_id, broadcast_info->expand_dim_mappings));
-}
-
-template <typename ElementWiseInst>
-static auto performElementWiseOperation(Graph& graph, const Tensor& lhs,
-                                        const Tensor& rhs) -> Tensor {
-  auto lhs_id = lhs.inst_id();
-  auto rhs_id = rhs.inst_id();
-
-  auto lhs_shape = graph.getShape(lhs_id);
-  auto rhs_shape = graph.getShape(rhs_id);
-
-  // try broadcasting lhs to have the same shape as rhs
-  if (lhs_shape.size() < rhs_shape.size()) {
-    auto new_lhs_id = performBroadcasting(graph, lhs_id, lhs_shape, rhs_shape);
-    if (!new_lhs_id) {
-      throw std::runtime_error(
-          std::format("Failed to broadcast {} into {}", lhs_shape, rhs_shape));
-    }
-    lhs_id = *new_lhs_id;
-  }
-
-  // try broadcasting lhs to have the same shape as rhs
-  if (lhs_shape.size() > rhs_shape.size()) {
-    auto new_rhs_id = performBroadcasting(graph, rhs_id, rhs_shape, lhs_shape);
-    if (!new_rhs_id) {
-      throw std::runtime_error(
-          std::format("Failed to broadcast {} into {}", lhs_shape, rhs_shape));
-    }
-    rhs_id = *new_rhs_id;
-  }
-
-  auto inst_id = graph.createOp(ElementWiseInst(lhs_id, rhs_id));
-  return Tensor(inst_id);
-}
-
-static auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
-    -> Tensor {
-  static auto is_valid_matmul = [](llvm::ArrayRef<int64_t> lhs_shape,
-                                   llvm::ArrayRef<int64_t> rhs_shape) {
-    AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
-                "At this point lhs and rhs must have the same rank");
-
-    if (lhs_shape.size() == 3) {
-      return lhs_shape[2] == rhs_shape[1];
-    }
-
-    if (lhs_shape.size() == 2) {
-      return lhs_shape[1] == rhs_shape[0];
-    }
-
-    return false;
-  };
-
-  llvm::ArrayRef<int64_t> lhs_shape = graph.getShape(lhs.inst_id());
-  llvm::ArrayRef<int64_t> rhs_shape = graph.getShape(rhs.inst_id());
-
-  auto lhs_id = lhs.inst_id();
-  auto rhs_id = rhs.inst_id();
-
-  if (lhs_shape.size() > 3 || rhs_shape.size() > 3 || lhs_shape.size() < 1 ||
-      rhs_shape.size() < 1) {
-    throw std::runtime_error(
-        "Attempted to multiply tensors with more than rank of 3.");
-  }
-
-  if (lhs_shape.size() < rhs_shape.size()) {
-    if (lhs_shape.size() == 2 && rhs_shape.size() == 3) {
-      llvm::SmallVector<int64_t> target_shape(lhs_shape);
-      target_shape.insert(target_shape.begin(), rhs_shape[0]);
-
-      if (not is_valid_matmul(target_shape, rhs_shape)) {
-        throw std::runtime_error(
-            std::format("Cannot perform matrix multiplication on tensors with "
-                        "shape {} and {}",
-                        lhs_shape, rhs_shape));
-      }
-
-      auto new_lhs_id =
-          performBroadcasting(graph, lhs_id, lhs_shape, target_shape);
-      if (!new_lhs_id) {
-        throw std::runtime_error(std::format("Failed to broadcast {} into {}",
-                                             lhs_shape, target_shape));
-      }
-      lhs_id = *new_lhs_id;
-    }
-  }
-  if (lhs_shape.size() > rhs_shape.size()) {
-    if (lhs_shape.size() == 3 && rhs_shape.size() == 2) {
-      llvm::SmallVector<int64_t> target_shape(rhs_shape);
-      target_shape.insert(target_shape.begin(), lhs_shape[0]);
-
-      if (not is_valid_matmul(lhs_shape, target_shape)) {
-        throw std::runtime_error(
-            std::format("Cannot perform matrix multiplication on tensors with "
-                        "shape {} and {}",
-                        lhs_shape, rhs_shape));
-      }
-      auto new_rhs_id =
-          performBroadcasting(graph, rhs_id, rhs_shape, target_shape);
-      if (!new_rhs_id) {
-        throw std::runtime_error(std::format("Failed to broadcast {} into {}",
-                                             rhs_shape, target_shape));
-      }
-
-      rhs_id = *new_rhs_id;
-    }
-  }
-
-  return Tensor(graph.createOp(insts::MatMul(lhs_id, rhs_id)));
 }
 
 static auto buildTensorBindings(nb::module_& m) -> void {
@@ -357,6 +173,26 @@ static auto buildTensorBindings(nb::module_& m) -> void {
              }
              return performMatMul(*graph, lhs, rhs);
            })
+      .def("sum",
+           [](const Tensor& self, i32 axis) -> Tensor {
+             auto graph = current_graph.lock();
+             if (!graph) {
+               throw std::runtime_error(
+                   "Failed to invoke sum since there is no active "
+                   "graph.");
+             }
+             return Tensor(graph->createOp(insts::Sum(self.inst_id(), axis)));
+           })
+      .def("backward",
+           [](const Tensor& self, const Tensor& grad) -> void {
+             auto graph = current_graph.lock();
+             if (!graph) {
+               throw std::runtime_error(
+                   "Failed to invoke backpropagation since there is no active "
+                   "graph.");
+             }
+             axon::backward(*graph, self.inst_id(), grad.inst_id());
+           })
       .def("backward",
            [](const Tensor& self) -> void {
              auto graph = current_graph.lock();
@@ -375,8 +211,8 @@ static auto buildTensorBindings(nb::module_& m) -> void {
       "_create_tensor",
       [](nb::ndarray<>& array, bool requires_grad,
          DataType::InternalType data_type) -> Tensor {
-        auto tensor =
-            Tensor(createStoragefromNanobind(array, data_type), requires_grad);
+        auto tensor = Tensor(Storage::createFromNanobind(array, data_type),
+                             requires_grad);
         return tensor;
       },
       nb::rv_policy::move);
@@ -385,7 +221,7 @@ static auto buildTensorBindings(nb::module_& m) -> void {
       "_create_filled",
       [](nb::tuple shape_object, nb::object fill_object, bool requires_grad,
          DataType::InternalType data_type) -> Tensor {
-        llvm::SmallVector<int64_t> shape;
+        llvm::SmallVector<i64> shape;
         for (auto dim_object : shape_object) {
           auto dim = nb::cast<int>(dim_object);
           shape.push_back(dim);
@@ -396,7 +232,7 @@ static auto buildTensorBindings(nb::module_& m) -> void {
           auto storage = Storage::createFilled(shape, fill, data_type);
           return {std::move(storage), requires_grad};
         } else if (data_type == DataType::Float64) {
-          auto fill = nb::cast<double>(fill_object);
+          auto fill = nb::cast<f64>(fill_object);
           auto storage = Storage::createFilled(shape, fill, data_type);
           return {std::move(storage), requires_grad};
         }
@@ -409,9 +245,9 @@ static auto buildTensorBindings(nb::module_& m) -> void {
       "_create_randn",
       [](nb::tuple shape_object, bool requires_grad,
          DataType::InternalType data_type) -> Tensor {
-        llvm::SmallVector<int64_t> shape;
+        llvm::SmallVector<i64> shape;
         for (auto dim_object : shape_object) {
-          auto dim = nb::cast<int>(dim_object);
+          auto dim = nb::cast<i32>(dim_object);
           shape.push_back(dim);
         }
 
@@ -420,6 +256,34 @@ static auto buildTensorBindings(nb::module_& m) -> void {
         return {std::move(storage), requires_grad};
       },
       nb::rv_policy::move);
+}
+
+static auto hasDataType(DataType data_type, nb::dlpack::dtype dtype) -> bool {
+  if (data_type == DataType::Float32) {
+    return dtype == nb::dlpack::dtype{
+                        .code = static_cast<u8>(nb::dlpack::dtype_code::Float),
+                        .bits = 32,
+                        .lanes = 1};
+  }
+
+  if (data_type == DataType::Float64) {
+    return dtype == nb::dlpack::dtype{
+                        .code = static_cast<u8>(nb::dlpack::dtype_code::Float),
+                        .bits = 64,
+                        .lanes = 1};
+  }
+  AXON_DCHECK("TODO");
+}
+
+template <typename T>
+static auto checkIsEqual(T* lhs, T* rhs, i64 total_elements) -> bool {
+  // Simple linear iteration - assumes both tensors have same layout
+  for (i64 i = 0; i < total_elements; ++i) {
+    if (lhs[i] != rhs[i]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 NB_MODULE(_core, m) {
@@ -446,4 +310,34 @@ NB_MODULE(_core, m) {
 
   buildTensorBindings(m);
   buildGraphBindings(m);
+
+  m.def("_is_equal", [](const Tensor& tensor, nb::ndarray<>& array) -> bool {
+    auto array_strides = llvm::ArrayRef<i64>(array.stride_ptr(), array.ndim());
+    auto array_shape = llvm::ArrayRef<i64>(array.shape_ptr(), array.ndim());
+    if (not tensor.hasData()) {
+      return false;
+    }
+    if (tensor.data()->shape() != array_shape) {
+      return false;
+    }
+    if (tensor.data()->strides() != array_strides) {
+      return false;
+    }
+    if (!hasDataType(tensor.data()->data_type(), array.dtype())) {
+      return false;
+    }
+    auto size = array.size();
+    switch (tensor.data()->data_type().kind()) {
+      case DataType::Float32: {
+        auto tensor_ptr = tensor.data()->as<f32>();
+        auto data_ptr = reinterpret_cast<f32*>(array.data());
+        return checkIsEqual<const f32>(tensor_ptr, data_ptr, size);
+      }
+      case DataType::Float64: {
+        auto tensor_ptr = tensor.data()->as<f64>();
+        auto data_ptr = reinterpret_cast<f64*>(array.data());
+        return checkIsEqual<const f64>(tensor_ptr, data_ptr, size);
+      }
+    }
+  });
 }

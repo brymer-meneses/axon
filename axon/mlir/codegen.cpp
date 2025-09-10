@@ -267,7 +267,7 @@ export auto codegenGraph(Graph& graph, mlir::OpBuilder& builder,
 
   for (auto inst_id : graph.insts().keys()) {
     const auto& inst = graph.insts().get(inst_id);
-    inst.visit([&](auto inst) { codegen(inst, ctx, inst_id); });
+    inst.visit([&](const auto& inst) { codegen(inst, ctx, inst_id); });
   }
 
   mlir::func::ReturnOp::create(ctx.builder, loc);

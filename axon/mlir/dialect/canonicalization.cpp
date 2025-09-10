@@ -163,23 +163,23 @@ struct FuseExpandedDimsPattern : mlir::OpRewritePattern<MatMulOp> {
 
 auto AddOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                         mlir::MLIRContext* context) -> void {
-  // patterns.add<EliminateAdditionOfSelfNegative>(context);
+  patterns.add<EliminateAdditionOfSelfNegative>(context);
 }
 
 auto TransposeOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                               mlir::MLIRContext* context)
     -> void {
-  // patterns.add<EliminateRedundantTransposePattern>(context);
+  patterns.add<EliminateRedundantTransposePattern>(context);
 }
 
 auto MatMulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                            mlir::MLIRContext* context) -> void {
-  // patterns.add<FuseTransposePattern, FuseExpandedDimsPattern>(context);
+  patterns.add<FuseTransposePattern, FuseExpandedDimsPattern>(context);
 }
 
 auto SubOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                         mlir::MLIRContext* context) -> void {
-  // patterns.add<EliminateSelfSubtractionPattern>(context);
+  patterns.add<EliminateSelfSubtractionPattern>(context);
 }
 
 auto AccumulateOp::canonicalize(AccumulateOp op,
