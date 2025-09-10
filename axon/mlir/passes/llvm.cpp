@@ -2,7 +2,7 @@ module;
 
 #include <memory>
 
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "axon/mlir/dialect/dialect.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"

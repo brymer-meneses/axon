@@ -2,7 +2,7 @@ module;
 
 #include <utility>
 
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -49,7 +49,7 @@ struct InferShapeRule<insts::MatMul> {
       return shape;
     }
 
-    std::unreachable();
+    AXON_UNREACHABLE("MatMul should only have ranks of 2 or 3");
   }
 };
 

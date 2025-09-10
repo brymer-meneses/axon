@@ -2,6 +2,18 @@
 
 #include <exception>
 #include <print>
+#include <utility>
+
+#if defined(ENABLE_DCHECK)
+#define AXON_UNREACHABLE(...)                                                  \
+  do {                                                                         \
+    std::println(stderr, "{} {} Unreachable hit: " __VA_ARGS__, __FILE_NAME__, \
+                 __LINE__);                                                    \
+    std::terminate();                                                          \
+  } while (0)
+#else
+#define AXON_UNREACHABLE(...) std::terminate()
+#endif
 
 #if defined(ENABLE_DCHECK)
 #define AXON_DCHECK(condition, ...)                                        \

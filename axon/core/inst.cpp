@@ -1,6 +1,6 @@
 module;
 
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FunctionExtras.h"
 #include "llvm/ADT/SmallVector.h"

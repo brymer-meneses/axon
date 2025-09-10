@@ -8,7 +8,7 @@ module;
 #include <sstream>
 #include <utility>
 
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "nanobind/intrusive/counter.h"
@@ -66,14 +66,15 @@ export class Tensor : nb::intrusive_base {
     if (hasData()) {
       return data_->shape();
     }
-    std::terminate();
+
+    return {};
   }
 
   auto rank() const -> int64_t {
     if (hasData()) {
       return static_cast<int64_t>(data_->shape().size());
     }
-    std::terminate();
+    AXON_UNREACHABLE("TODO!");
   }
 
   auto inst_id() const -> InstId { return inst_id_; }

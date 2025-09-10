@@ -2,7 +2,7 @@ module;
 
 #include <memory>
 
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
 
 export module axon.python:abi;

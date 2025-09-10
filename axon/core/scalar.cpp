@@ -1,9 +1,7 @@
 
 module;
 
-#include <variant>
-
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "type_traits"
 
 export module axon.core:scalar;

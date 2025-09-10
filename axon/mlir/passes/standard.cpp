@@ -3,6 +3,7 @@ module;
 #include <optional>
 #include <utility>
 
+#include "axon/base/macros.h"
 #include "axon/mlir/dialect/dialect.h"
 #include "llvm/ADT/STLExtras.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -105,7 +106,7 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
       return mlir::success();
     }
 
-    std::unreachable();
+    AXON_UNREACHABLE("MatMul should only have ranks of 2 or 3");
   }
 
   static auto getIndexingMaps(MatMulOp op,
@@ -168,7 +169,7 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
       return rewriter.getAffineMapArrayAttr({lhs_map, rhs_map, result_map});
     }
 
-    std::unreachable();
+    AXON_UNREACHABLE("MatMul should only have ranks of 2 or 3");
   }
 };
 

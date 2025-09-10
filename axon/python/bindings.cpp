@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/IR/OperationSupport.h"

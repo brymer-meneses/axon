@@ -1,6 +1,6 @@
 module;
 
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "dialect/dialect.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"

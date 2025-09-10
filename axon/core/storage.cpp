@@ -9,7 +9,7 @@ module;
 #include <type_traits>
 #include <utility>
 
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -50,7 +50,6 @@ export class DataType {
       return DataType::Float64;
     } else {
       static_assert("Passed template parameter has no corresponding DataType");
-      std::unreachable();
     }
   }
 

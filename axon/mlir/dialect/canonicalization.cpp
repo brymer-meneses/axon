@@ -1,6 +1,6 @@
 #include <utility>
 
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "axon/mlir/dialect/dialect.h"
 #include "llvm/ADT/APFloat.h"
 #include "mlir/Dialect/CommonFolders.h"

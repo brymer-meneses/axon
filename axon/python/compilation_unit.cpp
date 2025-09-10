@@ -4,7 +4,7 @@ module;
 #include <stdexcept>
 #include <vector>
 
-#include "axon/base/dcheck.h"
+#include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/TargetSelect.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
