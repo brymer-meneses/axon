@@ -148,7 +148,7 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     manager.addPass(mlir::createCanonicalizerPass());
     manager.addPass(mlir::createCSEPass());
 
-    manager.addPass(mlir::affine::createLoopFusionPass());
+    // manager.addPass(mlir::affine::createLoopFusionPass());
 
     manager.addPass(mlir::createCanonicalizerPass());
     manager.addPass(mlir::createCSEPass());

@@ -60,7 +60,7 @@ export class Tensor : public nb::intrusive_base {
 
   auto requiresGrad() const -> bool { return requires_grad_; }
 
-  auto shape() const -> llvm::ArrayRef<int64_t> {
+  auto shape() const -> llvm::ArrayRef<i64> {
     if (hasData()) {
       return data_->shape();
     }
@@ -68,9 +68,9 @@ export class Tensor : public nb::intrusive_base {
     return {};
   }
 
-  auto rank() const -> int64_t {
+  auto rank() const -> i64 {
     if (hasData()) {
-      return static_cast<int64_t>(data_->shape().size());
+      return static_cast<i64>(data_->shape().size());
     }
     AXON_UNREACHABLE("TODO!");
   }
@@ -92,13 +92,13 @@ export class Tensor : public nb::intrusive_base {
 };
 
 static auto dumpRecursive(llvm::raw_string_ostream& stream, const float* ptr,
-                          size_t dim, llvm::ArrayRef<int64_t> shape,
-                          llvm::ArrayRef<int64_t> strides, int indent_width,
+                          size_t dim, llvm::ArrayRef<i64> shape,
+                          llvm::ArrayRef<i64> strides, int indent_width,
                           int depth) -> void {
   if (dim == shape.size() - 1) {
     // Base case: 1-D row
     stream << "[";
-    for (int64_t i = 0; i < shape[dim]; ++i) {
+    for (i64 i = 0; i < shape[dim]; ++i) {
       float elem = ptr[i * strides[dim]];
       stream << elem;
       if (i + 1 < shape[dim]) {
@@ -109,7 +109,7 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream, const float* ptr,
   } else {
     // Recursive case: nested arrays
     stream << "[";
-    for (int64_t i = 0; i < shape[dim]; ++i) {
+    for (i64 i = 0; i < shape[dim]; ++i) {
       if (i > 0) {
         stream << ",\n";
         for (int j = 0; j < (depth + 1) * indent_width; ++j) {
@@ -148,14 +148,14 @@ export auto dumpTensor(const Tensor& tensor, int indent_width = 8)
 
 struct BroadcastInfo {
   llvm::SmallVector<insts::ExpandDims::Mapping> expand_dim_mappings;
-  llvm::SmallVector<int64_t> unsqueezed_shape;
+  llvm::SmallVector<i64> unsqueezed_shape;
 };
 
-static auto tryGetBroadcastInfo(llvm::ArrayRef<int64_t> source_shape,
-                                llvm::ArrayRef<int64_t> target_shape)
+static auto tryGetBroadcastInfo(llvm::ArrayRef<i64> source_shape,
+                                llvm::ArrayRef<i64> target_shape)
     -> std::optional<BroadcastInfo> {
-  auto source_rank = static_cast<int64_t>(source_shape.size());
-  auto target_rank = static_cast<int64_t>(target_shape.size());
+  auto source_rank = static_cast<i64>(source_shape.size());
+  auto target_rank = static_cast<i64>(target_shape.size());
 
   AXON_DCHECK(
       source_rank <= target_rank,
@@ -191,9 +191,8 @@ static auto tryGetBroadcastInfo(llvm::ArrayRef<int64_t> source_shape,
 }
 
 static auto performBroadcasting(Graph& graph, InstId source_id,
-                                llvm::ArrayRef<int64_t> source_shape,
-                                llvm::ArrayRef<int64_t> target_shape)
-    -> InstId {
+                                llvm::ArrayRef<i64> source_shape,
+                                llvm::ArrayRef<i64> target_shape) -> InstId {
   auto broadcast_info = tryGetBroadcastInfo(source_shape, target_shape);
   if (!broadcast_info) {
     throw std::runtime_error(std::format("Failed to broadcast {} into {}.",
@@ -247,8 +246,8 @@ auto performElementWiseOperation(Graph& graph, const Tensor& lhs,
 
 export auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
     -> Tensor {
-  static auto is_valid_matmul = [](llvm::ArrayRef<int64_t> lhs_shape,
-                                   llvm::ArrayRef<int64_t> rhs_shape) {
+  static auto is_valid_matmul = [](llvm::ArrayRef<i64> lhs_shape,
+                                   llvm::ArrayRef<i64> rhs_shape) {
     AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
                 "At this point lhs and rhs must have the same rank");
     if (lhs_shape.size() == 3) {
@@ -260,8 +259,8 @@ export auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
     return false;
   };
 
-  llvm::ArrayRef<int64_t> lhs_shape = graph.getShape(lhs.inst_id());
-  llvm::ArrayRef<int64_t> rhs_shape = graph.getShape(rhs.inst_id());
+  llvm::ArrayRef<i64> lhs_shape = graph.getShape(lhs.inst_id());
+  llvm::ArrayRef<i64> rhs_shape = graph.getShape(rhs.inst_id());
 
   auto lhs_id = lhs.inst_id();
   auto rhs_id = rhs.inst_id();
@@ -272,34 +271,48 @@ export auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
         "Attempted to multiply tensors with more than rank of 3.");
   }
 
-  if (lhs_shape.size() < rhs_shape.size()) {
+  auto lhs_elems = computeNumElems(lhs_shape);
+  auto rhs_elems = computeNumElems(rhs_shape);
+
+  if (lhs_elems < rhs_elems) {
+    llvm::SmallVector<i64> target_shape(lhs_shape);
+
     if (lhs_shape.size() == 2 && rhs_shape.size() == 3) {
-      llvm::SmallVector<int64_t> target_shape(lhs_shape);
       target_shape.insert(target_shape.begin(), rhs_shape[0]);
-
-      if (not is_valid_matmul(target_shape, rhs_shape)) {
-        throw std::runtime_error(
-            std::format("Cannot perform matrix multiplication on tensors with "
-                        "shape {} and {}",
-                        lhs_shape, rhs_shape));
-      }
-
-      lhs_id = performBroadcasting(graph, lhs_id, lhs_shape, target_shape);
+    } else if (lhs_shape.size() == 3 && rhs_shape.size() == 3) {
+      target_shape[0] = rhs_shape[0];
+    } else {
+      AXON_UNREACHABLE("TODO");
     }
+
+    if (not is_valid_matmul(target_shape, rhs_shape)) {
+      throw std::runtime_error(
+          std::format("Cannot perform matrix multiplication on tensors with "
+                      "shape {} and {}",
+                      lhs_shape, rhs_shape));
+    }
+
+    lhs_id = performBroadcasting(graph, lhs_id, lhs_shape, target_shape);
   }
-  if (lhs_shape.size() > rhs_shape.size()) {
-    if (lhs_shape.size() == 3 && rhs_shape.size() == 2) {
-      llvm::SmallVector<int64_t> target_shape(rhs_shape);
-      target_shape.insert(target_shape.begin(), lhs_shape[0]);
 
-      if (not is_valid_matmul(lhs_shape, target_shape)) {
-        throw std::runtime_error(
-            std::format("Cannot perform matrix multiplication on tensors with "
-                        "shape {} and {}",
-                        lhs_shape, rhs_shape));
-      }
-      rhs_id = performBroadcasting(graph, rhs_id, rhs_shape, target_shape);
+  if (lhs_elems > rhs_elems) {
+    llvm::SmallVector<i64> target_shape(rhs_shape);
+    if (lhs_shape.size() == 3 && rhs_shape.size() == 2) {
+      target_shape.insert(target_shape.begin(), lhs_shape[0]);
+    } else if (lhs_shape.size() == 3 && rhs_shape.size() == 3) {
+      target_shape[0] = rhs_shape[0];
+    } else {
+      AXON_UNREACHABLE("TODO");
     }
+
+    if (not is_valid_matmul(lhs_shape, target_shape)) {
+      throw std::runtime_error(
+          std::format("Cannot perform matrix multiplication on tensors with "
+                      "shape {} and {}",
+                      lhs_shape, rhs_shape));
+    }
+
+    rhs_id = performBroadcasting(graph, rhs_id, rhs_shape, target_shape);
   }
 
   return Tensor(graph.createOp(insts::MatMul(lhs_id, rhs_id)));

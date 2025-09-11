@@ -18,9 +18,9 @@ def test_mul():
 
     a3 = mul(a1, a2)
 
-    assert axon.testing.is_equal(a1.grad, b2)
-    assert axon.testing.is_equal(a2.grad, b1)
-    assert axon.testing.is_equal(a3, b1 * b2)
+    axon.testing.assert_are_equal(a1.grad, b2)
+    axon.testing.assert_are_equal(a2.grad, b1)
+    axon.testing.assert_are_equal(a3, b1 * b2)
 
 
 def test_broadcast_mul():
@@ -44,10 +44,10 @@ def test_broadcast_mul():
     # a1.grad should be a2 broadcasted to (10, 10)
     # we need the copy here since nanobind cannot take this as an input :<
     expected_a1_grad = np.broadcast_to(b2, (10, 10)).copy()
-    assert axon.testing.is_equal(a1.grad, expected_a1_grad)
+    axon.testing.assert_are_equal(a1.grad, expected_a1_grad)
 
     # a2.grad should be a1 summed along axis 0 to get shape (1, 10)
     expected_a2_grad = np.sum(b1, axis=0, keepdims=True)
-    assert axon.testing.is_equal(a2.grad, expected_a2_grad)
+    axon.testing.assert_are_equal(a2.grad, expected_a2_grad)
 
-    assert axon.testing.is_equal(a3, b1 * b2)
+    axon.testing.assert_are_equal(a3, b1 * b2)

@@ -303,6 +303,7 @@ static auto checkIsWithinTolerance(T* lhs, T* rhs, i64 total_elements,
                                    T tolerance) -> bool {
   for (i64 i = 0; i < total_elements; ++i) {
     if (std::fabs(lhs[i] - rhs[i]) > tolerance) {
+      std::println("MISMATCH: {} {}", lhs[i], rhs[i]);
       return false;
     }
   }
@@ -338,74 +339,37 @@ NB_MODULE(_core, m) {
   buildTensorBindings(m);
   buildGraphBindings(m);
 
-  m.def("_is_equal", [](const Tensor& tensor, nb::ndarray<>& array) -> bool {
+  m.def("_assert_are_close", [](const Tensor& tensor, nb::ndarray<>& array,
+                                float tolerance) {
     auto array_strides = llvm::ArrayRef<i64>(array.stride_ptr(), array.ndim());
     auto array_shape = llvm::ArrayRef<i64>(array.shape_ptr(), array.ndim());
     if (not tensor.hasData()) {
-      return false;
+      throw std::runtime_error("Tensor is lazy");
     }
     if (tensor.data()->shape() != array_shape) {
-      return false;
+      throw std::runtime_error("Do not have the same shape");
     }
     if (tensor.data()->strides() != array_strides) {
-      return false;
+      throw std::runtime_error("Do not have the same strides");
     }
     if (!hasDataType(tensor.data()->data_type(), array.dtype())) {
-      return false;
+      throw std::runtime_error("Do not have the same data type");
     }
+
     auto size = array.size();
     switch (tensor.data()->data_type().kind()) {
       case DataType::Float32: {
         auto tensor_ptr = tensor.data()->as<f32>();
         auto data_ptr = reinterpret_cast<f32*>(array.data());
         return checkIsWithinTolerance<const f32>(tensor_ptr, data_ptr, size,
-                                                 0.0);
+                                                 tolerance);
       }
       case DataType::Float64: {
         auto tensor_ptr = tensor.data()->as<f64>();
         auto data_ptr = reinterpret_cast<f64*>(array.data());
         return checkIsWithinTolerance<const f64>(tensor_ptr, data_ptr, size,
-                                                 0.0);
+                                                 tolerance);
       }
     }
   });
-
-  m.def(
-      "_is_close",
-      [](const Tensor& tensor, nb::ndarray<>& array, float tolerance) -> bool {
-        auto array_strides =
-            llvm::ArrayRef<i64>(array.stride_ptr(), array.ndim());
-        auto array_shape = llvm::ArrayRef<i64>(array.shape_ptr(), array.ndim());
-        if (not tensor.hasData()) {
-          return false;
-        }
-        if (tensor.data()->shape() != array_shape) {
-          std::println("Do not have the same shape");
-          return false;
-        }
-        if (tensor.data()->strides() != array_strides) {
-          std::println("Do not have the same strides");
-          return false;
-        }
-        if (!hasDataType(tensor.data()->data_type(), array.dtype())) {
-          std::println("Do not have the same data type");
-          return false;
-        }
-
-        auto size = array.size();
-        switch (tensor.data()->data_type().kind()) {
-          case DataType::Float32: {
-            auto tensor_ptr = tensor.data()->as<f32>();
-            auto data_ptr = reinterpret_cast<f32*>(array.data());
-            return checkIsWithinTolerance<const f32>(tensor_ptr, data_ptr, size,
-                                                     tolerance);
-          }
-          case DataType::Float64: {
-            auto tensor_ptr = tensor.data()->as<f64>();
-            auto data_ptr = reinterpret_cast<f64*>(array.data());
-            return checkIsWithinTolerance<const f64>(tensor_ptr, data_ptr, size,
-                                                     tolerance);
-          }
-        }
-      });
 }
