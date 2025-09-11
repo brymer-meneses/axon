@@ -1,7 +1,7 @@
 from typing import Callable, Optional, Any
 
 from .graph_manager import GraphManager
-from ._core import LoweringLevel, Graph, CompilationUnit
+from ._core import LoweringLevel, Graph, CompilationUnit, Tensor
 
 
 class LoweringOps:
@@ -48,7 +48,11 @@ class CompiledFunction:
         # trace the tensor operations
         with manager:
             manager.trace_params(*args, **kwargs)
-            self._func(*args, **kwargs)
+            result = self._func(*args, **kwargs)
+            if result is None:
+                graph.set_returned_as_none()
+            elif isinstance(result, Tensor):
+                graph.set_returned(result)
 
         # check if it matches the cached graph
         if graph != self._cached_graph:

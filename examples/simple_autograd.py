@@ -9,13 +9,14 @@ opts = LoweringOps(LoweringLevel.Axon)
 def matmul(a, b):
     l = 2 * a * b
     l.backward()
+    return l
 
 
 a = axon.ones((2, 2), requires_grad=True)
 b = axon.ones((5, 2, 2), requires_grad=True)
 
-matmul(a, b)
-print(matmul.dump_ir())
+l = matmul(a, b)
+print(l)
 
 if opts.execute:
     print(a.grad)

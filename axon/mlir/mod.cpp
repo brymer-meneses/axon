@@ -19,6 +19,7 @@ module;
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Target/LLVMIR/Dialect/All.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -67,10 +68,9 @@ enum class LoweringLevel {
 
 auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     -> void {
-  if (level == LoweringLevel::Axon) {
+  if (level >= LoweringLevel::Axon) {
     manager.addPass(mlir::createCanonicalizerPass());
     manager.addPass(mlir::createCSEPass());
-    return;
   }
 
   if (level >= LoweringLevel::Standard) {
@@ -79,6 +79,7 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     mlir::bufferization::OneShotBufferizePassOptions bufferization_options;
     bufferization_options.checkParallelRegions = true;
     bufferization_options.allowReturnAllocsFromLoops = true;
+    bufferization_options.bufferizeFunctionBoundaries = true;
 
     manager.addPass(
         mlir::bufferization::createOneShotBufferizePass(bufferization_options));

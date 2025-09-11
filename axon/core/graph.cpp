@@ -68,24 +68,20 @@ export class Graph {
       return inst_id;
     }
 
-    constexpr static auto get_parents =
-        [](const auto& op) -> llvm::SmallVector<InstId> {
+    auto check_requires_grad = [this](const auto& op) -> bool {
       using InstType = std::decay_t<decltype(op)>;
       if constexpr (!InstType::traits.differentiable) {
-        return {};
+        return false;
       } else if constexpr (InstType::traits.num_operands == 2) {
-        return {op.lhs_id, op.rhs_id};
+        return checkRequiresGrad(op.lhs_id) || checkRequiresGrad(op.rhs_id);
       } else if constexpr (InstType::traits.num_operands == 1) {
-        return {op.operand_id};
+        return checkRequiresGrad(op.operand_id);
       }
-      return {};
+
+      return false;
     };
 
-    auto parents = inst.visit(get_parents);
-    auto requires_grad = std::ranges::any_of(parents, [this](InstId parent_id) {
-      return checkRequiresGrad(parent_id);
-    });
-
+    auto requires_grad = inst.visit(check_requires_grad);
     auto inst_id = insts_.emplace(std::move(inst));
     inferShape(inst_id);
     if (requires_grad) {
@@ -94,6 +90,10 @@ export class Graph {
 
     return inst_id;
   }
+
+  auto setReturned(InstId returned_id) -> void { returned_id_ = returned_id; }
+
+  auto getReturnedId() const -> InstId { return returned_id_; }
 
   auto gradients() -> auto& { return gradients_; }
   auto gradients() const -> const auto& { return gradients_; }
@@ -144,6 +144,8 @@ export class Graph {
   IdMap<InstId, Shape> shapes_;
 
   IdStore<InstId, InstId> gradients_;
+
+  InstId returned_id_;
 };
 
 }  // namespace axon

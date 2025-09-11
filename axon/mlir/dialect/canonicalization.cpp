@@ -174,7 +174,7 @@ auto TransposeOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
 
 auto MatMulOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,
                                            mlir::MLIRContext* context) -> void {
-  patterns.add<FuseTransposePattern, FuseExpandedDimsPattern>(context);
+  patterns.add<FuseTransposePattern>(context);
 }
 
 auto SubOp::getCanonicalizationPatterns(mlir::RewritePatternSet& patterns,

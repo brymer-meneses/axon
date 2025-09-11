@@ -20,7 +20,7 @@ enum class ShapeInfo {
 
 struct InstTraits {
   /// number of tensor operands
-  int8_t num_operands = 0;
+  i8 num_operands = 0;
   /// shape inference rule
   ShapeInfo shape_rule = ShapeInfo::Custom;
   /// whether this inst has a backward function
@@ -38,7 +38,7 @@ struct Sum {
 
   InstId operand_id;
   // axis to sum
-  int32_t axis;
+  i32 axis;
 
   bool keepdims;
 };
@@ -51,8 +51,8 @@ struct ExpandDims {
   };
 
   struct Mapping {
-    int64_t dim;
-    int64_t scale;
+    i64 dim;
+    i64 scale;
   };
 
   InstId operand_id;
@@ -67,7 +67,7 @@ struct Unsqueeze {
   };
 
   InstId operand_id;
-  int32_t dim;
+  i32 dim;
 };
 
 struct Squeeze {
@@ -78,7 +78,7 @@ struct Squeeze {
   };
 
   InstId operand_id;
-  int32_t dim;
+  i32 dim;
 };
 
 struct Transpose {
@@ -90,8 +90,8 @@ struct Transpose {
 
   InstId operand_id;
 
-  uint32_t from;
-  uint32_t to;
+  u32 from;
+  u32 to;
 };
 
 struct Reshape {
@@ -102,7 +102,7 @@ struct Reshape {
   };
 
   InstId operand_id;
-  llvm::SmallVector<int64_t> target_shape;
+  llvm::SmallVector<i64> target_shape;
 };
 
 struct MatMul {

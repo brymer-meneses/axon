@@ -27,7 +27,8 @@ import :abi;
 
 namespace axon {
 
-static auto convertParams(std::span<std::shared_ptr<Tensor>> params)
+static auto processParams(Graph& graph,
+                          std::span<std::shared_ptr<Tensor>> params)
     -> llvm::SmallVector<void*> {
   llvm::SmallVector<void*> args;
 
@@ -36,6 +37,14 @@ static auto convertParams(std::span<std::shared_ptr<Tensor>> params)
     args.emplace_back(ptr);
   }
 
+  auto returned_id = graph.getReturnedId();
+  if (!returned_id) {
+    return args;
+  }
+
+  auto returned_descriptor =
+      abi::MemRefDescriptor::createEmpty(graph.getShape(returned_id).size());
+  args.emplace_back(reinterpret_cast<void*>(returned_descriptor));
   return args;
 }
 
@@ -48,16 +57,17 @@ static auto destroyParams(llvm::ArrayRef<void*> params) -> void {
 
 export class CompilationUnit {
  public:
-  CompilationUnit() : context_(createDialectRegistry()) {
+  CompilationUnit(Graph& graph)
+      : context_(createDialectRegistry()), graph_(graph) {
     context_.loadAllAvailableDialects();
   }
 
-  auto compile(Graph& graph, LoweringLevel level) -> mlir::LogicalResult {
+  auto compile(LoweringLevel level) -> mlir::LogicalResult {
     mlir::PassManager manager(&context_);
     mlir::OpBuilder builder(&context_);
 
     module_op_ = mlir::ModuleOp::create(builder.getUnknownLoc());
-    codegenGraph(graph, builder, module_op_);
+    codegenGraph(graph_, builder, module_op_);
 
     if (mlir::verify(module_op_).failed()) {
       module_op_.walk([&](mlir::Operation* op) {
@@ -77,7 +87,8 @@ export class CompilationUnit {
     return result;
   }
 
-  auto execute(std::vector<std::shared_ptr<Tensor>> params) -> void {
+  auto execute(std::vector<std::shared_ptr<Tensor>> params)
+      -> std::optional<Tensor> {
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
 
@@ -94,14 +105,27 @@ export class CompilationUnit {
     }
 
     auto& engine = maybe_engine.get();
-    auto args = convertParams(params);
+    auto args = processParams(graph_, params);
 
     auto invocation_result = engine->invokePacked("graph", args);
-    destroyParams(args);
-
     if (invocation_result) {
       throw std::runtime_error("JIT invocation failed\n");
     }
+
+    auto returned_id = graph_.getReturnedId();
+    if (!returned_id) {
+      // destroyParams(args);
+      return std::nullopt;
+    }
+
+    auto rank = graph_.getShape(returned_id).size();
+    auto return_descriptor =
+        reinterpret_cast<abi::MemRefDescriptor*>(args.back());
+    auto storage = abi::MemRefDescriptor::createStorage(
+        return_descriptor, DataType::Float32, rank);
+    destroyParams(args);
+
+    return {Tensor(std::move(storage), /*requires_grad=*/false)};
   }
 
   auto dump_ir() const -> std::string {
@@ -114,6 +138,7 @@ export class CompilationUnit {
  private:
   mlir::MLIRContext context_;
   mlir::ModuleOp module_op_;
+  Graph& graph_;
 };
 
 }  // namespace axon

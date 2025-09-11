@@ -1,11 +1,13 @@
 
 #include <optional>
+#include <utility>
 
 #include "dialect.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Support/LLVM.h"
 
 import axon.mlir;
+import axon.base;
 
 namespace axon {
 
@@ -100,14 +102,29 @@ auto MatMulOp::verify() -> mlir::LogicalResult {
     return mlir::failure();
   }
 
-  auto lhs_shape = lhs.getShape();
-  auto rhs_shape = rhs.getShape();
+  static auto transpose = [&](llvm::SmallVector<i64>& vec) {
+    if (vec.size() == 3) {
+      std::swap(vec[1], vec[2]);
+    } else {
+      std::swap(vec[0], vec[1]);
+    }
+  };
+
+  llvm::SmallVector<i64> lhs_shape(lhs.getShape());
+  llvm::SmallVector<i64> rhs_shape(rhs.getShape());
+  if (getTransposeLhs()) {
+    transpose(lhs_shape);
+  }
+  if (getTransposeRhs()) {
+    transpose(rhs_shape);
+  }
 
   if (lhs.getRank() == 3) {
     if (lhs_shape[2] != rhs_shape[1]) {
       emitOpError() << std::format(
           "Cannot perform matrix multiplication on tensors of {} and {}.",
           lhs_shape, rhs_shape);
+      return mlir::failure();
     }
 
     return mlir::success();
@@ -118,6 +135,7 @@ auto MatMulOp::verify() -> mlir::LogicalResult {
       emitOpError() << std::format(
           "Cannot perform matrix multiplication on tensors of {} and {}.",
           lhs_shape, rhs_shape);
+      return mlir::failure();
     }
     return mlir::success();
   }

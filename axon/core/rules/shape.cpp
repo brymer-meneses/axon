@@ -13,8 +13,8 @@ import :ids;
 
 export namespace axon {
 
-using Shape = llvm::SmallVector<int64_t>;
-using ShapeRef = llvm::ArrayRef<int64_t>;
+using Shape = llvm::SmallVector<i64>;
+using ShapeRef = llvm::ArrayRef<i64>;
 
 using ShapeMapping = IdMap<InstId, Shape>;
 
@@ -91,7 +91,7 @@ struct InferShapeRule<insts::Squeeze> {
                 "op.operand_id must have a shape already.");
 
     Shape shape = shapes.get(op.operand_id)->get();
-    AXON_DCHECK(op.dim < static_cast<int32_t>(shape.size()),
+    AXON_DCHECK(op.dim < static_cast<i32>(shape.size()),
                 "Dimension must be less than the rank of the operand");
     shape.erase(shape.begin() + op.dim);
     return shape;
@@ -105,7 +105,7 @@ struct InferShapeRule<insts::Sum> {
                 "op.operand_id must have a shape already.");
 
     Shape shape = shapes.get(op.operand_id)->get();
-    auto rank = static_cast<int32_t>(shape.size());
+    auto rank = static_cast<i32>(shape.size());
 
     if (op.keepdims) {
       AXON_DCHECK(op.axis < rank, "Axis must not exceed rank");
@@ -125,7 +125,7 @@ struct InferShapeRule<insts::ExpandDims> {
                 "op.operand_id must have a shape already.");
 
     Shape shape = shapes.get(op.operand_id)->get();
-    auto rank = static_cast<int32_t>(shape.size());
+    auto rank = static_cast<i32>(shape.size());
     for (auto expansion : op.mappings) {
       AXON_DCHECK(expansion.dim < rank, "Dim {} exceeded the rank {}",
                   expansion.dim, rank);

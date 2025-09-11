@@ -251,7 +251,15 @@ static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
                                    requires_grad);
     arg_types.emplace_back(type);
   }
-  return builder.getFunctionType(arg_types, {});
+
+  auto returned_id = graph.getReturnedId();
+  if (!returned_id) {
+    return builder.getFunctionType(arg_types, {});
+  }
+
+  auto shape = graph.getShape(returned_id);
+  auto returned_type = mlir::RankedTensorType::get(shape, data_type);
+  return builder.getFunctionType(arg_types, {returned_type});
 }
 
 export auto codegenGraph(Graph& graph, mlir::OpBuilder& builder,
@@ -270,7 +278,11 @@ export auto codegenGraph(Graph& graph, mlir::OpBuilder& builder,
     inst.visit([&](const auto& inst) { codegen(inst, ctx, inst_id); });
   }
 
-  mlir::func::ReturnOp::create(ctx.builder, loc);
+  if (auto returned_id = graph.getReturnedId()) {
+    mlir::func::ReturnOp::create(ctx.builder, loc, ctx.values[returned_id]);
+  } else {
+    mlir::func::ReturnOp::create(ctx.builder, loc);
+  }
 }
 
 }  // namespace axon

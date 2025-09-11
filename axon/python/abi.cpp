@@ -7,6 +7,7 @@ module;
 
 export module axon.python:abi;
 
+import axon.base;
 import axon.core;
 import :tensor;
 
@@ -14,12 +15,39 @@ export namespace axon::abi {
 
 class MemRefDescriptor {
  public:
-  static auto create(void* allocated_ptr, void* aligned_ptr, int64_t offset,
-                     llvm::ArrayRef<int64_t> shape,
-                     llvm::ArrayRef<int64_t> strides) -> MemRefDescriptor* {
+  static auto createEmpty(i64 rank) -> MemRefDescriptor* {
+    auto size = getAllocSize(rank);
+    auto* buffer = new std::byte[size];
+    return reinterpret_cast<MemRefDescriptor*>(buffer);
+  }
+
+  static auto createStorage(MemRefDescriptor* descriptor, DataType data_type,
+                            i64 rank) -> Storage {
+    auto shape_size = rank * sizeof(i64);
+    auto ptr = reinterpret_cast<std::byte*>(descriptor);
+
+    auto shape_ptr = reinterpret_cast<i64*>(ptr + sizeof(MemRefDescriptor));
+    auto strides_ptr =
+        reinterpret_cast<i64*>(ptr + sizeof(MemRefDescriptor) + shape_size);
+
+    llvm::ArrayRef<i64> shape(shape_ptr, rank);
+    llvm::ArrayRef<i64> strides(strides_ptr, rank);
+
+    AXON_DCHECK(descriptor->offset_ == 0);
+
+    return Storage::create(
+        reinterpret_cast<std::byte*>(descriptor->aligned_ptr_), shape,
+        data_type,
+        // TODO: Storage should take a function ptr to delete the data
+        /*is_owned=*/false, strides);
+  }
+
+  static auto create(void* allocated_ptr, void* aligned_ptr, i64 offset,
+                     llvm::ArrayRef<i64> shape, llvm::ArrayRef<i64> strides)
+      -> MemRefDescriptor* {
     auto rank = shape.size();
-    auto shape_size = rank * sizeof(int64_t);
-    auto strides_size = rank * sizeof(int64_t);
+    auto shape_size = rank * sizeof(i64);
+    auto strides_size = rank * sizeof(i64);
 
     auto total_size = sizeof(MemRefDescriptor) + shape_size + strides_size;
     auto* buffer = new std::byte[total_size];
@@ -29,12 +57,12 @@ class MemRefDescriptor {
   }
 
   static auto createInPlace(std::byte* buffer, void* allocated_ptr,
-                            void* aligned_ptr, int64_t offset,
-                            llvm::ArrayRef<int64_t> shape,
-                            llvm::ArrayRef<int64_t> strides) -> void {
+                            void* aligned_ptr, i64 offset,
+                            llvm::ArrayRef<i64> shape,
+                            llvm::ArrayRef<i64> strides) -> void {
     auto rank = shape.size();
-    auto shape_size = rank * sizeof(int64_t);
-    auto strides_size = rank * sizeof(int64_t);
+    auto shape_size = rank * sizeof(i64);
+    auto strides_size = rank * sizeof(i64);
 
     auto* ptr = reinterpret_cast<MemRefDescriptor*>(buffer);
     *ptr = MemRefDescriptor(allocated_ptr, aligned_ptr, offset);
@@ -46,16 +74,16 @@ class MemRefDescriptor {
     std::memcpy(strides_ptr, strides.data(), strides_size);
   }
 
-  static auto getAllocSize(int64_t rank) -> size_t {
-    auto shape_size = rank * sizeof(int64_t);
-    auto strides_size = rank * sizeof(int64_t);
+  static auto getAllocSize(i64 rank) -> size_t {
+    auto shape_size = rank * sizeof(i64);
+    auto strides_size = rank * sizeof(i64);
     auto total_size = sizeof(MemRefDescriptor) + shape_size + strides_size;
     return total_size;
   }
 
  private:
   MemRefDescriptor() = default;
-  MemRefDescriptor(void* allocated_ptr, void* aligned_ptr, int64_t offset)
+  MemRefDescriptor(void* allocated_ptr, void* aligned_ptr, i64 offset)
       : allocated_ptr_(allocated_ptr),
         aligned_ptr_(aligned_ptr),
         offset_(offset) {}
@@ -63,7 +91,7 @@ class MemRefDescriptor {
  private:
   void* allocated_ptr_;
   void* aligned_ptr_;
-  int64_t offset_;
+  i64 offset_;
 };
 
 struct TensorDescriptor {

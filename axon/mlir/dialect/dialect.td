@@ -169,7 +169,6 @@ def Axon_SubOp : AxonDialect_Op<"sub", [
   Pure,
   SameOperandsAndResultType,
   SameOperandsAndResultElementType,
-  Commutative
 ]> {
   let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs);
   let results = (outs AnyTensor:$result);

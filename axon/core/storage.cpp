@@ -70,12 +70,12 @@ export enum class Layout {
   ColumnMajor,
 };
 
-static auto computeStrides(llvm::ArrayRef<int64_t> shape, Layout layout)
-    -> llvm::SmallVector<int64_t> {
-  llvm::SmallVector<int64_t> strides(shape.size());
+static auto computeStrides(llvm::ArrayRef<i64> shape, Layout layout)
+    -> llvm::SmallVector<i64> {
+  llvm::SmallVector<i64> strides(shape.size());
   switch (layout) {
     case Layout::ColumnMajor: {
-      int64_t stride = 1;
+      i64 stride = 1;
       for (size_t i : std::views::iota(0u, shape.size())) {
         strides[i] = stride;
         stride *= shape[i];
@@ -83,7 +83,7 @@ static auto computeStrides(llvm::ArrayRef<int64_t> shape, Layout layout)
       return strides;
     }
     case Layout::RowMajor: {
-      int64_t stride = 1;
+      i64 stride = 1;
       for (size_t i :
            std::views::iota(0u, shape.size()) | std::views::reverse) {
         strides[i] = stride;
@@ -94,36 +94,36 @@ static auto computeStrides(llvm::ArrayRef<int64_t> shape, Layout layout)
   }
 }
 
-static auto computeNumElems(llvm::ArrayRef<int64_t> shape) -> int64_t {
-  int64_t num_elems = 1;
+static auto computeNumElems(llvm::ArrayRef<i64> shape) -> i64 {
+  i64 num_elems = 1;
   for (auto dim : shape) {
     num_elems *= dim;
   }
   return num_elems;
 }
 
-static auto computeTotalSizeInBytes(llvm::ArrayRef<int64_t> shape,
+static auto computeTotalSizeInBytes(llvm::ArrayRef<i64> shape,
                                     DataType data_type) -> size_t {
   return computeNumElems(shape) * data_type.getSizeInBytes();
 }
 
 export class Storage {
  public:
-  static auto create(std::byte* type_erased_ptr, llvm::ArrayRef<int64_t> shape,
+  static auto create(std::byte* type_erased_ptr, llvm::ArrayRef<i64> shape,
                      DataType data_type, bool is_owned,
                      Layout layout = Layout::RowMajor) -> Storage {
     auto strides = computeStrides(shape, layout);
     return {data_type, type_erased_ptr, shape, strides, is_owned};
   }
 
-  static auto create(std::byte* type_erased_ptr, llvm::ArrayRef<int64_t> shape,
+  static auto create(std::byte* type_erased_ptr, llvm::ArrayRef<i64> shape,
                      DataType data_type, bool is_owned,
-                     llvm::ArrayRef<int64_t> strides) -> Storage {
+                     llvm::ArrayRef<i64> strides) -> Storage {
     return {data_type, type_erased_ptr, shape, strides, is_owned};
   }
 
-  static auto createFilled(llvm::ArrayRef<int64_t> shape, auto value,
-                           DataType data_type, llvm::ArrayRef<int64_t> strides)
+  static auto createFilled(llvm::ArrayRef<i64> shape, auto value,
+                           DataType data_type, llvm::ArrayRef<i64> strides)
       -> Storage {
     auto num_elems = computeNumElems(shape);
     auto size = num_elems * data_type.getSizeInBytes();
@@ -145,7 +145,7 @@ export class Storage {
     return {data_type, data, shape, strides, /*is_owned=*/true};
   }
 
-  static auto createFromNanobind(nb::ndarray<>& array, DataType data_type)
+  static auto fromNanobind(nb::ndarray<>& array, DataType data_type)
       -> Storage {
     // TODO: Explore ways to avoid copying the memory.
     auto buffer_size = array.size() * data_type.getSizeInBytes();
@@ -162,14 +162,14 @@ export class Storage {
                            stride);
   }
 
-  static auto createFilled(llvm::ArrayRef<int64_t> shape, auto value,
+  static auto createFilled(llvm::ArrayRef<i64> shape, auto value,
                            DataType data_type, Layout layout = Layout::RowMajor)
       -> Storage {
     auto strides = computeStrides(shape, layout);
     return createFilled(shape, value, data_type, strides);
   }
 
-  static auto createDistributed(llvm::ArrayRef<int64_t> shape, float mean,
+  static auto createDistributed(llvm::ArrayRef<i64> shape, float mean,
                                 float standard_deviation, DataType data_type,
                                 Layout layout = Layout::RowMajor) -> Storage {
     static thread_local std::mt19937 generator;
@@ -181,16 +181,16 @@ export class Storage {
 
     switch (data_type.kind()) {
       case DataType::Float32: {
-        std::normal_distribution<float> distribution(mean, standard_deviation);
-        auto data_ptr = reinterpret_cast<float*>(type_erased_ptr);
+        std::normal_distribution<f32> distribution(mean, standard_deviation);
+        auto data_ptr = reinterpret_cast<f32*>(type_erased_ptr);
         for (int i = 0; i < num_elems; ++i) {
           data_ptr[i] = distribution(generator);
         }
         return create(type_erased_ptr, shape, data_type, /*is_owned=*/true);
       }
       case DataType::Float64: {
-        std::normal_distribution<double> distribution(mean, standard_deviation);
-        auto data_ptr = reinterpret_cast<double*>(type_erased_ptr);
+        std::normal_distribution<f64> distribution(mean, standard_deviation);
+        auto data_ptr = reinterpret_cast<f64*>(type_erased_ptr);
         for (int i = 0; i < num_elems; ++i) {
           data_ptr[i] = distribution(generator);
         }
@@ -244,10 +244,10 @@ export class Storage {
 
   auto fillWithZeros() -> void {
     if (data_type_ == DataType::Float32) {
-      auto* data_ptr = reinterpret_cast<float*>(data_);
+      auto* data_ptr = reinterpret_cast<f32*>(data_);
       std::fill_n(data_ptr, size(), 0.0);
     } else if (data_type_ == DataType::Float64) {
-      auto* data_ptr = reinterpret_cast<double*>(data_);
+      auto* data_ptr = reinterpret_cast<f64*>(data_);
       std::fill_n(data_ptr, size(), 0.0);
     }
   }
@@ -270,21 +270,21 @@ export class Storage {
     return reinterpret_cast<T*>(data_);
   }
 
-  auto shape() const -> llvm::ArrayRef<int64_t> { return shape_; }
-  auto strides() const -> llvm::ArrayRef<int64_t> { return strides_; }
+  auto shape() const -> llvm::ArrayRef<i64> { return shape_; }
+  auto strides() const -> llvm::ArrayRef<i64> { return strides_; }
   auto data_type() const -> DataType { return data_type_; }
 
  private:
-  Storage(DataType data_type, std::byte* data, llvm::ArrayRef<int64_t> shape,
-          llvm::ArrayRef<int64_t> strides, bool is_owned)
+  Storage(DataType data_type, std::byte* data, llvm::ArrayRef<i64> shape,
+          llvm::ArrayRef<i64> strides, bool is_owned)
       : data_(data),
         shape_(shape),
         strides_(strides),
         data_type_(data_type),
         is_owned_(is_owned) {}
 
-  Storage(DataType data_type, std::byte* data, llvm::SmallVector<int64_t> shape,
-          llvm::SmallVector<int64_t> strides, bool is_owned)
+  Storage(DataType data_type, std::byte* data, llvm::SmallVector<i64> shape,
+          llvm::SmallVector<i64> strides, bool is_owned)
       : data_(data),
         shape_(std::move(shape)),
         strides_(std::move(strides)),
@@ -292,8 +292,8 @@ export class Storage {
         is_owned_(is_owned) {}
 
   std::byte* data_;
-  llvm::SmallVector<int64_t> shape_;
-  llvm::SmallVector<int64_t> strides_;
+  llvm::SmallVector<i64> shape_;
+  llvm::SmallVector<i64> strides_;
   DataType data_type_;
   bool is_owned_;
 };

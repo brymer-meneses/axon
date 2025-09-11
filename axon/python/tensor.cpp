@@ -8,6 +8,7 @@ module;
 #include "axon/base/macros.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_os_ostream.h"
+#include "llvm/Support/raw_ostream.h"
 #include "nanobind/intrusive/counter.h"
 #include "nanobind/nanobind.h"
 #include "nanobind/ndarray.h"
@@ -200,7 +201,7 @@ static auto performBroadcasting(Graph& graph, InstId source_id,
   }
 
   // Add unit dimensions since they are not equal
-  if (target_shape.size() != target_shape.size()) {
+  if (target_shape.size() != source_shape.size()) {
     source_id = graph.createOp(
         insts::Reshape(source_id, broadcast_info->unsqueezed_shape));
   }

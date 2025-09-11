@@ -17,6 +17,7 @@ module;
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Utils/ReshapeOpsUtils.h"
 #include "mlir/IR/AffineExpr.h"
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
@@ -27,8 +28,8 @@ export module axon.mlir.passes:standard_lowering;
 namespace axon {
 
 static auto createZerosLike(mlir::ConversionPatternRewriter& rewriter,
-                            mlir::RankedTensorType tensor_type,
-                            mlir::Location loc) -> mlir::Value {
+                            mlir::TensorType tensor_type, mlir::Location loc)
+    -> mlir::Value {
   auto element_type = tensor_type.getElementType();
   auto empty_op = mlir::tensor::EmptyOp::create(
       rewriter, loc, tensor_type.getShape(), element_type);
@@ -75,13 +76,11 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
-    auto result_tensor_type =
-        mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
+    auto result_tensor_type = op.getResult().getType();
     auto rank = result_tensor_type.getRank();
 
     if (rank > 3 || rank <= 1) {
-      op.emitError("Got invalid rank for MatMulOp.");
-      return mlir::failure();
+      return rewriter.notifyMatchFailure(op, "Got invalid rank for MatMulOp");
     }
 
     auto init_op = createZerosLike(rewriter, result_tensor_type, loc);
@@ -89,19 +88,21 @@ struct MatMulOpLowering : mlir::OpConversionPattern<MatMulOp> {
 
     if (result_tensor_type.getRank() == 3) {
       auto new_op = mlir::linalg::BatchMatmulOp::create(
-          rewriter, loc, mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
-          mlir::ValueRange{init_op});
-      new_op.setIndexingMapsAttr(indexing_maps);
+          rewriter, loc,
+          /*inputs=*/mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
+          /*outputs=*/mlir::ValueRange{init_op},
+          /*attributes=*/{{"indexing_maps", indexing_maps}});
       rewriter.replaceOp(op, new_op.getResult(0));
       return mlir::success();
     }
 
     if (result_tensor_type.getRank() == 2) {
       auto new_op = mlir::linalg::MatmulOp::create(
-          rewriter, loc, mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
-          mlir::ValueRange{init_op});
+          rewriter, loc,
+          /*inputs=*/mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
+          /*outputs=*/mlir::ValueRange{init_op},
+          /*attributes=*/{{"indexing_maps", indexing_maps}});
 
-      new_op.setIndexingMapsAttr(indexing_maps);
       rewriter.replaceOp(op, new_op.getResult(0));
       return mlir::success();
     }
@@ -313,10 +314,10 @@ struct SqueezeOpLowering : mlir::OpConversionPattern<SqueezeOp> {
     auto reassociation_indices =
         mlir::getReassociationIndicesForReshape(input_tensor, result_tensor);
     if (!reassociation_indices) {
-      op.emitError(
+      return rewriter.notifyMatchFailure(
+          op,
           std::format("Failed to compute reassociation indices for {} -> {}",
                       input_tensor.getShape(), result_tensor.getShape()));
-      return mlir::failure();
     }
 
     auto collapse_op = mlir::tensor::CollapseShapeOp::create(
@@ -340,10 +341,10 @@ struct UnqueezeOpLowering : mlir::OpConversionPattern<UnsqueezeOp> {
     auto reassociation_indices =
         mlir::getReassociationIndicesForReshape(input_tensor, result_tensor);
     if (!reassociation_indices) {
-      op.emitError(
+      return rewriter.notifyMatchFailure(
+          op,
           std::format("Failed to compute reassociation indices for {} and {}",
                       input_tensor.getShape(), result_tensor.getShape()));
-      return mlir::failure();
     }
 
     auto expand_op = mlir::tensor::ExpandShapeOp::create(
@@ -367,10 +368,10 @@ struct ReshapeOpLowering : mlir::OpConversionPattern<ReshapeOp> {
     auto reassociation_indices =
         mlir::getReassociationIndicesForReshape(input_tensor, result_tensor);
     if (!reassociation_indices) {
-      op.emitError(
+      return rewriter.notifyMatchFailure(
+          op,
           std::format("Failed to compute reassociation indices for {} and {}",
                       input_tensor.getShape(), result_tensor.getShape()));
-      return mlir::failure();
     }
 
     if (input_tensor.getRank() < result_tensor.getRank()) {
