@@ -51,7 +51,9 @@ target_sources(axon
     axon/core/graph.cpp
     axon/core/storage.cpp
     axon/core/scalar.cpp
+    axon/core/data_type.cpp
     axon/core/rules/backward.cpp
+    axon/core/rules/hash.cpp
     axon/core/rules/shape.cpp
 
     axon/mlir/mod.cpp
@@ -124,6 +126,8 @@ target_sources(_core
     axon/python/mod.cpp
     axon/python/tensor.cpp
     axon/python/compilation_unit.cpp
+    axon/python/jit.cpp
+    axon/python/tensor_ops.cpp
     axon/python/abi.cpp
   PUBLIC
     axon/python/bindings.cpp

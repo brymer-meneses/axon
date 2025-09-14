@@ -45,14 +45,15 @@ static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx,
 
 static auto codegen(const insts::Constant& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  const Storage& constant = ctx.graph.constants().get(inst_id)->get();
+  Storage* constant = ctx.graph.constants().get(inst_id)->get();
+  AXON_DCHECK(constant != nullptr);
 
   auto result_type =
-      mlir::RankedTensorType::get(constant.shape(), ctx.builder.getF32Type());
+      mlir::RankedTensorType::get(constant->shape(), ctx.builder.getF32Type());
 
-  if (constant.data_type() == DataType::Float32) {
-    auto data_ptr = reinterpret_cast<float*>(constant.data_ptr());
-    auto data_ref = llvm::ArrayRef<float>(data_ptr, constant.size());
+  if (constant->data_type() == DataType::Float32) {
+    auto data_ptr = reinterpret_cast<float*>(constant->data_ptr());
+    auto data_ref = llvm::ArrayRef<float>(data_ptr, constant->size());
     auto data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
 
     ctx.values[inst_id] = ConstantOp::create(
@@ -244,9 +245,14 @@ static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {
   llvm::SmallVector<mlir::Type> arg_types;
   auto data_type = builder.getF32Type();
+  auto context = builder.getContext();
+
+  AXON_DCHECK(context != nullptr);
+
   for (auto& param : graph.parameters().values()) {
     auto requires_grad = param.requires_grad;
     auto shape = graph.getShape(param.inst_id);
+
     auto type = TensorRefType::get(builder.getContext(), data_type, shape,
                                    requires_grad);
     arg_types.emplace_back(type);
@@ -262,9 +268,11 @@ static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
   return builder.getFunctionType(arg_types, {returned_type});
 }
 
-export auto codegenGraph(Graph& graph, mlir::OpBuilder& builder,
-                         mlir::ModuleOp& module_op) -> void {
-  builder.setInsertionPointToEnd(module_op.getBody());
+export auto codegenGraph(Graph& graph, mlir::OpBuilder& builder)
+    -> mlir::ModuleOp {
+  auto module = mlir::ModuleOp::create(builder.getUnknownLoc());
+  builder.setInsertionPointToEnd(module.getBody());
+
   auto loc = builder.getUnknownLoc();
 
   auto func_type = getFunctionType(graph, builder);
@@ -283,6 +291,8 @@ export auto codegenGraph(Graph& graph, mlir::OpBuilder& builder,
   } else {
     mlir::func::ReturnOp::create(ctx.builder, loc);
   }
+
+  return module;
 }
 
 }  // namespace axon

@@ -1,23 +1,11 @@
 import axon
 
-from axon import LoweringLevel, LoweringOps
-
-opts = LoweringOps(LoweringLevel.Axon)
+from axon import Tensor
 
 
-@axon.jit(opts)
-def matmul(a, b):
-    l = 2 * a * b
-    l.backward()
-    return l
+a = Tensor([1, 2, 3, 4], dtype=axon.float32)
+b = Tensor([1, 2, 3, 4], dtype=axon.float32)
 
+c = a + b
 
-a = axon.ones((2, 2), requires_grad=True)
-b = axon.ones((5, 2, 2), requires_grad=True)
-
-l = matmul(a, b)
-print(l)
-
-if opts.execute:
-    print(a.grad)
-    print(b.grad)
+print(c)

@@ -9,20 +9,21 @@ export module axon.python:abi;
 
 import axon.base;
 import axon.core;
+
 import :tensor;
 
-export namespace axon::abi {
+namespace axon::abi {
 
-class MemRefDescriptor {
+export class MemRefDescriptor {
  public:
-  static auto createEmpty(i64 rank) -> MemRefDescriptor* {
+  static auto createEmpty(u64 rank) -> MemRefDescriptor* {
     auto size = getAllocSize(rank);
     auto* buffer = new std::byte[size];
     return reinterpret_cast<MemRefDescriptor*>(buffer);
   }
 
   static auto createStorage(MemRefDescriptor* descriptor, DataType data_type,
-                            i64 rank) -> Storage {
+                            u64 rank) -> Storage {
     auto shape_size = rank * sizeof(i64);
     auto ptr = reinterpret_cast<std::byte*>(descriptor);
 
@@ -74,7 +75,7 @@ class MemRefDescriptor {
     std::memcpy(strides_ptr, strides.data(), strides_size);
   }
 
-  static auto getAllocSize(i64 rank) -> size_t {
+  static auto getAllocSize(u64 rank) -> u64 {
     auto shape_size = rank * sizeof(i64);
     auto strides_size = rank * sizeof(i64);
     auto total_size = sizeof(MemRefDescriptor) + shape_size + strides_size;
@@ -94,14 +95,14 @@ class MemRefDescriptor {
   i64 offset_;
 };
 
-struct TensorDescriptor {
+export struct TensorDescriptor {
   static auto destroy(TensorDescriptor* ptr) -> void {
     auto buffer = reinterpret_cast<std::byte*>(ptr);
     delete[] buffer;
   }
 
   static auto create(const Tensor& tensor) -> TensorDescriptor* {
-    AXON_DCHECK(tensor.hasData(), "Passed tensor is not live");
+    AXON_DCHECK(tensor.isEvaluated());
 
     auto total_size = MemRefDescriptor::getAllocSize(tensor.rank());
     if (tensor.requiresGrad()) {
@@ -109,21 +110,32 @@ struct TensorDescriptor {
     }
 
     auto* buffer = new std::byte[total_size];
-    auto data_ptr = tensor.data()->data_ptr();
+    auto descriptor = reinterpret_cast<TensorDescriptor*>(buffer);
+
+    setStorage(descriptor, tensor);
+
+    return descriptor;
+  }
+
+  static auto setStorage(TensorDescriptor* descriptor, const Tensor& tensor)
+      -> void {
+    auto buffer = reinterpret_cast<std::byte*>(descriptor);
+    auto data_ptr = tensor.storage().data_ptr();
+
+    AXON_DCHECK(data_ptr != nullptr);
+
     MemRefDescriptor::createInPlace(buffer, data_ptr, data_ptr, 0,
-                                    tensor.data()->shape(),
-                                    tensor.data()->strides());
+                                    tensor.storage().shape(),
+                                    tensor.storage().strides());
 
     if (tensor.requiresGrad()) {
       auto grad = tensor.grad();
-      auto grad_data_ptr = grad->data()->data_ptr();
+      auto grad_data_ptr = grad->storage().data_ptr();
 
       auto* ptr = buffer + MemRefDescriptor::getAllocSize(tensor.rank());
       MemRefDescriptor::createInPlace(ptr, grad_data_ptr, grad_data_ptr, 0,
-                                      grad->shape(), grad->data()->strides());
+                                      grad->shape(), grad->storage().strides());
     }
-
-    return reinterpret_cast<TensorDescriptor*>(buffer);
   }
 };
 

@@ -18,59 +18,18 @@ export module axon.core:storage;
 
 import axon.base;
 
+import :data_type;
+
 namespace nb = nanobind;
 
 namespace axon {
-
-export class DataType {
- public:
-  enum InternalType : uint8_t {
-    Float32,
-    Float64,
-  };
-
-  constexpr DataType(InternalType type) : type_(type) {}
-  constexpr DataType() = default;
-
-  auto operator==(DataType other) const -> bool { return type_ == other.type_; }
-
-  auto getSizeInBytes() const -> size_t {
-    switch (type_) {
-      case DataType::Float32:
-        return 4;
-      case DataType::Float64:
-        return 8;
-    }
-  }
-
-  auto kind() -> InternalType { return type_; }
-
-  template <typename T>
-  auto isSameAs() const -> bool {
-    return fromType<T>() == type_;
-  }
-
-  template <typename T>
-  static consteval auto fromType() -> DataType {
-    if constexpr (std::is_same_v<T, f32>) {
-      return DataType::Float32;
-    } else if constexpr (std::is_same_v<T, f64>) {
-      return DataType::Float64;
-    } else {
-      static_assert("Passed template parameter has no corresponding DataType");
-    }
-  }
-
- private:
-  InternalType type_;
-};
 
 export enum class Layout {
   RowMajor,
   ColumnMajor,
 };
 
-static auto computeStrides(llvm::ArrayRef<i64> shape, Layout layout)
+export auto computeStrides(llvm::ArrayRef<i64> shape, Layout layout)
     -> llvm::SmallVector<i64> {
   llvm::SmallVector<i64> strides(shape.size());
   switch (layout) {
@@ -94,7 +53,7 @@ static auto computeStrides(llvm::ArrayRef<i64> shape, Layout layout)
   }
 }
 
-static auto computeNumElems(llvm::ArrayRef<i64> shape) -> i64 {
+export auto computeNumElems(llvm::ArrayRef<i64> shape) -> i64 {
   i64 num_elems = 1;
   for (auto dim : shape) {
     num_elems *= dim;
@@ -105,6 +64,34 @@ static auto computeNumElems(llvm::ArrayRef<i64> shape) -> i64 {
 static auto computeTotalSizeInBytes(llvm::ArrayRef<i64> shape,
                                     DataType data_type) -> size_t {
   return computeNumElems(shape) * data_type.getSizeInBytes();
+}
+
+static auto computeShape(const nb::list& list) -> llvm::SmallVector<i64> {
+  llvm::SmallVector<i64> shape;
+  auto current = list;
+  while (nb::isinstance<nb::list>(current) && current.size() > 0) {
+    shape.push_back(static_cast<i64>(current.size()));
+
+    if (nb::isinstance<nb::list>(current[0])) {
+      current = nb::cast<nb::list>(current[0]);
+    } else {
+      break;
+    }
+  }
+
+  return shape;
+}
+
+template <typename T>
+static auto fillBuffer(const nb::list& list, T*& buffer) -> void {
+  for (const auto& item : list) {
+    if (nb::isinstance<nb::list>(item)) {
+      fillBuffer<T>(nb::cast<nb::list>(item), buffer);
+    } else {
+      *buffer = nb::cast<T>(item);
+      ++buffer;
+    }
+  }
 }
 
 export class Storage {
@@ -162,6 +149,17 @@ export class Storage {
                            stride);
   }
 
+  static auto fromPython(const nb::list& list, DataType data_type) -> Storage {
+    switch (data_type.kind()) {
+      case DataType::Float32: {
+        return fromPythonImpl<f32>(list);
+      }
+      case DataType::Float64: {
+        return fromPythonImpl<f64>(list);
+      }
+    }
+  }
+
   static auto createFilled(llvm::ArrayRef<i64> shape, auto value,
                            DataType data_type, Layout layout = Layout::RowMajor)
       -> Storage {
@@ -210,6 +208,8 @@ export class Storage {
       delete[] bytes;
     }
   }
+
+  Storage() = default;
 
   Storage(const Storage&) = delete;
   auto operator=(const Storage&) -> Storage& = delete;
@@ -290,6 +290,22 @@ export class Storage {
         strides_(std::move(strides)),
         data_type_(data_type),
         is_owned_(is_owned) {}
+
+  template <typename T>
+  static auto fromPythonImpl(const nb::list& list) -> Storage {
+    auto shape = computeShape(list);
+    auto total_count = computeNumElems(shape);
+
+    auto byte_size = total_count * sizeof(T);
+    auto bytes = new std::byte[byte_size];
+    T* buffer = reinterpret_cast<T*>(bytes);
+    T* fill_ptr = buffer;
+
+    fillBuffer<T>(list, fill_ptr);
+
+    return Storage::create(bytes, shape, DataType::fromType<T>(),
+                           /*is_owned=*/true);
+  };
 
   std::byte* data_;
   llvm::SmallVector<i64> shape_;

@@ -40,10 +40,8 @@ constexpr T IndexBase<T>::None = T(-1);
 
 }  // namespace axon
 
-namespace llvm {
-
 export template <axon::Index T>
-struct DenseMapInfo<T> {
+struct llvm::DenseMapInfo<T> {
   static constexpr auto sentinel = std::numeric_limits<int32_t>::min();
 
   static inline auto getEmptyKey() -> T { return T(sentinel); }
@@ -58,5 +56,3 @@ struct DenseMapInfo<T> {
     return lhs.value() == rhs.value();
   }
 };
-
-}  // namespace llvm

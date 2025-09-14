@@ -41,6 +41,8 @@ struct Sum {
   i32 axis;
 
   bool keepdims;
+
+  auto operator==(const Sum& other) const -> bool = default;
 };
 
 struct ExpandDims {
@@ -53,10 +55,14 @@ struct ExpandDims {
   struct Mapping {
     i64 dim;
     i64 scale;
+
+    auto operator==(const Mapping&) const -> bool = default;
   };
 
   InstId operand_id;
   llvm::SmallVector<Mapping> mappings;
+
+  auto operator==(const ExpandDims& other) const -> bool = default;
 };
 
 struct Unsqueeze {
@@ -68,6 +74,8 @@ struct Unsqueeze {
 
   InstId operand_id;
   i32 dim;
+
+  auto operator==(const Unsqueeze& other) const -> bool = default;
 };
 
 struct Squeeze {
@@ -79,6 +87,8 @@ struct Squeeze {
 
   InstId operand_id;
   i32 dim;
+
+  auto operator==(const Squeeze& other) const -> bool = default;
 };
 
 struct Transpose {
@@ -92,6 +102,8 @@ struct Transpose {
 
   u32 from;
   u32 to;
+
+  auto operator==(const Transpose& other) const -> bool = default;
 };
 
 struct Reshape {
@@ -103,6 +115,8 @@ struct Reshape {
 
   InstId operand_id;
   llvm::SmallVector<i64> target_shape;
+
+  auto operator==(const Reshape& other) const -> bool = default;
 };
 
 struct MatMul {
@@ -114,6 +128,8 @@ struct MatMul {
 
   InstId lhs_id;
   InstId rhs_id;
+
+  auto operator==(const MatMul& other) const -> bool = default;
 };
 
 struct Add {
@@ -125,6 +141,8 @@ struct Add {
 
   InstId lhs_id;
   InstId rhs_id;
+
+  auto operator==(const Add& other) const -> bool = default;
 };
 
 struct Sub {
@@ -136,6 +154,8 @@ struct Sub {
 
   InstId lhs_id;
   InstId rhs_id;
+
+  auto operator==(const Sub& other) const -> bool = default;
 };
 
 struct Mul {
@@ -147,6 +167,8 @@ struct Mul {
 
   InstId lhs_id;
   InstId rhs_id;
+
+  auto operator==(const Mul& other) const -> bool = default;
 };
 
 struct ScalarMul {
@@ -158,6 +180,8 @@ struct ScalarMul {
 
   InstId operand_id;
   Scalar scalar;
+
+  auto operator==(const ScalarMul& other) const -> bool = default;
 };
 
 struct Neg {
@@ -168,6 +192,8 @@ struct Neg {
   };
 
   InstId operand_id;
+
+  auto operator==(const Neg& other) const -> bool = default;
 };
 
 struct Constant {
@@ -176,6 +202,8 @@ struct Constant {
       .shape_rule = ShapeInfo::None,
       .differentiable = false,
   };
+
+  auto operator==(const Constant&) const -> bool { return true; }
 };
 
 struct AccumulateGrad {
@@ -187,6 +215,8 @@ struct AccumulateGrad {
 
   InstId inst_id;
   InstId value_id;
+
+  auto operator==(const AccumulateGrad&) const -> bool = default;
 };
 
 struct GetParameter {
@@ -197,6 +227,8 @@ struct GetParameter {
   };
 
   ParamId param_id;
+
+  auto operator==(const GetParameter&) const -> bool = default;
 };
 
 struct OnesLike {
@@ -207,6 +239,8 @@ struct OnesLike {
   };
 
   InstId operand_id;
+
+  auto operator==(const OnesLike&) const -> bool = default;
 };
 
 }  // namespace insts

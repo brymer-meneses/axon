@@ -7,5 +7,6 @@ export import :graph;
 export import :autodiff;
 export import :storage;
 
+export import :data_type;
 export import :shape_rules;
 export import :scalar;

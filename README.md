@@ -19,13 +19,14 @@ uv run examples/simple_autograd.py
 
 ```python
 import axon
-from axon import nn, optim
+from axon import nn, optim, Tensor
 
 class Model(nn.Module):
     def __init__(self, in_features, out_features):
         super().__init__()
-        self.W = axon.randn((in_features, out_features), requires_grad=True)
-        self.B = axon.randn((out_features, 1), requires_grad=True)
+
+        self.W = Tensor.randn((in_features, out_features), requires_grad=True)
+        self.B = Tensor.randn((out_features, 1), requires_grad=True)
 
     def forward(self, x):
         return x @ self.W + self.B
@@ -33,16 +34,13 @@ class Model(nn.Module):
 def mse_loss(y, y_hat):
     return 0.5 * (y-y_hat) ** 2
 
-@axon.jit()
-def training_step(x, y, model):
+optim = optim.SGD(model.parameters(), lr=0.01)
+
+for (x, y) in dataset:
     y_hat = model(x)
     l = mse_loss(y, y_hat)
     l.backward()
-    return l
 
-optim = optim.SGD(model.parameters(), lr=0.01)
-for (x, y) in dataset:
-    l = training_step(x, y, model)
     optim.zero_grad()
     optim.step()
 ```

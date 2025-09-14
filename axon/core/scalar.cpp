@@ -1,5 +1,6 @@
-
 module;
+
+#include <array>
 
 #include "axon/base/macros.h"
 #include "type_traits"
@@ -7,7 +8,7 @@ module;
 export module axon.core:scalar;
 
 import axon.base;
-import :storage;
+import :data_type;
 
 namespace axon {
 
@@ -31,6 +32,10 @@ export class Scalar {
   }
 
   auto data_type() const -> DataType { return data_type_; }
+
+  auto bytes() const -> const std::array<std::byte, 8>& { return storage_; }
+
+  auto operator==(const Scalar& other) const -> bool = default;
 
  private:
   alignas(std::max_align_t) std::array<std::byte, 8> storage_;

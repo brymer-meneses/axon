@@ -66,6 +66,8 @@ class ValueStore {
     return static_cast<int32_t>(index.value()) < values_.size();
   }
 
+  auto operator==(const ValueStore& rhs) const -> bool = default;
+
  private:
   std::vector<ValueType> values_;
 };
@@ -73,6 +75,8 @@ class ValueStore {
 template <Index KeyType, Index ValueType>
 class RelationalStore {
  public:
+  auto operator==(const RelationalStore& rhs) const -> bool = default;
+
   auto createRelation(KeyType lhs, ValueType rhs) -> void {
     AXON_DCHECK(not containsKey(lhs),
                 "Passed source has already an existing relation.");
@@ -141,9 +145,13 @@ class IdStore {
   struct KeyValuePair {
     KeyType key;
     ValueType value;
+
+    auto operator==(const KeyValuePair& rhs) const -> bool = default;
   };
 
  public:
+  auto operator==(const IdStore& rhs) const -> bool = default;
+
   auto add(KeyType key, ValueType value) -> void {
     AXON_DCHECK(not containsKey(key), "Passed key must not be used.");
     pairs_.emplace_back(key, value);
@@ -204,7 +212,21 @@ class IdMap {
   using ValueTypeConstRef = std::reference_wrapper<const ValueType>;
 
  public:
+  auto operator==(const IdMap& rhs) const -> bool = default;
+
   auto set(KeyType key, ValueType&& value) -> void {
+    for (uint64_t i = 0; i < keys_.size(); i += 1) {
+      if (keys_[i] == key) {
+        values_[i] = std::move(value);
+        return;
+      }
+    }
+
+    keys_.emplace_back(key);
+    values_.emplace_back(std::move(value));
+  }
+
+  auto set(KeyType key, const ValueType& value) -> void {
     for (uint64_t i = 0; i < keys_.size(); i += 1) {
       if (keys_[i] == key) {
         values_[i] = std::move(value);
@@ -234,11 +256,16 @@ class IdMap {
     return std::nullopt;
   }
 
+  auto size() const -> size_t { return keys_.size(); }
+
   auto keys() -> std::vector<KeyType>& { return keys_; }
   auto keys() const -> const std::vector<KeyType>& { return keys_; }
 
   auto values() -> std::vector<ValueType>& { return values_; }
   auto values() const -> const std::vector<ValueType>& { return values_; }
+
+  auto pairs() -> auto { return std::views::zip(keys_, values_); }
+  auto pairs() const -> auto { return std::views::zip(keys_, values_); }
 
  private:
   std::vector<KeyType> keys_;
