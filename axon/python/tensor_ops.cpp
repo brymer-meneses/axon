@@ -19,8 +19,8 @@ namespace axon {
 
 auto Tensor::evaluate() -> void {
   AXON_DCHECK(context_ != nullptr);
-
-  AXON_DCHECK(context_->insts().contains(this));
+  AXON_DCHECK(context_->insts().contains(this),
+              "Context must know this tensor.");
 
   context_->setTensorToEvaluate(this);
 
@@ -120,6 +120,7 @@ auto getOrCombineGraphContext(Tensor& lhs, Tensor& rhs)
     auto context = std::make_shared<GraphContext>();
     lhs.declareAsParam(context);
     rhs.declareAsParam(context);
+
     return context;
   }
 

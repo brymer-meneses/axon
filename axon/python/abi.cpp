@@ -120,21 +120,25 @@ export struct TensorDescriptor {
   static auto setStorage(TensorDescriptor* descriptor, const Tensor& tensor)
       -> void {
     auto buffer = reinterpret_cast<std::byte*>(descriptor);
-    auto data_ptr = tensor.storage().data_ptr();
+
+    AXON_DCHECK(tensor.storage() != nullptr);
+
+    auto data_ptr = tensor.storage()->data_ptr();
 
     AXON_DCHECK(data_ptr != nullptr);
 
     MemRefDescriptor::createInPlace(buffer, data_ptr, data_ptr, 0,
-                                    tensor.storage().shape(),
-                                    tensor.storage().strides());
+                                    tensor.storage()->shape(),
+                                    tensor.storage()->strides());
 
     if (tensor.requiresGrad()) {
       auto grad = tensor.grad();
-      auto grad_data_ptr = grad->storage().data_ptr();
+      auto grad_data_ptr = grad->storage()->data_ptr();
 
       auto* ptr = buffer + MemRefDescriptor::getAllocSize(tensor.rank());
       MemRefDescriptor::createInPlace(ptr, grad_data_ptr, grad_data_ptr, 0,
-                                      grad->shape(), grad->storage().strides());
+                                      grad->shape(),
+                                      grad->storage()->strides());
     }
   }
 };

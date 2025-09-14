@@ -145,7 +145,8 @@ export class Graph {
   }
 
   auto hash() const -> u64 {
-    llvm::hash_code hash;
+    llvm::hash_code hash = llvm::hash_value(0);
+
     for (auto& inst : insts_.values()) {
       auto inst_hash = inst.visit([this](const auto& inst) {
         using InstType = std::decay_t<decltype(inst)>;
@@ -223,25 +224,23 @@ export class Graph {
 
 export template <>
 struct llvm::DenseMapInfo<axon::Graph> {
-  static inline axon::Graph* empty_key = reinterpret_cast<axon::Graph*>(-1);
-  static inline axon::Graph* tombstone_key = reinterpret_cast<axon::Graph*>(-2);
+  static inline auto getEmptyKey() -> axon::Graph {
+    static axon::Graph empty_graph;
+    return empty_graph;
+  }
 
-  static inline auto getEmptyKey() -> axon::Graph { return *empty_key; }
-
-  static inline auto getTombstoneKey() -> axon::Graph { return *tombstone_key; }
+  static inline auto getTombstoneKey() -> axon::Graph {
+    static axon::Graph tombstone_graph;
+    tombstone_graph.setReturned(axon::InstId::Pending);
+    return tombstone_graph;
+  }
 
   static auto getHashValue(const axon::Graph& graph) -> unsigned {
-    return graph.hash();
+    auto hash = graph.hash();
+    return hash;
   }
 
   static auto isEqual(const axon::Graph& lhs, const axon::Graph& rhs) -> bool {
-    if (&lhs == empty_key || &lhs == tombstone_key || &rhs == empty_key ||
-        &rhs == tombstone_key) {
-      return &lhs == &rhs;
-    }
-
-    // Try cheap paths first.
-
     if (lhs.getReturnedId() != rhs.getReturnedId()) {
       return false;
     }

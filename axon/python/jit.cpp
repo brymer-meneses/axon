@@ -1,5 +1,6 @@
 module;
 
+#include <memory>
 #include <print>
 #include <ranges>
 
@@ -30,9 +31,8 @@ namespace axon {
 
 class CompiledFunction {
  public:
-  CompiledFunction() : mlir_context_(createDialectRegistry()) {
-    mlir_context_.loadAllAvailableDialects();
-  }
+  CompiledFunction(mlir::MLIRContext* mlir_context)
+      : mlir_context_(mlir_context) {}
 
   ~CompiledFunction() {
     for (auto descriptor : descriptors_) {
@@ -40,6 +40,8 @@ class CompiledFunction {
           reinterpret_cast<abi::TensorDescriptor*>(descriptor);
       abi::TensorDescriptor::destroy(tensor_descriptor);
     }
+
+    engine_.reset();
   }
 
   auto execute(GraphContext& context) -> void {
@@ -51,12 +53,11 @@ class CompiledFunction {
       compileModuleAndPrepareEngine(context);
     }
 
-    std::println("Executing the jit function.");
-
     auto invocation_result = engine_->invokePacked("graph", descriptors_);
     if (invocation_result) {
       throw std::runtime_error("JIT invocation failed\n");
     }
+
     auto tensor = context.getTensorToEvaluate();
     AXON_DCHECK(tensor != nullptr);
 
@@ -65,15 +66,17 @@ class CompiledFunction {
     auto return_descriptor =
         reinterpret_cast<abi::MemRefDescriptor*>(descriptors_.back());
 
-    // materialize the storage of this tensor
-    tensor->storage() = abi::MemRefDescriptor::createStorage(
-        return_descriptor, DataType::Float32, rank);
+    auto storage_ptr =
+        std::make_unique<Storage>(abi::MemRefDescriptor::createStorage(
+            return_descriptor, DataType::Float32, rank));
+
+    tensor->setStorage(std::move(storage_ptr));
   }
 
  private:
   auto compileModuleAndPrepareEngine(GraphContext& context) -> void {
-    mlir::OpBuilder builder(&mlir_context_);
-    mlir::PassManager pm(&mlir_context_);
+    mlir::OpBuilder builder(mlir_context_);
+    mlir::PassManager pm(mlir_context_);
 
     pm.enableVerifier();
 
@@ -102,10 +105,11 @@ class CompiledFunction {
   }
 
   auto configureDescriptors(GraphContext& context) -> void {
-    std::println("Configuring descriptors ...");
     // If this is the first time we're configuring the descriptors then we need
     // to create them first.
     if (descriptors_.empty()) {
+      AXON_DCHECK(context.parameters().size() > 0);
+
       for (auto tensor : context.parameters()) {
         auto ptr =
             reinterpret_cast<void*>(abi::TensorDescriptor::create(*tensor));
@@ -138,7 +142,7 @@ class CompiledFunction {
  private:
   std::unique_ptr<mlir::ExecutionEngine> engine_;
   llvm::SmallVector<void*> descriptors_;
-  mlir::MLIRContext mlir_context_;
+  mlir::MLIRContext* mlir_context_;
   mlir::ModuleOp module_;
 };
 
@@ -147,12 +151,12 @@ export class GlobalContext {
   GlobalContext(const GlobalContext&) = delete;
   auto operator=(const GlobalContext&) -> GlobalContext& = delete;
 
-  GlobalContext(GlobalContext&&) = delete;
-  auto operator=(GlobalContext&&) -> GlobalContext& = delete;
-
   static auto get() -> GlobalContext& {
-    static GlobalContext context;
-    return context;
+    // FIXME:
+    // Remove this intentional leak memory since llvm has complex internal
+    // destructors, that will result to a std::terminate if not done properly.
+    static auto context = new GlobalContext();
+    return *context;
   }
 
   auto execute(GraphContext& context) -> void {
@@ -161,18 +165,17 @@ export class GlobalContext {
       return graph_registry_[graph]->execute(context);
     }
 
-    auto compiled_function = std::make_unique<CompiledFunction>();
+    auto compiled_function = std::make_unique<CompiledFunction>(&mlir_context_);
     compiled_function->execute(context);
-
     graph_registry_[graph] = std::move(compiled_function);
   }
 
  private:
-  GlobalContext() {
-    llvm::InitializeNativeTarget();
-    llvm::InitializeNativeTargetAsmPrinter();
+  GlobalContext() : mlir_context_(createDialectRegistry()) {
+    mlir_context_.loadAllAvailableDialects();
   }
 
+  mlir::MLIRContext mlir_context_;
   llvm::DenseMap<Graph, std::unique_ptr<CompiledFunction>> graph_registry_;
 };
 

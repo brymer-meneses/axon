@@ -103,7 +103,7 @@ export class GraphContext {
     return insts_;
   }
 
-  auto parameters() -> llvm::SmallVector<Tensor*> { return parameters_; }
+  auto parameters() -> llvm::SmallVector<Tensor*>& { return parameters_; }
   auto parameters() const -> const llvm::SmallVector<Tensor*>& {
     return parameters_;
   }
@@ -147,7 +147,7 @@ export class Tensor {
     }
 
     if (grad_ != nullptr) {
-      grad_->storage().fillWithZeros();
+      grad_->storage()->fillWithZeros();
     } else {
       grad_ = std::make_shared<Tensor>(Storage::createZerosLike(*storage_),
                                        /*requires_grad=*/false);
@@ -205,8 +205,12 @@ export class Tensor {
 
   auto grad() const -> std::shared_ptr<Tensor> { return grad_; }
 
-  auto storage() -> Storage& { return *storage_; }
-  auto storage() const -> const Storage& { return *storage_; }
+  auto storage() -> Storage* { return storage_.get(); }
+  auto storage() const -> const Storage* { return storage_.get(); }
+
+  auto setStorage(std::unique_ptr<Storage> storage) -> void {
+    storage_ = std::move(storage);
+  }
 
   auto context() -> std::shared_ptr<GraphContext> { return context_; }
   auto context() const -> const std::shared_ptr<GraphContext> {

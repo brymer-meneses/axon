@@ -9,6 +9,7 @@
 #include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/TargetSelect.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "nanobind/intrusive/counter.h"
@@ -54,6 +55,9 @@ static auto convertVectorToTuple(llvm::ArrayRef<i64> shape) -> nb::tuple {
 }
 
 NB_MODULE(_core, m) {
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmPrinter();
+
   nb::enum_<DataType::InternalType>(m, "dtype")
       .value("float32", DataType::Float32)
       .value("float64", DataType::Float64)
