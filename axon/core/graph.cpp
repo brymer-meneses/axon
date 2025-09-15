@@ -147,13 +147,19 @@ export class Graph {
   auto hash() const -> u64 {
     llvm::hash_code hash = llvm::hash_value(0);
 
+    std::println("------------");
     for (auto& inst : insts_.values()) {
+      std::println("inst {}", inst.index());
+
       auto inst_hash = inst.visit([this](const auto& inst) {
         using InstType = std::decay_t<decltype(inst)>;
         return Hash<InstType>::hash(inst, shapes_);
       });
+
       hash = llvm::hash_combine(hash, inst_hash);
     }
+    std::println("------------");
+
     return hash;
   }
 
@@ -223,40 +229,8 @@ export class Graph {
 }  // namespace axon
 
 export template <>
-struct llvm::DenseMapInfo<axon::Graph> {
-  static inline auto getEmptyKey() -> axon::Graph {
-    static axon::Graph empty_graph;
-    return empty_graph;
-  }
-
-  static inline auto getTombstoneKey() -> axon::Graph {
-    static axon::Graph tombstone_graph;
-    tombstone_graph.setReturned(axon::InstId::Pending);
-    return tombstone_graph;
-  }
-
-  static auto getHashValue(const axon::Graph& graph) -> unsigned {
-    auto hash = graph.hash();
-    return hash;
-  }
-
-  static auto isEqual(const axon::Graph& lhs, const axon::Graph& rhs) -> bool {
-    if (lhs.getReturnedId() != rhs.getReturnedId()) {
-      return false;
-    }
-    if (lhs.gradients().size() != rhs.gradients().size()) {
-      return false;
-    }
-    if (lhs.constants().size() != rhs.constants().size()) {
-      return false;
-    }
-    if (lhs.parameters().size() != rhs.parameters().size()) {
-      return false;
-    }
-    if (lhs.insts().size() != rhs.insts().size()) {
-      return false;
-    }
-
-    return lhs == rhs;
+struct std::hash<axon::Graph> {
+  auto operator()(const axon::Graph& graph) const -> size_t {
+    return graph.hash();
   }
 };

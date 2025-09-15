@@ -1,5 +1,7 @@
 module;
 
+#include <print>
+
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/HashBuilder.h"
@@ -133,7 +135,7 @@ template <>
 struct Hash<insts::Constant> {
   static auto hash(const insts::Constant&, const IdMap<InstId, Shape>&)
       -> llvm::hash_code {
-    constexpr auto tag = Inst::tag<insts::AccumulateGrad>();
+    constexpr auto tag = Inst::tag<insts::Constant>();
     return llvm::hash_combine(tag);
   }
 };
@@ -142,14 +144,10 @@ template <>
 struct Hash<insts::ScalarMul> {
   static auto hash(const insts::ScalarMul& op,
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
-    constexpr auto tag = Inst::tag<insts::Squeeze>();
-
+    constexpr auto tag = Inst::tag<insts::ScalarMul>();
     llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
 
-    llvm::ArrayRef<std::byte> scalar_bytes(op.scalar.bytes());
-
-    return llvm::hash_combine(operand_shape, tag, op.scalar.data_type().kind(),
-                              op.scalar.bytes().data());
+    return llvm::hash_combine(operand_shape, tag, op.scalar);
   }
 };
 

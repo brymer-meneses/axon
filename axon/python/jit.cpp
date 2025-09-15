@@ -3,6 +3,7 @@ module;
 #include <memory>
 #include <print>
 #include <ranges>
+#include <unordered_map>
 
 #include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -100,7 +101,6 @@ class CompiledFunction {
       throw std::runtime_error("Failed to create JIT engine");
     }
 
-    std::println("Created engine.");
     engine_ = std::move(maybe_engine.get());
   }
 
@@ -127,10 +127,9 @@ class CompiledFunction {
       return;
     }
 
-    // AXON_DCHECK(descriptors_.size() == context.graph().parameters().size() +
-    // 1);
+    AXON_DCHECK(descriptors_.size() == context.graph().parameters().size() + 1);
     for (auto [tensor, ptr] :
-         std::views::zip(context.insts().keys(), descriptors_)) {
+         std::views::zip(context.parameters(), descriptors_)) {
       AXON_DCHECK(tensor != nullptr);
       AXON_DCHECK(tensor->isEvaluated());
 
@@ -176,7 +175,7 @@ export class GlobalContext {
   }
 
   mlir::MLIRContext mlir_context_;
-  llvm::DenseMap<Graph, std::unique_ptr<CompiledFunction>> graph_registry_;
+  std::unordered_map<Graph, std::unique_ptr<CompiledFunction>> graph_registry_;
 };
 
 }  // namespace axon

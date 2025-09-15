@@ -3,6 +3,8 @@ module;
 #include <cstdint>
 #include <type_traits>
 
+#include "llvm/ADT/Hashing.h"
+
 export module axon.core:data_type;
 
 import axon.base;
@@ -30,7 +32,7 @@ export class DataType {
     }
   }
 
-  auto kind() -> InternalType { return type_; }
+  auto kind() const -> InternalType { return type_; }
 
   template <typename T>
   auto isSameAs() const -> bool {
@@ -51,5 +53,9 @@ export class DataType {
  private:
   InternalType type_;
 };
+
+export auto hash_value(const DataType& data_type) -> llvm::hash_code {
+  return llvm::hash_combine(data_type.kind());
+}
 
 }  // namespace axon

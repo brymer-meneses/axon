@@ -125,7 +125,6 @@ target_sources(_core
   PUBLIC FILE_SET CXX_MODULES FILES
     axon/python/mod.cpp
     axon/python/tensor.cpp
-    axon/python/compilation_unit.cpp
     axon/python/jit.cpp
     axon/python/tensor_ops.cpp
     axon/python/abi.cpp
@@ -157,3 +156,10 @@ nanobind_lto(_core)
 nanobind_set_visibility(_core)
 nanobind_extension(_core)
 
+nanobind_add_stub(
+  _core_stub
+  MODULE _core
+  OUTPUT ${CMAKE_SOURCE_DIR}/axon/python/axon/_core.pyi
+  PYTHON_PATH ${CMAKE_SOURCE_DIR}/axon/python/axon
+  DEPENDS _core
+)

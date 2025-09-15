@@ -3,6 +3,9 @@ module;
 #include <array>
 
 #include "axon/base/macros.h"
+#include "llvm/ADT/DenseMapInfo.h"
+#include "llvm/ADT/Hashing.h"
+#include "llvm/Support/HashBuilder.h"
 #include "type_traits"
 
 export module axon.core:scalar;
@@ -16,7 +19,7 @@ namespace axon {
 export class Scalar {
  public:
   template <typename T>
-  Scalar(T scalar) {
+  constexpr explicit Scalar(T scalar) {
     static_assert(sizeof(T) <= 8);
 
     data_type_ = DataType::fromType<T>();
@@ -41,5 +44,10 @@ export class Scalar {
   alignas(std::max_align_t) std::array<std::byte, 8> storage_;
   DataType data_type_;
 };
+
+export auto hash_value(const Scalar& scalar) -> llvm::hash_code {
+  return llvm::hash_combine(llvm::ArrayRef<std::byte>(scalar.bytes()),
+                            scalar.data_type());
+}
 
 }  // namespace axon
