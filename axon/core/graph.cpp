@@ -94,7 +94,7 @@ export class Graph {
     return inst_id;
   }
 
-  auto absorb(Graph& graph) -> void {
+  auto merge(Graph& graph) -> void {
     AXON_DCHECK(!graph.returned_id_.isValid());
 
     auto add_offset = [offset =
@@ -145,22 +145,26 @@ export class Graph {
   }
 
   auto hash() const -> u64 {
-    llvm::hash_code hash = llvm::hash_value(0);
+    llvm::hash_code hash = 0;
 
-    std::println("------------");
     for (auto& inst : insts_.values()) {
-      std::println("inst {}", inst.index());
-
       auto inst_hash = inst.visit([this](const auto& inst) {
         using InstType = std::decay_t<decltype(inst)>;
         return Hash<InstType>::hash(inst, shapes_);
       });
-
       hash = llvm::hash_combine(hash, inst_hash);
     }
-    std::println("------------");
 
     return hash;
+  }
+
+  auto reset() -> void {
+    insts_.clear();
+    parameters_.clear();
+    constants_.clear();
+    shapes_.clear();
+    gradients_.clear();
+    returned_id_ = InstId::None;
   }
 
   auto setReturned(InstId returned_id) -> void { returned_id_ = returned_id; }
@@ -190,7 +194,7 @@ export class Graph {
 
  private:
   auto inferShape(InstId inst_id) -> void {
-    auto inst = insts_.get(inst_id);
+    auto& inst = insts_.get(inst_id);
 
     inst.visit([&](const auto& op) {
       using InstType = std::decay_t<decltype(op)>;

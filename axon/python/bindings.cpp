@@ -89,16 +89,21 @@ NB_MODULE(_core, m) {
           [](Tensor& self) { return convertVectorToTuple(self.shape()); })
 
       .def_prop_ro("requires_grad", &Tensor::requiresGrad)
+      .def_prop_ro("grad", &Tensor::grad)
 
       .def_prop_ro("is_evaluated", &Tensor::isEvaluated)
 
-      .def("backward", &Tensor::backward)
+      .def("zero_grad", &Tensor::zeroGrad)
+
+      .def("backward", &Tensor::backward, nb::arg("grad") = nullptr)
 
       .def("__repr__", &Tensor::asString)
 
       .def("__add__", &performBinaryElementWiseOperation<insts::Add>)
       .def("__mul__", &performBinaryElementWiseOperation<insts::Mul>)
       .def("__sub__", &performBinaryElementWiseOperation<insts::Sub>)
+
+      .def("__matmul__", &performMatMul)
 
       .def_static(
           "ones",

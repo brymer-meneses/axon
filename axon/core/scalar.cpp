@@ -6,7 +6,6 @@ module;
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/Support/HashBuilder.h"
-#include "type_traits"
 
 export module axon.core:scalar;
 
@@ -18,7 +17,7 @@ namespace axon {
 /// A type erased scalar value
 export class Scalar {
  public:
-  template <typename T>
+  template <Numeric T>
   constexpr explicit Scalar(T scalar) {
     static_assert(sizeof(T) <= 8);
 
@@ -27,7 +26,7 @@ export class Scalar {
     *ptr = scalar;
   }
 
-  template <typename T>
+  template <Numeric T>
   auto as() const -> const T {
     AXON_DCHECK(DataType::fromType<T>() == data_type_,
                 "Invalid passed data type.");

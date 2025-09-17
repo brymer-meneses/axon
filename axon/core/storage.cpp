@@ -82,7 +82,7 @@ static auto computeShape(const nb::list& list) -> llvm::SmallVector<i64> {
   return shape;
 }
 
-template <typename T>
+template <Numeric T>
 static auto fillBuffer(const nb::list& list, T*& buffer) -> void {
   for (const auto& item : list) {
     if (nb::isinstance<nb::list>(item)) {
@@ -118,12 +118,12 @@ export class Storage {
 
     switch (data_type.kind()) {
       case DataType::Float32: {
-        auto* data_ptr = reinterpret_cast<float*>(data);
+        auto* data_ptr = reinterpret_cast<f32*>(data);
         std::fill_n(data_ptr, num_elems, value);
         break;
       }
       case DataType::Float64: {
-        auto* data_ptr = reinterpret_cast<float*>(data);
+        auto* data_ptr = reinterpret_cast<f64*>(data);
         std::fill_n(data_ptr, num_elems, value);
         break;
       }
@@ -258,13 +258,13 @@ export class Storage {
 
   auto data_ptr() const -> std::byte* { return data_; }
 
-  template <typename T>
+  template <Numeric T>
   auto as() const -> const T* {
     AXON_DCHECK(data_type_.isSameAs<T>());
     return reinterpret_cast<T*>(data_);
   }
 
-  template <typename T>
+  template <Numeric T>
   auto as() -> T* {
     AXON_DCHECK(data_type_.isSameAs<T>());
     return reinterpret_cast<T*>(data_);

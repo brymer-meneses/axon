@@ -1,5 +1,6 @@
 module;
 
+#include <algorithm>
 #include <format>
 #include <memory>
 #include <optional>
@@ -8,12 +9,12 @@ module;
 #include "axon/base/macros.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Support/raw_ostream.h"
 #include "nanobind/intrusive/counter.h"
 #include "nanobind/nanobind.h"
 #include "nanobind/ndarray.h"
-#include "xtensor/containers/xarray.hpp"
 
 export module axon.python:tensor;
 
@@ -25,10 +26,7 @@ namespace nb = nanobind;
 
 namespace axon {
 
-template <typename T>
-concept NumericType = std::integral<T> || std::floating_point<T>;
-
-template <NumericType T>
+template <Numeric T>
 static auto dumpRecursive(llvm::raw_string_ostream& stream, const T* ptr,
                           size_t dim, llvm::ArrayRef<i64> shape,
                           llvm::ArrayRef<i64> strides, int indent_width,
@@ -72,7 +70,7 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream, const T* ptr,
 
 export class Tensor;
 
-export class GraphContext {
+export class TraceSession {
  public:
   auto getShape(const Tensor* tensor) const -> llvm::ArrayRef<i64> {
     AXON_DCHECK(insts_.contains(tensor));
@@ -81,7 +79,7 @@ export class GraphContext {
     return graph_.getShape(inst_id);
   }
 
-  auto absorb(GraphContext& other) -> void {
+  auto merge(TraceSession& other) -> void {
     auto offset = graph_.insts().size();
 
     for (auto [tensor, inst_id] : other.insts_) {
@@ -92,7 +90,7 @@ export class GraphContext {
       parameters_.push_back(tensor);
     }
 
-    graph_.absorb(other.graph_);
+    graph_.merge(other.graph_);
   }
 
   auto graph() -> Graph& { return graph_; }
@@ -108,23 +106,8 @@ export class GraphContext {
     return parameters_;
   }
 
-  auto getTensorToEvaluate() const -> Tensor* { return to_evaluate_; }
-
-  auto setTensorToEvaluate(Tensor* tensor) -> void {
-    if (tensor == nullptr) {
-      graph_.setReturned(InstId::None);
-      return;
-    }
-
-    AXON_DCHECK(insts_.contains(tensor));
-
-    graph_.setReturned(insts_[tensor]);
-    to_evaluate_ = tensor;
-  }
-
  private:
   Graph graph_;
-  Tensor* to_evaluate_;
   llvm::DenseMap<Tensor*, InstId> insts_;
   llvm::SmallVector<Tensor*> parameters_;
 };
@@ -133,11 +116,13 @@ export class Tensor {
  public:
   Tensor(Storage&& storage, bool requires_grad)
       : storage_(std::make_unique<Storage>(std::move(storage))),
-        requires_grad_(requires_grad) {}
+        requires_grad_(requires_grad),
+        data_type_(storage_->data_type()) {}
 
-  Tensor(std::shared_ptr<GraphContext> context, InstId inst_id)
-      : context_(std::move(context)) {
-    context_->insts()[this] = inst_id;
+  Tensor(std::shared_ptr<TraceSession> session, InstId inst_id,
+         DataType data_type)
+      : session_(std::move(session)), data_type_(data_type) {
+    session_->insts()[this] = inst_id;
   }
 
   auto zeroGrad() -> void {
@@ -161,14 +146,17 @@ export class Tensor {
       return storage_->shape();
     }
 
-    AXON_DCHECK(context_ != nullptr);
-    return context_->getShape(this);
+    // This is a lazy tensor, so get the shape from the trace session.
+    AXON_DCHECK(session_ != nullptr);
+    return session_->getShape(this);
   }
 
   auto asString() -> std::string {
     if (!isEvaluated()) {
       evaluate();
     }
+
+    AXON_DCHECK(isEvaluated());
 
     std::string repr;
     llvm::raw_string_ostream stream{repr};
@@ -199,43 +187,53 @@ export class Tensor {
     return repr;
   }
 
+  auto declareAsParam(std::shared_ptr<TraceSession> session) -> void {
+    session_ = std::move(session);
+
+    auto inst_id =
+        session_->graph().declareParam(storage_->shape(), requires_grad_);
+
+    session_->insts()[this] = inst_id;
+    session_->parameters().push_back(this);
+  }
+
   auto isEvaluated() const -> bool { return storage_ != nullptr; }
+
+  auto isRoot() const -> bool {
+    if (session_ != nullptr) {
+      return session_->parameters().size() == 0;
+    }
+    return true;
+  }
 
   auto requiresGrad() const -> bool { return requires_grad_; }
 
+  // defined in tensor_ops.cpp
+  auto evaluate() -> void;
+  auto backward(std::shared_ptr<Tensor> grad) -> void;
+
   auto grad() const -> std::shared_ptr<Tensor> { return grad_; }
+
+  auto data_type() const -> DataType { return data_type_; }
 
   auto storage() -> Storage* { return storage_.get(); }
   auto storage() const -> const Storage* { return storage_.get(); }
+
+  auto session() -> std::shared_ptr<TraceSession>& { return session_; }
+  auto session() const -> const std::shared_ptr<TraceSession>& {
+    return session_;
+  }
 
   auto setStorage(std::unique_ptr<Storage> storage) -> void {
     storage_ = std::move(storage);
   }
 
-  auto context() -> std::shared_ptr<GraphContext> { return context_; }
-  auto context() const -> const std::shared_ptr<GraphContext> {
-    return context_;
-  }
-
-  auto declareAsParam(std::shared_ptr<GraphContext> context) -> void {
-    context_ = std::move(context);
-
-    auto inst_id =
-        context_->graph().declareParam(storage_->shape(), requires_grad_);
-
-    context_->insts()[this] = inst_id;
-    context_->parameters().push_back(this);
-  }
-
-  // defined in tensor_ops.cpp
-  auto evaluate() -> void;
-  auto backward(Tensor& grad) -> void;
-
  private:
   std::unique_ptr<Storage> storage_;
-  std::shared_ptr<GraphContext> context_;
+  std::shared_ptr<TraceSession> session_;
   std::shared_ptr<Tensor> grad_;
 
+  DataType data_type_;
   bool requires_grad_;
 };
 

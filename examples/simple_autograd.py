@@ -1,11 +1,18 @@
 import axon
-
 from axon import Tensor
 
 
-a = Tensor([1, 2, 3], dtype=axon.float32)
-b = Tensor([1, 2, 3], dtype=axon.float32)
+a = Tensor.randn((2, 5, 5), requires_grad=True, dtype=axon.float64)
+b = Tensor.randn((5, 5), requires_grad=True, dtype=axon.float64)
 
-for i in range(0, 10):
-    c = a + b
-    print(c)
+c = a @ b
+c.backward(Tensor.ones((5, 5), dtype=axon.float64))
+
+# print(a)
+# print(b)
+#
+# print(c)
+# print(c)
+
+print(a.grad)
+print(b.grad)

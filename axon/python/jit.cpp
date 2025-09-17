@@ -32,56 +32,55 @@ namespace axon {
 
 class CompiledFunction {
  public:
-  CompiledFunction(mlir::MLIRContext* mlir_context)
-      : mlir_context_(mlir_context) {}
+  CompiledFunction(mlir::MLIRContext* context, Graph& graph)
+      : context_(context) {
+    compileModuleAndPrepareEngine(graph);
+  }
 
   ~CompiledFunction() {
-    for (auto descriptor : descriptors_) {
+    if (descriptors_.empty()) {
+      return;
+    }
+
+    auto last_index = descriptors_.size() - 1;
+    for (size_t i = 0; i < last_index; ++i) {
       auto tensor_descriptor =
-          reinterpret_cast<abi::TensorDescriptor*>(descriptor);
+          reinterpret_cast<abi::TensorDescriptor*>(descriptors_[i]);
       abi::TensorDescriptor::destroy(tensor_descriptor);
     }
 
-    engine_.reset();
+    auto returned_descriptor =
+        reinterpret_cast<abi::MemRefDescriptor*>(descriptors_.back());
+    abi::MemRefDescriptor::destroy(returned_descriptor);
   }
 
-  auto execute(GraphContext& context) -> void {
+  auto execute(llvm::ArrayRef<Tensor*> parameters, Tensor* returned)
+      -> std::unique_ptr<Storage> {
     // context contains a graph that is isomorphic to the one that was used to
     // construct this CompiledFunction.
-
-    configureDescriptors(context);
-    if (!engine_) {
-      compileModuleAndPrepareEngine(context);
-    }
+    configureDescriptors(parameters, returned);
 
     auto invocation_result = engine_->invokePacked("graph", descriptors_);
     if (invocation_result) {
-      throw std::runtime_error("JIT invocation failed\n");
+      throw std::runtime_error("JIT invocation failed");
     }
 
-    auto tensor = context.getTensorToEvaluate();
-    AXON_DCHECK(tensor != nullptr);
-
-    auto rank = tensor->rank();
-
+    auto rank = returned->rank();
     auto return_descriptor =
         reinterpret_cast<abi::MemRefDescriptor*>(descriptors_.back());
 
-    auto storage_ptr =
-        std::make_unique<Storage>(abi::MemRefDescriptor::createStorage(
-            return_descriptor, DataType::Float32, rank));
-
-    tensor->setStorage(std::move(storage_ptr));
+    return std::make_unique<Storage>(abi::MemRefDescriptor::createStorage(
+        return_descriptor, returned->data_type(), rank));
   }
 
  private:
-  auto compileModuleAndPrepareEngine(GraphContext& context) -> void {
-    mlir::OpBuilder builder(mlir_context_);
-    mlir::PassManager pm(mlir_context_);
+  auto compileModuleAndPrepareEngine(Graph& graph) -> void {
+    mlir::OpBuilder builder(context_);
+    mlir::PassManager pm(context_);
 
     pm.enableVerifier();
 
-    module_ = codegenGraph(context.graph(), builder);
+    module_ = codegenGraph(graph, builder);
     axon::buildLlvmLoweringPipeline(pm, LoweringLevel::LLVM);
 
     auto lowering_result = pm.run(module_);
@@ -104,44 +103,67 @@ class CompiledFunction {
     engine_ = std::move(maybe_engine.get());
   }
 
-  auto configureDescriptors(GraphContext& context) -> void {
+  auto configureDescriptors(llvm::ArrayRef<Tensor*> parameters,
+                            Tensor* returned_value) -> void {
     // If this is the first time we're configuring the descriptors then we need
     // to create them first.
     if (descriptors_.empty()) {
-      AXON_DCHECK(context.parameters().size() > 0);
+      AXON_DCHECK(parameters.size() > 0);
 
-      for (auto tensor : context.parameters()) {
+      for (auto tensor : parameters) {
+        AXON_DCHECK(tensor != nullptr);
+
+        if (tensor->requiresGrad() && tensor->grad() == nullptr) {
+          tensor->zeroGrad();
+        }
+
         auto ptr =
             reinterpret_cast<void*>(abi::TensorDescriptor::create(*tensor));
         descriptors_.emplace_back(ptr);
       }
 
-      auto tensor = context.getTensorToEvaluate();
-      AXON_DCHECK(tensor != nullptr);
+      AXON_DCHECK(returned_value != nullptr);
 
       auto returned_descriptor = abi::MemRefDescriptor::create(
-          nullptr, nullptr, 0, tensor->shape(),
-          computeStrides(tensor->shape(), Layout::RowMajor));
+          nullptr, nullptr, 0, returned_value->shape(),
+          computeStrides(returned_value->shape(), Layout::RowMajor));
 
       descriptors_.emplace_back(reinterpret_cast<void*>(returned_descriptor));
       return;
     }
 
-    AXON_DCHECK(descriptors_.size() == context.graph().parameters().size() + 1);
-    for (auto [tensor, ptr] :
-         std::views::zip(context.parameters(), descriptors_)) {
+    AXON_DCHECK(returned_value != nullptr);
+    AXON_DCHECK(descriptors_.size() == parameters.size() + 1);
+
+    for (auto [tensor, ptr] : std::views::zip(parameters, descriptors_)) {
       AXON_DCHECK(tensor != nullptr);
       AXON_DCHECK(tensor->isEvaluated());
+
+      if (tensor->requiresGrad() && tensor->grad() == nullptr) {
+        tensor->zeroGrad();
+      }
 
       auto descriptor = reinterpret_cast<abi::TensorDescriptor*>(ptr);
       abi::TensorDescriptor::setStorage(descriptor, *tensor);
     }
+
+    auto returned_descriptor =
+        reinterpret_cast<abi::MemRefDescriptor*>(descriptors_.back());
+
+    auto shape = returned_value->shape();
+    auto strides = computeStrides(shape, Layout::RowMajor);
+
+    abi::MemRefDescriptor::createInPlace(
+        reinterpret_cast<std::byte*>(returned_descriptor),
+        /*allocated_ptr=*/nullptr,
+        /*aligned_ptr=*/nullptr,
+        /*offset=*/0, shape, strides);
   }
 
  private:
   std::unique_ptr<mlir::ExecutionEngine> engine_;
   llvm::SmallVector<void*> descriptors_;
-  mlir::MLIRContext* mlir_context_;
+  mlir::MLIRContext* context_;
   mlir::ModuleOp module_;
 };
 
@@ -158,15 +180,19 @@ export class GlobalContext {
     return *context;
   }
 
-  auto execute(GraphContext& context) -> void {
-    auto& graph = context.graph();
+  auto execute(llvm::ArrayRef<Tensor*> parameters, Tensor* returned,
+               Graph& graph) -> std::unique_ptr<Storage> {
+    auto hash = graph.hash();
+
     if (graph_registry_.contains(graph)) {
-      return graph_registry_[graph]->execute(context);
+      return graph_registry_[graph]->execute(parameters, returned);
     }
 
-    auto compiled_function = std::make_unique<CompiledFunction>(&mlir_context_);
-    compiled_function->execute(context);
+    auto compiled_function =
+        std::make_unique<CompiledFunction>(&mlir_context_, graph);
+    auto storage = compiled_function->execute(parameters, returned);
     graph_registry_[graph] = std::move(compiled_function);
+    return std::move(storage);
   }
 
  private:

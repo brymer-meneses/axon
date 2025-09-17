@@ -16,6 +16,11 @@ namespace axon::abi {
 
 export class MemRefDescriptor {
  public:
+  static auto destroy(MemRefDescriptor* ptr) -> void {
+    auto buffer = reinterpret_cast<std::byte*>(ptr);
+    delete[] buffer;
+  }
+
   static auto createEmpty(u64 rank) -> MemRefDescriptor* {
     auto size = getAllocSize(rank);
     auto* buffer = new std::byte[size];
@@ -133,6 +138,8 @@ export struct TensorDescriptor {
 
     if (tensor.requiresGrad()) {
       auto grad = tensor.grad();
+      AXON_DCHECK(grad != nullptr);
+
       auto grad_data_ptr = grad->storage()->data_ptr();
 
       auto* ptr = buffer + MemRefDescriptor::getAllocSize(tensor.rank());

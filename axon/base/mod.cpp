@@ -1,6 +1,8 @@
 module;
 
+#include <concepts>
 #include <cstdint>
+#include <type_traits>
 
 export module axon.base;
 
@@ -26,3 +28,6 @@ export {
   using f32 = float;
   using f64 = double;
 }
+
+export template <typename T>
+concept Numeric = std::integral<T> || std::floating_point<T>;

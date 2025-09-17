@@ -52,8 +52,8 @@ static auto codegen(const insts::Constant& op, CompilationContext& ctx,
       mlir::RankedTensorType::get(constant->shape(), ctx.builder.getF32Type());
 
   if (constant->data_type() == DataType::Float32) {
-    auto data_ptr = reinterpret_cast<float*>(constant->data_ptr());
-    auto data_ref = llvm::ArrayRef<float>(data_ptr, constant->size());
+    auto data_ptr = reinterpret_cast<f32*>(constant->data_ptr());
+    auto data_ref = llvm::ArrayRef<f32>(data_ptr, constant->size());
     auto data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
 
     ctx.values[inst_id] = ConstantOp::create(

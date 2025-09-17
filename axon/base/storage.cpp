@@ -37,6 +37,8 @@ class ValueStore {
 
   auto size() const -> size_t { return values_.size(); }
 
+  auto clear() -> void { values_.clear(); }
+
   auto keys() const -> auto {
     return std::views::iota(0u, values_.size()) |
            std::views::transform([](auto val) { return KeyType(val); });
@@ -121,6 +123,8 @@ class RelationalStore {
     return ValueType::None;
   }
 
+  auto clear() -> void { relations_.clear(); }
+
   auto size() const -> size_t { return relations_.size(); }
 
   auto relations() const -> const auto& { return relations_; }
@@ -189,6 +193,8 @@ class IdStore {
     add(target_key, target_value);
   }
 
+  auto clear() -> void { pairs_.clear(); }
+
   auto size() const -> size_t { return pairs_.size(); }
 
   auto pairs() const -> const auto& { return pairs_; }
@@ -254,6 +260,11 @@ class IdMap {
       }
     }
     return std::nullopt;
+  }
+
+  auto clear() -> void {
+    keys_.clear();
+    values_.clear();
   }
 
   auto size() const -> size_t { return keys_.size(); }

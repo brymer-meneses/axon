@@ -17,38 +17,59 @@ namespace nb = nanobind;
 
 namespace axon {
 
-auto Tensor::evaluate() -> void {
-  AXON_DCHECK(context_ != nullptr);
-  AXON_DCHECK(context_->insts().contains(this),
-              "Context must know this tensor.");
+static auto evaluateTraceSession(std::shared_ptr<TraceSession> session,
+                                 Tensor* tensor) -> std::unique_ptr<Storage> {
+  AXON_DCHECK(session != nullptr);
+  AXON_DCHECK(session->insts().contains(tensor));
 
-  context_->setTensorToEvaluate(this);
+  auto& graph = session->graph();
+  graph.setReturned(session->insts()[tensor]);
 
-  GlobalContext::get().execute(*context_);
-
-  AXON_DCHECK(isEvaluated(), "Tensor must be evaluated at this point.");
-
-  context_->setTensorToEvaluate(nullptr);
+  auto storage =
+      GlobalContext::get().execute(session->parameters(), tensor, graph);
+  graph.setReturned(InstId::None);
+  return std::move(storage);
 }
 
-auto Tensor::backward(Tensor& grad) -> void {}
+static auto resetTraceSession(std::shared_ptr<TraceSession> session) -> void {
+  AXON_DCHECK(session != nullptr);
 
-template <typename Arg>
-auto getCorrespondingInstId(GraphContext& context, Arg&& arg) -> auto {
-  if constexpr (std::is_same_v<Arg, std::shared_ptr<Tensor>>) {
-    auto ptr = arg.get();
-    return context.insts()[ptr];
-  } else {
-    return std::forward<Arg>(arg);
+  for (auto& [tensor, _] : session->insts()) {
+    tensor->session() = nullptr;
   }
 }
 
-template <typename InstType, typename... Args>
-auto createTensorFromInst(std::shared_ptr<GraphContext> context, Args&&... args)
-    -> std::shared_ptr<Tensor> {
-  auto inst = InstType(getCorrespondingInstId(*context, args)...);
-  auto inst_id = context->graph().createOp(std::move(inst), /*emit_grad=*/true);
-  return std::make_shared<Tensor>(context, inst_id);
+auto Tensor::evaluate() -> void {
+  storage_ = evaluateTraceSession(session_, this);
+
+  // If this tensor doesn't require gradients, then we can prune this graph.
+  if (!requires_grad_) {
+    resetTraceSession(session_);
+  }
+}
+
+auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
+  AXON_DCHECK(session_ != nullptr);
+
+  if (grad->data_type() != data_type_) {
+    throw nb::value_error(
+        "Received gradient has different dtype with this tensor");
+  }
+
+  if (!grad && rank() != 0) {
+    throw nb::value_error(
+        "Only scalar tensors can have their gradient inferred.");
+  }
+
+  auto& graph = session_->graph();
+  auto grad_id = session_->insts()[grad.get()];
+  auto tensor_id = session_->insts()[this];
+
+  axon::backward(graph, tensor_id, grad_id);
+
+  storage_ = evaluateTraceSession(session_, this);
+
+  resetTraceSession(session_);
 }
 
 struct BroadcastInfo {
@@ -114,41 +135,47 @@ static auto performBroadcasting(Graph& graph, InstId source_id,
       insts::ExpandDims(source_id, broadcast_info->expand_dim_mappings));
 }
 
-auto getOrCombineGraphContext(Tensor& lhs, Tensor& rhs)
-    -> std::shared_ptr<GraphContext> {
-  if (!lhs.context() && !rhs.context()) {
-    auto context = std::make_shared<GraphContext>();
-    lhs.declareAsParam(context);
-    rhs.declareAsParam(context);
-
-    return context;
+static auto getAndValidateDataType(Tensor& lhs, Tensor& rhs) -> DataType {
+  if (lhs.data_type() != rhs.data_type()) {
+    throw nb::value_error(
+        "Cannot operate on two tensors with different data types");
   }
 
-  if (!lhs.context() && rhs.context()) {
-    auto context = rhs.context();
-    lhs.declareAsParam(context);
-    return context;
+  return lhs.data_type();
+}
+
+auto getTraceSession(Tensor& lhs, Tensor& rhs)
+    -> std::shared_ptr<TraceSession> {
+  if (lhs.isRoot() && rhs.isRoot()) {
+    auto session = std::make_shared<TraceSession>();
+    lhs.declareAsParam(session);
+    rhs.declareAsParam(session);
+    return session;
   }
 
-  if (lhs.context() && !rhs.context()) {
-    auto context = lhs.context();
-    rhs.declareAsParam(context);
-    return context;
+  if (lhs.isRoot() && !rhs.isRoot()) {
+    auto session = rhs.session();
+    lhs.declareAsParam(session);
+    return session;
   }
 
-  if (lhs.context() && rhs.context()) {
-    if (lhs.context() != rhs.context()) {
-      auto context = lhs.context();
+  if (!lhs.isRoot() && rhs.isRoot()) {
+    auto session = lhs.session();
+    rhs.declareAsParam(session);
+    return session;
+  }
 
-      // absorb the context from rhs
-      context->absorb(*rhs.context());
-
-      // set the context for rhs
-      rhs.context() = context;
-      return context;
+  if (!lhs.isRoot() && !rhs.isRoot()) {
+    if (lhs.session() != rhs.session()) {
+      auto session = lhs.session();
+      // merge with the trace session from the rhs;
+      session->merge(*rhs.session());
+      // set the session for rhs
+      rhs.session() = session;
+      return session;
     }
 
-    return lhs.context();
+    return lhs.session();
   }
 
   AXON_UNREACHABLE("This should be an unreachable point");
@@ -158,17 +185,18 @@ export template <typename ElementWiseInst>
 auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
                                        std::shared_ptr<Tensor> rhs)
     -> std::shared_ptr<Tensor> {
-  auto context = getOrCombineGraphContext(*lhs, *rhs);
+  auto data_type = getAndValidateDataType(*lhs, *rhs);
+  auto session = getTraceSession(*lhs, *rhs);
 
-  auto lhs_id = context->insts()[lhs.get()];
-  auto rhs_id = context->insts()[rhs.get()];
+  auto lhs_id = session->insts()[lhs.get()];
+  auto rhs_id = session->insts()[rhs.get()];
 
   auto lhs_shape = lhs->shape();
   auto rhs_shape = rhs->shape();
 
   if (lhs_shape.equals(rhs_shape)) {
-    auto inst_id = context->graph().createOp(ElementWiseInst(lhs_id, rhs_id));
-    return std::make_shared<Tensor>(context, inst_id);
+    auto inst_id = session->graph().createOp(ElementWiseInst(lhs_id, rhs_id));
+    return std::make_shared<Tensor>(session, inst_id, data_type);
   }
 
   auto lhs_elems = computeNumElems(lhs_shape);
@@ -176,88 +204,90 @@ auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
 
   if (lhs_elems < rhs_elems) {
     lhs_id =
-        performBroadcasting(context->graph(), lhs_id, lhs_shape, rhs_shape);
+        performBroadcasting(session->graph(), lhs_id, lhs_shape, rhs_shape);
   } else if (lhs_elems > rhs_elems) {
     rhs_id =
-        performBroadcasting(context->graph(), rhs_id, rhs_shape, lhs_shape);
+        performBroadcasting(session->graph(), rhs_id, rhs_shape, lhs_shape);
   }
 
-  auto inst_id = context->graph().createOp(ElementWiseInst(lhs_id, rhs_id));
-  return std::make_shared<Tensor>(context, inst_id);
+  auto inst_id = session->graph().createOp(ElementWiseInst(lhs_id, rhs_id));
+  return std::make_shared<Tensor>(session, inst_id, data_type);
 }
-//
-// export auto performMatMul(Graph& graph, const Tensor& lhs, const Tensor& rhs)
-//     -> Tensor {
-//   static auto is_valid_matmul = [](llvm::ArrayRef<i64> lhs_shape,
-//                                    llvm::ArrayRef<i64> rhs_shape) {
-//     AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
-//                 "At this point lhs and rhs must have the same rank");
-//     if (lhs_shape.size() == 3) {
-//       return lhs_shape[2] == rhs_shape[1];
-//     }
-//     if (lhs_shape.size() == 2) {
-//       return lhs_shape[1] == rhs_shape[0];
-//     }
-//     return false;
-//   };
-//
-//   llvm::ArrayRef<i64> lhs_shape = graph.getShape(lhs.inst_id());
-//   llvm::ArrayRef<i64> rhs_shape = graph.getShape(rhs.inst_id());
-//
-//   auto lhs_id = lhs.inst_id();
-//   auto rhs_id = rhs.inst_id();
-//
-//   if (lhs_shape.size() > 3 || rhs_shape.size() > 3 || lhs_shape.size() < 1 ||
-//       rhs_shape.size() < 1) {
-//     throw std::runtime_error(
-//         "Attempted to multiply tensors with more than rank of 3.");
-//   }
-//
-//   auto lhs_elems = computeNumElems(lhs_shape);
-//   auto rhs_elems = computeNumElems(rhs_shape);
-//
-//   if (lhs_elems < rhs_elems) {
-//     llvm::SmallVector<i64> target_shape(lhs_shape);
-//
-//     if (lhs_shape.size() == 2 && rhs_shape.size() == 3) {
-//       target_shape.insert(target_shape.begin(), rhs_shape[0]);
-//     } else if (lhs_shape.size() == 3 && rhs_shape.size() == 3) {
-//       target_shape[0] = rhs_shape[0];
-//     } else {
-//       AXON_UNREACHABLE("TODO");
-//     }
-//
-//     if (not is_valid_matmul(target_shape, rhs_shape)) {
-//       throw std::runtime_error(
-//           std::format("Cannot perform matrix multiplication on tensors with "
-//                       "shape {} and {}",
-//                       lhs_shape, rhs_shape));
-//     }
-//
-//     lhs_id = performBroadcasting(graph, lhs_id, lhs_shape, target_shape);
-//   }
-//
-//   if (lhs_elems > rhs_elems) {
-//     llvm::SmallVector<i64> target_shape(rhs_shape);
-//     if (lhs_shape.size() == 3 && rhs_shape.size() == 2) {
-//       target_shape.insert(target_shape.begin(), lhs_shape[0]);
-//     } else if (lhs_shape.size() == 3 && rhs_shape.size() == 3) {
-//       target_shape[0] = rhs_shape[0];
-//     } else {
-//       AXON_UNREACHABLE("TODO");
-//     }
-//
-//     if (not is_valid_matmul(lhs_shape, target_shape)) {
-//       throw std::runtime_error(
-//           std::format("Cannot perform matrix multiplication on tensors with "
-//                       "shape {} and {}",
-//                       lhs_shape, rhs_shape));
-//     }
-//
-//     rhs_id = performBroadcasting(graph, rhs_id, rhs_shape, target_shape);
-//   }
-//
-//   return Tensor(graph.createOp(insts::MatMul(lhs_id, rhs_id)));
-// }
+
+export auto performMatMul(std::shared_ptr<Tensor> lhs,
+                          std::shared_ptr<Tensor> rhs)
+    -> std::shared_ptr<Tensor> {
+  static auto is_valid_matmul = [](llvm::ArrayRef<i64> lhs_shape,
+                                   llvm::ArrayRef<i64> rhs_shape) {
+    AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
+                "At this point lhs and rhs must have the same rank");
+    if (lhs_shape.size() == 3) {
+      return lhs_shape[2] == rhs_shape[1];
+    }
+    if (lhs_shape.size() == 2) {
+      return lhs_shape[1] == rhs_shape[0];
+    }
+    return false;
+  };
+
+  auto data_type = getAndValidateDataType(*lhs, *rhs);
+  auto session = getTraceSession(*lhs, *rhs);
+  auto& graph = session->graph();
+
+  llvm::ArrayRef<i64> lhs_shape = session->getShape(lhs.get());
+  llvm::ArrayRef<i64> rhs_shape = session->getShape(rhs.get());
+
+  auto lhs_id = session->insts()[lhs.get()];
+  auto rhs_id = session->insts()[rhs.get()];
+
+  if (lhs_shape.size() > 3 || rhs_shape.size() > 3 || lhs_shape.size() < 1 ||
+      rhs_shape.size() < 1) {
+    throw std::runtime_error(
+        "Attempted to multiply tensors with more than rank of 3.");
+  }
+
+  auto lhs_elems = computeNumElems(lhs_shape);
+  auto rhs_elems = computeNumElems(rhs_shape);
+
+  if (lhs_elems < rhs_elems) {
+    llvm::SmallVector<i64> target_shape(lhs_shape);
+
+    if (lhs_shape.size() == 2 && rhs_shape.size() == 3) {
+      target_shape.insert(target_shape.begin(), rhs_shape[0]);
+    } else if (lhs_shape.size() == 3 && rhs_shape.size() == 3) {
+      target_shape[0] = rhs_shape[0];
+    }
+
+    if (not is_valid_matmul(target_shape, rhs_shape)) {
+      throw std::runtime_error(
+          std::format("Cannot perform matrix multiplication on tensors with "
+                      "shape {} and {}",
+                      lhs_shape, rhs_shape));
+    }
+
+    lhs_id = performBroadcasting(graph, lhs_id, lhs_shape, target_shape);
+  }
+
+  if (lhs_elems > rhs_elems) {
+    llvm::SmallVector<i64> target_shape(rhs_shape);
+    if (lhs_shape.size() == 3 && rhs_shape.size() == 2) {
+      target_shape.insert(target_shape.begin(), lhs_shape[0]);
+    } else if (lhs_shape.size() == 3 && rhs_shape.size() == 3) {
+      target_shape[0] = rhs_shape[0];
+    }
+
+    if (not is_valid_matmul(lhs_shape, target_shape)) {
+      throw std::runtime_error(
+          std::format("Cannot perform matrix multiplication on tensors with "
+                      "shape {} and {}",
+                      lhs_shape, rhs_shape));
+    }
+
+    rhs_id = performBroadcasting(graph, rhs_id, rhs_shape, target_shape);
+  }
+
+  auto inst_id = graph.createOp(insts::MatMul(lhs_id, rhs_id));
+  return std::make_shared<Tensor>(session, inst_id, data_type);
+}
 
 }  // namespace axon

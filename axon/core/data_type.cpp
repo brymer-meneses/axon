@@ -34,12 +34,12 @@ export class DataType {
 
   auto kind() const -> InternalType { return type_; }
 
-  template <typename T>
+  template <Numeric T>
   auto isSameAs() const -> bool {
     return fromType<T>() == type_;
   }
 
-  template <typename T>
+  template <Numeric T>
   static consteval auto fromType() -> DataType {
     if constexpr (std::is_same_v<T, f32>) {
       return DataType::Float32;

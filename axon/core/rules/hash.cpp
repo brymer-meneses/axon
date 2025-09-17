@@ -81,7 +81,7 @@ struct Hash<insts::Sum> {
 
     llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
 
-    return llvm::hash_combine(operand_shape, tag);
+    return llvm::hash_combine(0, operand_shape, tag);
   }
 };
 
@@ -92,7 +92,7 @@ struct Hash<insts::Unsqueeze> {
     constexpr auto tag = Inst::tag<insts::Unsqueeze>();
 
     llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
-    return llvm::hash_combine(operand_shape, tag, op.dim);
+    return llvm::hash_combine(0, operand_shape, tag, op.dim);
   }
 };
 
@@ -103,7 +103,7 @@ struct Hash<insts::Squeeze> {
     constexpr auto tag = Inst::tag<insts::Squeeze>();
 
     llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
-    return llvm::hash_combine(operand_shape, tag, op.dim);
+    return llvm::hash_combine(0, operand_shape, tag, op.dim);
   }
 };
 
@@ -114,7 +114,7 @@ struct Hash<insts::Transpose> {
     constexpr auto tag = Inst::tag<insts::Squeeze>();
 
     llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
-    return llvm::hash_combine(operand_shape, tag, op.from, op.to);
+    return llvm::hash_combine(0, operand_shape, tag, op.from, op.to);
   }
 };
 
