@@ -47,8 +47,10 @@ struct EliminateSelfSubtractionPattern : mlir::OpRewritePattern<SubOp> {
 
     auto loc = op.getLoc();
     auto fill_type = op.getLhs().getType();
-    auto zero =
-        FillOp::create(rewriter, loc, fill_type, rewriter.getF32FloatAttr(0.0));
+    auto element_type =
+        mlir::cast<mlir::RankedTensorType>(fill_type).getElementType();
+    auto zero_attr = mlir::FloatAttr::get(element_type, 0.0);
+    auto zero = FillOp::create(rewriter, loc, fill_type, zero_attr);
 
     rewriter.replaceOp(op, zero);
     return mlir::success();
@@ -65,8 +67,10 @@ struct EliminateAdditionOfSelfNegative : mlir::OpRewritePattern<AddOp> {
     if (auto lhs_neg = op.getLhs().getDefiningOp<NegOp>()) {
       if (lhs_neg.getOperand() == op.getRhs()) {
         auto fill_type = op.getResult().getType();
-        auto zero = FillOp::create(rewriter, op.getLoc(), fill_type,
-                                   rewriter.getF32FloatAttr(0.0));
+        auto element_type =
+            mlir::cast<mlir::RankedTensorType>(fill_type).getElementType();
+        auto zero_attr = mlir::FloatAttr::get(element_type, 0.0);
+        auto zero = FillOp::create(rewriter, op.getLoc(), fill_type, zero_attr);
         rewriter.replaceOp(op, zero);
         return mlir::success();
       }
@@ -75,8 +79,10 @@ struct EliminateAdditionOfSelfNegative : mlir::OpRewritePattern<AddOp> {
     if (auto rhs_neg = op.getLhs().getDefiningOp<NegOp>()) {
       if (rhs_neg.getOperand() == op.getLhs()) {
         auto fill_type = op.getResult().getType();
-        auto zero = FillOp::create(rewriter, op.getLoc(), fill_type,
-                                   rewriter.getF32FloatAttr(0.0));
+        auto element_type =
+            mlir::cast<mlir::RankedTensorType>(fill_type).getElementType();
+        auto zero_attr = mlir::FloatAttr::get(element_type, 0.0);
+        auto zero = FillOp::create(rewriter, op.getLoc(), fill_type, zero_attr);
         rewriter.replaceOp(op, zero);
         return mlir::success();
       }

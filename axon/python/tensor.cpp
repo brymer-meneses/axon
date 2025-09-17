@@ -190,8 +190,9 @@ export class Tensor {
   auto declareAsParam(std::shared_ptr<TraceSession> session) -> void {
     session_ = std::move(session);
 
-    auto inst_id =
-        session_->graph().declareParam(storage_->shape(), requires_grad_);
+    auto inst_id = session_->graph().declareParam(storage_->shape(),
+                                                 storage_->data_type(),
+                                                 requires_grad_);
 
     session_->insts()[this] = inst_id;
     session_->parameters().push_back(this);

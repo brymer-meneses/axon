@@ -50,7 +50,8 @@ auto backward(Graph& graph, InstId output_id, InstId grad_id = InstId::None)
 
     auto grad_id = graph.gradients().get(param.inst_id);
     if (grad_id.isValid()) {
-      graph.insts().emplace(insts::AccumulateGrad(param.inst_id, grad_id));
+      graph.createOp(insts::AccumulateGrad(param.inst_id, grad_id),
+                     /*emit_grad=*/false);
     }
   }
 }

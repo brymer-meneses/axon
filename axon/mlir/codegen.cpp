@@ -30,6 +30,23 @@ struct CompilationContext {
   llvm::DenseMap<InstId, mlir::Value> values{};
 };
 
+static auto getElementType(DataType data_type, mlir::OpBuilder& builder)
+    -> mlir::Type {
+  switch (data_type.kind()) {
+    case DataType::Float32:
+      return builder.getF32Type();
+    case DataType::Float64:
+      return builder.getF64Type();
+  }
+
+  AXON_UNREACHABLE("Unsupported data type");
+}
+
+static auto getFloatAttr(mlir::Type element_type, double value)
+    -> mlir::FloatAttr {
+  return mlir::FloatAttr::get(element_type, value);
+}
+
 static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto tensor_ref = ctx.tensor_refs[op.inst_id];
@@ -48,17 +65,28 @@ static auto codegen(const insts::Constant& op, CompilationContext& ctx,
   Storage* constant = ctx.graph.constants().get(inst_id)->get();
   AXON_DCHECK(constant != nullptr);
 
+  auto element_type = getElementType(constant->data_type(), ctx.builder);
   auto result_type =
-      mlir::RankedTensorType::get(constant->shape(), ctx.builder.getF32Type());
+      mlir::RankedTensorType::get(constant->shape(), element_type);
 
-  if (constant->data_type() == DataType::Float32) {
-    auto data_ptr = reinterpret_cast<f32*>(constant->data_ptr());
-    auto data_ref = llvm::ArrayRef<f32>(data_ptr, constant->size());
-    auto data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
-
-    ctx.values[inst_id] = ConstantOp::create(
-        ctx.builder, ctx.builder.getUnknownLoc(), data_attribute);
+  mlir::DenseElementsAttr data_attribute;
+  switch (constant->data_type().kind()) {
+    case DataType::Float32: {
+      auto data_ptr = reinterpret_cast<f32*>(constant->data_ptr());
+      auto data_ref = llvm::ArrayRef<f32>(data_ptr, constant->size());
+      data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
+      break;
+    }
+    case DataType::Float64: {
+      auto data_ptr = reinterpret_cast<f64*>(constant->data_ptr());
+      auto data_ref = llvm::ArrayRef<f64>(data_ptr, constant->size());
+      data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
+      break;
+    }
   }
+
+  ctx.values[inst_id] = ConstantOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), data_attribute);
 }
 
 static auto codegen(const insts::Sum& op, CompilationContext& ctx,
@@ -114,10 +142,12 @@ static auto codegen(const insts::GetParameter& op, CompilationContext& ctx,
 static auto codegen(const insts::OnesLike& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto like = ctx.values[op.operand_id];
+  auto like_type = mlir::cast<mlir::RankedTensorType>(like.getType());
+  auto element_type = like_type.getElementType();
 
   ctx.values[inst_id] =
       FillOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like.getType(),
-                     ctx.builder.getF32FloatAttr(1.0));
+                     getFloatAttr(element_type, 1.0));
 }
 
 static auto codegen(const insts::Add& op, CompilationContext& ctx,
@@ -244,7 +274,6 @@ static auto codegen(const insts::Neg& op, CompilationContext& ctx,
 static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {
   llvm::SmallVector<mlir::Type> arg_types;
-  auto data_type = builder.getF32Type();
   auto context = builder.getContext();
 
   AXON_DCHECK(context != nullptr);
@@ -252,8 +281,9 @@ static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
   for (auto& param : graph.parameters().values()) {
     auto requires_grad = param.requires_grad;
     auto shape = graph.getShape(param.inst_id);
+    auto element_type = getElementType(param.data_type, builder);
 
-    auto type = TensorRefType::get(builder.getContext(), data_type, shape,
+    auto type = TensorRefType::get(builder.getContext(), element_type, shape,
                                    requires_grad);
     arg_types.emplace_back(type);
   }
@@ -264,7 +294,10 @@ static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
   }
 
   auto shape = graph.getShape(returned_id);
-  auto returned_type = mlir::RankedTensorType::get(shape, data_type);
+  auto returned_dtype = graph.getDataType(returned_id);
+  auto returned_element_type = getElementType(returned_dtype, builder);
+  auto returned_type =
+      mlir::RankedTensorType::get(shape, returned_element_type);
   return builder.getFunctionType(arg_types, {returned_type});
 }
 
