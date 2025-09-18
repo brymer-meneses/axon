@@ -21,9 +21,6 @@
 #include "nanobind/stl/string.h"
 #include "nanobind/stl/unique_ptr.h"
 #include "nanobind/stl/vector.h"
-#include "xtensor/containers/xadapt.hpp"
-#include "xtensor/containers/xarray.hpp"
-#include "xtensor/io/xio.hpp"
 
 import axon.base;
 import axon.core;

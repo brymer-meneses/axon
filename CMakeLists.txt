@@ -72,7 +72,6 @@ target_sources(axon
 target_compile_features(axon PUBLIC cxx_std_23)
 target_include_directories(axon
   SYSTEM PRIVATE 
-    ${xtensor_INCLUDE_DIRS} 
     ${NANOBIND_INCLUDE_DIRS}
     ${LLVM_INCLUDE_DIRS}
     ${MLIR_INCLUDE_DIRS}
@@ -86,8 +85,6 @@ target_link_libraries(axon
   SYSTEM 
     nanobind
     ${llvm_libs}
-    xtensor
-    xtensor-blas
     mlir
 )
 
@@ -138,8 +135,6 @@ target_include_directories(_core
 target_link_libraries(_core 
   PRIVATE 
     axon
-    xtensor
-    xtensor-blas
     Python::Module
     nanobind
 )
