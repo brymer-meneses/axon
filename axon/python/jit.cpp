@@ -189,6 +189,7 @@ export class GlobalContext {
       return graph_registry_[graph]->execute(parameters, returned);
     }
 
+    std::println("creating function with hash {}", hash);
     auto compiled_function =
         std::make_unique<CompiledFunction>(&mlir_context_, graph);
     auto storage = compiled_function->execute(parameters, returned);

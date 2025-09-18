@@ -142,9 +142,6 @@ export class Storage {
     auto shape = llvm::ArrayRef<i64>(array.shape_ptr(), array.ndim());
     auto stride = llvm::ArrayRef<i64>(array.stride_ptr(), array.ndim());
 
-    AXON_DCHECK(data_type == DataType::Float32,
-                "Only float32 is supported for now.");
-
     return Storage::create(data_ptr, shape, data_type, /*is_owned=*/true,
                            stride);
   }

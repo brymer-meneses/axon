@@ -1,5 +1,7 @@
 import enum
 
+from . import testing as testing
+
 
 class dtype(enum.Enum):
     float32 = 0

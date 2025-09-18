@@ -3,11 +3,15 @@ module;
 #include <cstdint>
 #include <type_traits>
 
+#include "axon/base/macros.h"
 #include "llvm/ADT/Hashing.h"
+#include "nanobind/ndarray.h"
 
 export module axon.core:data_type;
 
 import axon.base;
+
+namespace nb = nanobind;
 
 namespace axon {
 
@@ -48,6 +52,18 @@ export class DataType {
     } else {
       static_assert("Passed template parameter has no corresponding DataType");
     }
+  }
+
+  static auto fromDlPack(nb::dlpack::dtype dtype) -> DataType {
+    if (dtype.code == static_cast<u8>(nanobind::dlpack::dtype_code::Float)) {
+      if (dtype.bits == 32) {
+        return DataType::Float32;
+      } else if (dtype.bits == 64) {
+        return DataType::Float64;
+      }
+    }
+
+    AXON_UNREACHABLE("Unsupported data type");
   }
 
  private:

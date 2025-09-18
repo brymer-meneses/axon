@@ -154,7 +154,9 @@ nanobind_extension(_core)
 nanobind_add_stub(
   _core_stub
   MODULE _core
+  RECURSIVE
   OUTPUT ${CMAKE_SOURCE_DIR}/axon/python/axon/_core.pyi
+
   PYTHON_PATH ${CMAKE_SOURCE_DIR}/axon/python/axon
   DEPENDS _core
 )

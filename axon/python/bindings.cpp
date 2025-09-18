@@ -52,6 +52,17 @@ static auto convertVectorToTuple(llvm::ArrayRef<i64> shape) -> nb::tuple {
   return nb::tuple(list);
 }
 
+template <Numeric T>
+static auto checkIsWithinTolerance(T* lhs, T* rhs, i64 total_elements,
+                                   T tolerance) -> bool {
+  for (i64 i = 0; i < total_elements; ++i) {
+    if (std::fabs(lhs[i] - rhs[i]) > tolerance) {
+      return false;
+    }
+  }
+  return true;
+}
+
 NB_MODULE(_core, m) {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
@@ -103,12 +114,24 @@ NB_MODULE(_core, m) {
   nb::class_<Tensor>(m, "Tensor")
       .def(nb::new_([](nb::object object, bool requires_grad,
                        DataType::InternalType data_type) {
-             if (!nb::isinstance<nb::list>(object)) {
-               throw nb::value_error("Expected a list");
+             if (nb::isinstance<nb::ndarray<>>(object)) {
+               auto ndarray = nb::cast<nb::ndarray<>>(object);
+               auto ndarray_data_type = DataType::fromDlPack(ndarray.dtype());
+               if (ndarray_data_type != data_type) {
+                 throw nb::value_error("Does not match the received data type");
+               }
+
+               auto storage = Storage::fromNanobind(ndarray, data_type);
+               return std::make_shared<Tensor>(std::move(storage),
+                                               requires_grad);
              }
-             auto storage =
-                 Storage::fromPython(nb::cast<nb::list>(object), data_type);
-             return std::make_shared<Tensor>(std::move(storage), requires_grad);
+
+             if (nb::isinstance<nb::list>(object)) {
+               auto storage =
+                   Storage::fromPython(nb::cast<nb::list>(object), data_type);
+               return std::make_shared<Tensor>(std::move(storage),
+                                               requires_grad);
+             }
            }),
            nb::arg("data"), nb::arg("requires_grad") = false,
            nb::arg("dtype") = DataType::Float64)
@@ -167,4 +190,47 @@ NB_MODULE(_core, m) {
           },
           nb::arg("shape"), nb::arg("requires_grad") = false,
           nb::arg("dtype") = DataType::Float64);
+
+  auto testing = m.def_submodule("testing");
+
+  testing.def(
+      "assert_are_close",
+      [](std::shared_ptr<Tensor> tensor, nb::ndarray<>& array, f64 tolerance) {
+        auto array_strides =
+            llvm::ArrayRef<i64>(array.stride_ptr(), array.ndim());
+        auto array_shape = llvm::ArrayRef<i64>(array.shape_ptr(), array.ndim());
+
+        if (!tensor->isEvaluated()) {
+          tensor->evaluate();
+        }
+
+        if (tensor->shape() != array_shape) {
+          throw nb::value_error("Do not have the same shape");
+        }
+        if (tensor->storage()->strides() != array_strides) {
+          throw nb::value_error("Do not have the same strides");
+        }
+
+        auto data_type = DataType::fromDlPack(array.dtype());
+        if (data_type != tensor->data_type()) {
+          throw nb::value_error("Do not have the same data type");
+        }
+
+        auto size = array.size();
+        switch (tensor->data_type().kind()) {
+          case DataType::Float32: {
+            auto tensor_ptr = tensor->storage()->as<f32>();
+            auto data_ptr = reinterpret_cast<f32*>(array.data());
+            return checkIsWithinTolerance<const f32>(tensor_ptr, data_ptr, size,
+                                                     tolerance);
+          }
+          case DataType::Float64: {
+            auto tensor_ptr = tensor->storage()->as<f64>();
+            auto data_ptr = reinterpret_cast<f64*>(array.data());
+            return checkIsWithinTolerance<const f64>(tensor_ptr, data_ptr, size,
+                                                     tolerance);
+          }
+        }
+      },
+      nb::arg("tensor"), nb::arg("ndarray"), nb::arg("tolerance") = 1e-5);
 }
