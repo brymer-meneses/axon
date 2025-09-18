@@ -125,6 +125,15 @@ export class Tensor {
     session_->insts()[this] = inst_id;
   }
 
+  ~Tensor() {
+    if (session_) {
+      session_->insts().erase(this);
+      auto& params = session_->parameters();
+      params.erase(std::remove(params.begin(), params.end(), this),
+                   params.end());
+    }
+  }
+
   auto zeroGrad() -> void {
     if (not requires_grad_) {
       throw std::runtime_error(
@@ -190,9 +199,8 @@ export class Tensor {
   auto declareAsParam(std::shared_ptr<TraceSession> session) -> void {
     session_ = std::move(session);
 
-    auto inst_id = session_->graph().declareParam(storage_->shape(),
-                                                 storage_->data_type(),
-                                                 requires_grad_);
+    auto inst_id = session_->graph().declareParam(
+        storage_->shape(), storage_->data_type(), requires_grad_);
 
     session_->insts()[this] = inst_id;
     session_->parameters().push_back(this);

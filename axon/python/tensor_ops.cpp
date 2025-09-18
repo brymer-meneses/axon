@@ -35,8 +35,13 @@ static auto resetTraceSession(std::shared_ptr<TraceSession> session) -> void {
   AXON_DCHECK(session != nullptr);
 
   for (auto& [tensor, _] : session->insts()) {
-    tensor->session() = nullptr;
+    if (tensor->session() != nullptr) {
+      tensor->session() = nullptr;
+    }
   }
+
+  session->insts().clear();
+  session->parameters().clear();
 }
 
 auto Tensor::evaluate() -> void {
@@ -60,15 +65,18 @@ auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
     throw nb::value_error(
         "Only scalar tensors can have their gradient inferred.");
   }
+  if (!session_->insts().contains(grad.get())) {
+    grad->declareAsParam(session_);
+  }
 
+  auto& insts = session_->insts();
   auto& graph = session_->graph();
-  auto grad_id = session_->insts()[grad.get()];
-  auto tensor_id = session_->insts()[this];
+  InstId grad_id = insts[grad.get()];
+  auto tensor_id = insts[this];
 
   axon::backward(graph, tensor_id, grad_id);
 
   storage_ = evaluateTraceSession(session_, this);
-
   resetTraceSession(session_);
 }
 

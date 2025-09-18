@@ -10,6 +10,8 @@ class Module:
     def __setattr__(self, name: str, value: Any) -> None:
         if isinstance(value, Tensor):
             self._parameters.append(value)
+        elif isinstance(value, Module):
+            self._parameters.extend(value._parameters)
 
         self.__dict__[name] = value
 

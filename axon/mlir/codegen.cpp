@@ -275,7 +275,6 @@ static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {
   llvm::SmallVector<mlir::Type> arg_types;
   auto context = builder.getContext();
-
   AXON_DCHECK(context != nullptr);
 
   for (auto& param : graph.parameters().values()) {

@@ -11,13 +11,9 @@ import :ids;
 
 export namespace axon {
 
-auto backward(Graph& graph, InstId output_id, InstId grad_id = InstId::None)
-    -> void {
+auto backward(Graph& graph, InstId output_id, InstId grad_id) -> void {
   AXON_DCHECK(output_id.isValid(), "`output_id` has no value.");
-
-  if (not grad_id.isValid()) {
-    grad_id = graph.createOp(insts::OnesLike(output_id));
-  }
+  AXON_DCHECK(grad_id.isValid());
 
   llvm::SmallVector<Dependency> work_list;
   work_list.emplace_back(output_id, grad_id);

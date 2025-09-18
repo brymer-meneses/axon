@@ -185,6 +185,7 @@ export class GlobalContext {
     auto hash = graph.hash();
 
     if (graph_registry_.contains(graph)) {
+      std::println("reusing hash {}", hash);
       return graph_registry_[graph]->execute(parameters, returned);
     }
 

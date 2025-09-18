@@ -31,6 +31,8 @@ Loops: LoweringLevel = LoweringLevel.Loops
 
 LLVM: LoweringLevel = LoweringLevel.LLVM
 
+def inspect_ir(tensor: Tensor, level: LoweringLevel) -> None: ...
+
 class Tensor:
     def __init__(self, data: object, requires_grad: bool = False, dtype: dtype = dtype.float64) -> None: ...
 

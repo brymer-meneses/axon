@@ -11,6 +11,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/TargetSelect.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "nanobind/intrusive/counter.h"
 #include "nanobind/nanobind.h"
@@ -70,6 +71,37 @@ NB_MODULE(_core, m) {
       .value("Loops", LoweringLevel::Loops)
       .value("LLVM", LoweringLevel::LLVM)
       .export_values();
+
+  m.def(
+      "inspect_ir",
+      [](Tensor& tensor, LoweringLevel level) {
+        mlir::MLIRContext context(createDialectRegistry());
+        context.loadAllAvailableDialects();
+
+        mlir::OpBuilder builder(&context);
+        mlir::PassManager pm(&context);
+
+        auto session = tensor.session();
+        if (!session) {
+          throw nb::value_error("Failed to inspect a non-lazy tensor.");
+        }
+
+        auto& graph = session->graph();
+        auto inst_id = session->insts()[&tensor];
+        graph.setReturned(inst_id);
+
+        auto module = codegenGraph(graph, builder);
+        axon::buildLlvmLoweringPipeline(pm, level);
+
+        auto lowering_result = pm.run(module);
+        if (lowering_result.failed()) {
+          throw std::runtime_error("Failed to compile graph.");
+        }
+
+        graph.setReturned(InstId::None);
+        module.print(llvm::outs());
+      },
+      nb::arg("tensor"), nb::arg("level"));
 
   nb::class_<Tensor>(m, "Tensor")
       .def(nb::new_([](nb::object object, bool requires_grad,

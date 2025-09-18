@@ -1,12 +1,14 @@
 import axon
-from axon import Tensor
+from axon import Tensor, LoweringLevel
 
+a = Tensor.ones((2, 5, 5), requires_grad=True)
+b = Tensor.ones((5, 5), requires_grad=True)
+grad = Tensor.ones((2, 5, 5))
 
-a = Tensor.ones((2, 5, 5), requires_grad=True, dtype=axon.float64)
-b = Tensor.ones((5, 5), requires_grad=True, dtype=axon.float64)
+c = a @ b + a
+c.backward(grad)
 
-c = a @ b
-c.backward(Tensor.ones((2, 5, 5), dtype=axon.float64))
+axon.inspect_ir(c, LoweringLevel.Linalg)
 
 print(a.grad)
 print(b.grad)

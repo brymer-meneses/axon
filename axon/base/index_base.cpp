@@ -42,11 +42,9 @@ constexpr T IndexBase<T>::None = T(-1);
 
 export template <axon::Index T>
 struct llvm::DenseMapInfo<T> {
-  static constexpr auto sentinel = std::numeric_limits<int32_t>::min();
+  static inline auto getEmptyKey() -> T { return T(-1); }
 
-  static inline auto getEmptyKey() -> T { return T(sentinel); }
-
-  static inline auto getTombstoneKey() -> T { return T(sentinel + 1); }
+  static inline auto getTombstoneKey() -> T { return T(-2); }
 
   static auto getHashValue(const T& value) -> unsigned {
     return static_cast<unsigned>(value.value() * 37UL);
