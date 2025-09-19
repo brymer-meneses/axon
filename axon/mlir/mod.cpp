@@ -148,6 +148,7 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     manager.addPass(mlir::createCanonicalizerPass());
     manager.addPass(mlir::createCSEPass());
 
+    // TODO: investigate why this causes test failures
     // manager.addPass(mlir::affine::createLoopFusionPass());
 
     manager.addPass(mlir::createCanonicalizerPass());

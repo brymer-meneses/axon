@@ -29,7 +29,6 @@ def test_broadcast_add():
     a3.backward(Tensor.ones((10, 10)))
 
     axon.testing.assert_are_close(a3, b1 + b2)
-
     axon.testing.assert_are_close(a1.grad, np.ones(a3.shape))
 
     expected_a2_grad = np.sum(np.ones_like(b1), axis=0, keepdims=True)

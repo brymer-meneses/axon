@@ -1,5 +1,7 @@
 module;
 
+#include <format>
+
 #include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -185,8 +187,17 @@ auto getTraceSession(Tensor& lhs, Tensor& rhs)
 
     return lhs.session();
   }
-
   AXON_UNREACHABLE("This should be an unreachable point");
+}
+
+auto getTraceSession(Tensor& input) -> std::shared_ptr<TraceSession> {
+  if (input.isRoot()) {
+    auto session = std::make_shared<TraceSession>();
+    input.declareAsParam(session);
+    return session;
+  }
+
+  return input.session();
 }
 
 export template <typename ElementWiseInst>
@@ -225,8 +236,8 @@ auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
 export auto performMatMul(std::shared_ptr<Tensor> lhs,
                           std::shared_ptr<Tensor> rhs)
     -> std::shared_ptr<Tensor> {
-  static auto is_valid_matmul = [](llvm::ArrayRef<i64> lhs_shape,
-                                   llvm::ArrayRef<i64> rhs_shape) {
+  static constexpr auto is_valid_matmul = [](llvm::ArrayRef<i64> lhs_shape,
+                                             llvm::ArrayRef<i64> rhs_shape) {
     AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
                 "At this point lhs and rhs must have the same rank");
     if (lhs_shape.size() == 3) {
@@ -296,6 +307,25 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
 
   auto inst_id = graph.createOp(insts::MatMul(lhs_id, rhs_id));
   return std::make_shared<Tensor>(session, inst_id, data_type);
+}
+
+export template <Numeric T>
+auto performScalarMul(std::shared_ptr<Tensor> input, T scalar_value)
+    -> std::shared_ptr<Tensor> {
+  auto session = getTraceSession(*input);
+  auto data_type = DataType::fromType<T>();
+
+  if (data_type != input->data_type()) {
+    // TODO: Improve this error message by adding a format specifier for
+    // DataType and scalar.
+    throw nb::value_error("Tried to multiply a tensor with different dtype");
+  }
+
+  Scalar scalar{scalar_value};
+  auto input_id = session->insts().at(input.get());
+  auto product_inst_id =
+      session->graph().createOp(insts::ScalarMul(input_id, scalar));
+  return std::make_shared<Tensor>(session, product_inst_id, data_type);
 }
 
 }  // namespace axon

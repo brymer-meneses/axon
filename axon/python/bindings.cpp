@@ -154,6 +154,9 @@ NB_MODULE(_core, m) {
       .def("__mul__", &performBinaryElementWiseOperation<insts::Mul>)
       .def("__sub__", &performBinaryElementWiseOperation<insts::Sub>)
 
+      .def("__mul__", &performScalarMul<f64>)
+      .def("__rmul__", &performScalarMul<f64>)
+
       .def("__matmul__", &performMatMul)
 
       .def_static(

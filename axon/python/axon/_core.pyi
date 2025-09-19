@@ -1,4 +1,5 @@
 import enum
+from typing import overload
 
 from numpy.typing import ArrayLike
 
@@ -58,9 +59,15 @@ class Tensor:
 
     def __add__(self, arg: Tensor, /) -> Tensor: ...
 
+    @overload
     def __mul__(self, arg: Tensor, /) -> Tensor: ...
 
+    @overload
+    def __mul__(self, arg: float, /) -> Tensor: ...
+
     def __sub__(self, arg: Tensor, /) -> Tensor: ...
+
+    def __rmul__(self, arg: float, /) -> Tensor: ...
 
     def __matmul__(self, arg: Tensor, /) -> Tensor: ...
 

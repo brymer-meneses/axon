@@ -101,7 +101,7 @@ def Axon_AccumulateOp : AxonDialect_Op<"accumulate", [
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
-    auto getEffects(llvm::SmallVectorImpl<mlir::MemoryEffects::EffectInstance> &effects) -> void{
+    auto getEffects(llvm::SmallVectorImpl<mlir::MemoryEffects::EffectInstance> &effects) -> void {
       effects.emplace_back(mlir::MemoryEffects::Write::get(), &getSinkMutable());
       effects.emplace_back(mlir::MemoryEffects::Read::get(), &getSourceMutable());
     }
