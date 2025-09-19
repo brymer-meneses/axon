@@ -4,6 +4,7 @@ module;
 
 #include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
 export module axon.core:shape_rules;
@@ -11,17 +12,17 @@ export module axon.core:shape_rules;
 import :inst_kinds;
 import :ids;
 
-export namespace axon {
+namespace axon {
 
-using Shape = llvm::SmallVector<i64>;
-using ShapeRef = llvm::ArrayRef<i64>;
+export using Shape = llvm::SmallVector<i64>;
+export using ShapeRef = llvm::ArrayRef<i64>;
 
-using ShapeMapping = IdMap<InstId, Shape>;
+export using ShapeMapping = IdMap<InstId, Shape>;
 
-template <typename T>
+export template <typename T>
 struct InferShapeRule;
 
-template <>
+export template <>
 struct InferShapeRule<insts::MatMul> {
   static auto apply(const insts::MatMul& op, const ShapeMapping& shapes)
       -> Shape {
@@ -53,7 +54,7 @@ struct InferShapeRule<insts::MatMul> {
   }
 };
 
-template <>
+export template <>
 struct InferShapeRule<insts::Transpose> {
   static auto apply(const insts::Transpose& op, const ShapeMapping& shapes)
       -> Shape {
@@ -70,7 +71,7 @@ struct InferShapeRule<insts::Transpose> {
   }
 };
 
-template <>
+export template <>
 struct InferShapeRule<insts::Unsqueeze> {
   static auto apply(const insts::Unsqueeze& op, const ShapeMapping& shapes)
       -> Shape {
@@ -83,7 +84,7 @@ struct InferShapeRule<insts::Unsqueeze> {
   }
 };
 
-template <>
+export template <>
 struct InferShapeRule<insts::Squeeze> {
   static auto apply(const insts::Squeeze& op, const ShapeMapping& shapes)
       -> Shape {
@@ -98,26 +99,40 @@ struct InferShapeRule<insts::Squeeze> {
   }
 };
 
-template <>
+template <typename T>
+static auto inferShapeOfReduceInst(const T& op, const ShapeMapping& shapes)
+    -> Shape {
+  AXON_DCHECK(shapes.get(op.operand_id),
+              "op.operand_id must have a shape already.");
+
+  Shape shape = shapes.get(op.operand_id)->get();
+  auto rank = static_cast<i32>(shape.size());
+
+  if (op.keep_dims) {
+    AXON_DCHECK(op.axis < rank, "Axis must not exceed rank");
+    shape[op.axis] = 1;
+    return shape;
+  }
+  shape.erase(shape.begin() + op.axis);
+  return shape;
+}
+
+export template <>
 struct InferShapeRule<insts::Sum> {
   static auto apply(const insts::Sum& op, const ShapeMapping& shapes) -> Shape {
-    AXON_DCHECK(shapes.get(op.operand_id),
-                "op.operand_id must have a shape already.");
-
-    Shape shape = shapes.get(op.operand_id)->get();
-    auto rank = static_cast<i32>(shape.size());
-
-    if (op.keepdims) {
-      AXON_DCHECK(op.axis < rank, "Axis must not exceed rank");
-      shape[op.axis] = 1;
-      return shape;
-    }
-    shape.erase(shape.begin() + op.axis);
-    return shape;
+    return inferShapeOfReduceInst(op, shapes);
   }
 };
 
-template <>
+export template <>
+struct InferShapeRule<insts::Softmax> {
+  static auto apply(const insts::Softmax& op, const ShapeMapping& shapes)
+      -> Shape {
+    return inferShapeOfReduceInst(op, shapes);
+  }
+};
+
+export template <>
 struct InferShapeRule<insts::ExpandDims> {
   static auto apply(const insts::ExpandDims& op, const ShapeMapping& shapes)
       -> Shape {
@@ -135,7 +150,7 @@ struct InferShapeRule<insts::ExpandDims> {
   }
 };
 
-template <>
+export template <>
 struct InferShapeRule<insts::Reshape> {
   static auto apply(const insts::Reshape& op, const ShapeMapping& shapes)
       -> Shape {
@@ -145,7 +160,7 @@ struct InferShapeRule<insts::Reshape> {
   }
 };
 
-template <typename T>
+export template <typename T>
 concept HasInferShapeRule = requires(const T& op, const ShapeMapping& shapes) {
   { InferShapeRule<T>::apply(op, shapes) } -> std::same_as<Shape>;
 };

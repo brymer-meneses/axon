@@ -13,6 +13,7 @@ module;
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/Func/Transforms/Passes.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Utils/ReshapeOpsUtils.h"
@@ -641,6 +642,53 @@ struct ConstantOpLowering : mlir::OpConversionPattern<ConstantOp> {
   }
 };
 
+struct PowOpLowering : mlir::OpConversionPattern<PowOp> {
+  using mlir::OpConversionPattern<PowOp>::OpConversionPattern;
+
+  auto matchAndRewrite(PowOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+
+    auto result_tensor_type = op.getResult().getType();
+
+    auto exponent_constant = mlir::arith::ConstantFloatOp::create(
+        rewriter, loc,
+        rewriter.getF64FloatAttr(op.getExponent().convertToDouble()));
+
+    auto exponent_tensor = mlir::tensor::SplatOp::create(
+        rewriter, loc, exponent_constant, result_tensor_type.getShape());
+
+    auto pow_op = mlir::math::PowFOp::create(
+        rewriter, loc, adaptor.getOperand(), exponent_tensor);
+
+    rewriter.replaceOp(op, pow_op);
+    return mlir::success();
+  }
+};
+
+struct SoftmaxOpLowering : mlir::OpConversionPattern<SoftmaxOp> {
+  using mlir::OpConversionPattern<SoftmaxOp>::OpConversionPattern;
+
+  auto matchAndRewrite(SoftmaxOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+
+    auto result_tensor_type = op.getResult().getType();
+
+    auto init_op =
+        mlir::tensor::EmptyOp::create(rewriter, loc, result_tensor_type, {});
+
+    auto softmax_op = mlir::linalg::SoftmaxOp::create(
+        rewriter, loc, mlir::TypeRange{result_tensor_type},
+        adaptor.getOperand(), init_op, op.getDim());
+
+    rewriter.replaceOp(op, softmax_op);
+    return mlir::success();
+  }
+};
+
 struct AxonToStandardTypeConverter : mlir::TypeConverter {
   AxonToStandardTypeConverter(mlir::MLIRContext* ctx) {
     addConversion([](mlir::Type type) -> mlir::Type { return type; });
@@ -668,11 +716,11 @@ struct AxonToStandardLoweringPass
 
   auto getDependentDialects(mlir::DialectRegistry& registry) const
       -> void override {
-    registry
-        .insert<mlir::affine::AffineDialect, mlir::func::FuncDialect,
-                mlir::linalg::LinalgDialect, mlir::memref::MemRefDialect,
-                mlir::bufferization::BufferizationDialect, mlir::BuiltinDialect,
-                mlir::arith::ArithDialect, mlir::tensor::TensorDialect>();
+    registry.insert<mlir::affine::AffineDialect, mlir::func::FuncDialect,
+                    mlir::linalg::LinalgDialect, mlir::memref::MemRefDialect,
+                    mlir::bufferization::BufferizationDialect,
+                    mlir::BuiltinDialect, mlir::arith::ArithDialect,
+                    mlir::tensor::TensorDialect, mlir::math::MathDialect>();
   }
 
   auto runOnOperation() -> void final {
@@ -680,11 +728,11 @@ struct AxonToStandardLoweringPass
 
     mlir::ConversionTarget target(context);
 
-    target
-        .addLegalDialect<mlir::func::FuncDialect, mlir::linalg::LinalgDialect,
-                         mlir::memref::MemRefDialect, mlir::arith::ArithDialect,
-                         mlir::bufferization::BufferizationDialect,
-                         mlir::BuiltinDialect, mlir::tensor::TensorDialect>();
+    target.addLegalDialect<
+        mlir::func::FuncDialect, mlir::linalg::LinalgDialect,
+        mlir::memref::MemRefDialect, mlir::arith::ArithDialect,
+        mlir::bufferization::BufferizationDialect, mlir::BuiltinDialect,
+        mlir::tensor::TensorDialect, mlir::math::MathDialect>();
 
     target.addLegalOp<TupleAccessOp>();
     target.addIllegalDialect<AxonDialect>();
@@ -704,6 +752,9 @@ struct AxonToStandardLoweringPass
       SubOpLowering,
       MatMulOpLowering, 
       NegOpLowering,
+      PowOpLowering,
+      SoftmaxOpLowering,
+
       TransposeOpLowering, 
       SumOpLowering,
       ScalarMulOpLowering,

@@ -29,22 +29,6 @@ struct InstTraits {
 
 namespace insts {
 
-struct Sum {
-  constexpr static auto traits = InstTraits{
-      .num_operands = 1,
-      .shape_rule = ShapeInfo::Custom,
-      .differentiable = true,
-  };
-
-  InstId operand_id;
-  // axis to sum
-  i32 axis;
-
-  bool keepdims;
-
-  auto operator==(const Sum& other) const -> bool = default;
-};
-
 struct ExpandDims {
   constexpr static auto traits = InstTraits{
       .num_operands = 1,
@@ -243,6 +227,77 @@ struct OnesLike {
   auto operator==(const OnesLike&) const -> bool = default;
 };
 
+struct Pow {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::SameAsOperands,
+      .differentiable = true,
+  };
+
+  auto operator==(const Pow&) const -> bool = default;
+
+  InstId operand_id;
+  Scalar exponent;
+};
+
+struct Sum {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::Custom,
+      .differentiable = true,
+  };
+
+  auto operator==(const Sum& other) const -> bool = default;
+
+  InstId operand_id;
+  // axis to sum
+  i32 axis;
+  bool keep_dims;
+};
+
+struct ArgMax {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::Custom,
+      // TODO: add backward rule for this set it to false for now.
+      .differentiable = false,
+  };
+
+  auto operator==(const ArgMax&) const -> bool = default;
+
+  InstId operand_id;
+  i32 axis;
+  bool keep_dims;
+};
+
+struct Softmax {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::Custom,
+      // TODO: add backward rule for this set it to false for now.
+      .differentiable = false,
+  };
+
+  auto operator==(const Softmax&) const -> bool = default;
+
+  InstId operand_id;
+  i32 axis;
+  bool keep_dims;
+};
+
+struct Relu {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::Custom,
+      // TODO: add backward rule for this set it to false for now.
+      .differentiable = true,
+  };
+
+  auto operator==(const Relu&) const -> bool = default;
+
+  InstId operand_id;
+};
+
 }  // namespace insts
 
 // clang-format off:
@@ -250,6 +305,8 @@ using InstInternalType =
     std::variant<
       insts::Add, 
       insts::Mul, 
+      insts::Pow,
+      insts::Softmax,
       insts::Sub,
       insts::Neg,
       insts::ScalarMul,

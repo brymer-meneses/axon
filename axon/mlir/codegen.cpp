@@ -89,8 +89,11 @@ static auto codegen(const insts::Constant& op, CompilationContext& ctx,
       ctx.builder, ctx.builder.getUnknownLoc(), data_attribute);
 }
 
-static auto codegen(const insts::Sum& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+/// Utility function to handle lowering of reduce like inst which all have the
+/// same fields.
+template <typename InstType, typename LoweredOpType>
+static auto codegenReduceInst(const InstType& op, CompilationContext& ctx,
+                              InstId inst_id) -> void {
   auto operand = ctx.values[op.operand_id];
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
 
@@ -99,8 +102,18 @@ static auto codegen(const insts::Sum& op, CompilationContext& ctx,
       mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
 
   ctx.values[inst_id] =
-      SumOp::create(ctx.builder, ctx.builder.getUnknownLoc(), result_type,
-                    operand, op.axis, op.keepdims);
+      LoweredOpType::create(ctx.builder, ctx.builder.getUnknownLoc(),
+                            result_type, operand, op.axis, op.keep_dims);
+}
+
+static auto codegen(const insts::Softmax& op, CompilationContext& ctx,
+                    InstId inst_id) -> void {
+  codegenReduceInst<insts::Softmax, SoftmaxOp>(op, ctx, inst_id);
+}
+
+static auto codegen(const insts::Sum& op, CompilationContext& ctx,
+                    InstId inst_id) -> void {
+  codegenReduceInst<insts::Sum, SumOp>(op, ctx, inst_id);
 }
 
 static auto codegen(const insts::ExpandDims& op, CompilationContext& ctx,
@@ -253,6 +266,17 @@ static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx,
   ctx.values[inst_id] = ScalarMulOp::create(
       ctx.builder, ctx.builder.getUnknownLoc(), operand, attr);
 };
+
+static auto codegen(const insts::Pow& op, CompilationContext& ctx,
+                    InstId inst_id) -> void {
+  auto operand = ctx.values[op.operand_id];
+  auto element_type =
+      mlir::cast<mlir::RankedTensorType>(operand.getType()).getElementType();
+
+  ctx.values[inst_id] =
+      PowOp::create(ctx.builder, ctx.builder.getUnknownLoc(), operand,
+                    getFloatAttr(element_type, op.exponent.as<f64>()));
+}
 
 static auto codegen(const insts::Sub& op, CompilationContext& ctx,
                     InstId inst_id) -> void {

@@ -14,6 +14,7 @@ module;
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/Transforms/AllocationOpInterfaceImpl.h"
 #include "mlir/Dialect/MemRef/Transforms/BufferViewFlowOpInterfaceImpl.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
@@ -41,6 +42,7 @@ auto createDialectRegistry() -> mlir::DialectRegistry {
   registry.insert<mlir::tensor::TensorDialect>();
   registry.insert<mlir::linalg::LinalgDialect>();
   registry.insert<mlir::bufferization::BufferizationDialect>();
+  registry.insert<mlir::math::MathDialect>();
   registry.insert<AxonDialect>();
 
   mlir::registerBuiltinDialectTranslation(registry);

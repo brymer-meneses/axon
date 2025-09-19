@@ -14,7 +14,7 @@ import :inst;
 import :inst_kinds;
 import :shape_rules;
 
-export namespace axon {
+namespace axon {
 
 template <typename InstType>
 concept BinaryInst = requires(InstType t) {
@@ -29,7 +29,7 @@ template <typename T>
 struct Hash;
 
 // Hash simple binary insts
-template <BinaryInst T>
+export template <BinaryInst T>
 struct Hash<T> {
   static auto hash(const T& op, const IdMap<InstId, Shape>& shapes)
       -> llvm::hash_code {
@@ -42,7 +42,7 @@ struct Hash<T> {
 };
 
 // Hash simple unary insts
-template <UnaryInst T>
+export template <UnaryInst T>
 struct Hash<T> {
   static auto hash(const T& op, const IdMap<InstId, Shape>& shapes)
       -> llvm::hash_code {
@@ -52,7 +52,7 @@ struct Hash<T> {
   }
 };
 
-template <>
+export template <>
 struct Hash<insts::Reshape> {
   static auto hash(const insts::Reshape& op, const IdMap<InstId, Shape>& shapes)
       -> llvm::hash_code {
@@ -63,7 +63,7 @@ struct Hash<insts::Reshape> {
   }
 };
 
-template <>
+export template <>
 struct Hash<insts::GetParameter> {
   static auto hash(const insts::GetParameter& op, const IdMap<InstId, Shape>&)
       -> llvm::hash_code {
@@ -73,19 +73,31 @@ struct Hash<insts::GetParameter> {
   }
 };
 
-template <>
+template <typename InstType>
+static auto handleReduceInst(const InstType& op,
+                             const IdMap<InstId, Shape>& shapes) {
+  constexpr auto tag = Inst::tag<InstType>();
+  llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
+  return llvm::hash_combine(operand_shape, tag, op.keep_dims, op.axis);
+}
+
+export template <>
 struct Hash<insts::Sum> {
   static auto hash(const insts::Sum& op, const IdMap<InstId, Shape>& shapes)
       -> llvm::hash_code {
-    constexpr auto tag = Inst::tag<insts::Sum>();
-
-    llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
-
-    return llvm::hash_combine(0, operand_shape, tag);
+    return handleReduceInst(op, shapes);
   }
 };
 
-template <>
+export template <>
+struct Hash<insts::Softmax> {
+  static auto hash(const insts::Softmax& op, const IdMap<InstId, Shape>& shapes)
+      -> llvm::hash_code {
+    return handleReduceInst(op, shapes);
+  }
+};
+
+export template <>
 struct Hash<insts::Unsqueeze> {
   static auto hash(const insts::Unsqueeze& op,
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
@@ -96,7 +108,7 @@ struct Hash<insts::Unsqueeze> {
   }
 };
 
-template <>
+export template <>
 struct Hash<insts::Squeeze> {
   static auto hash(const insts::Squeeze& op, const IdMap<InstId, Shape>& shapes)
       -> llvm::hash_code {
@@ -107,7 +119,7 @@ struct Hash<insts::Squeeze> {
   }
 };
 
-template <>
+export template <>
 struct Hash<insts::Transpose> {
   static auto hash(const insts::Transpose& op,
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
@@ -118,7 +130,7 @@ struct Hash<insts::Transpose> {
   }
 };
 
-template <>
+export template <>
 struct Hash<insts::AccumulateGrad> {
   static auto hash(const insts::AccumulateGrad& op,
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
@@ -131,7 +143,7 @@ struct Hash<insts::AccumulateGrad> {
   }
 };
 
-template <>
+export template <>
 struct Hash<insts::Constant> {
   static auto hash(const insts::Constant&, const IdMap<InstId, Shape>&)
       -> llvm::hash_code {
@@ -140,7 +152,7 @@ struct Hash<insts::Constant> {
   }
 };
 
-template <>
+export template <>
 struct Hash<insts::ScalarMul> {
   static auto hash(const insts::ScalarMul& op,
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {

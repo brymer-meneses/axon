@@ -280,6 +280,47 @@ def Axon_SumOp : AxonDialect_Op<"sum", [
   let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";
 }
 
+def Axon_ArgMaxOp : AxonDialect_Op<"argmax", [
+  Pure,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$operand, I64Attr:$dim, BoolAttr:$keep_dims);
+  let results = (outs AnyTensor:$result);
+  let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";
+}
+
+def Axon_SoftmaxOp : AxonDialect_Op<"softmax", [
+  Pure,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$operand, I64Attr:$dim, BoolAttr:$keep_dims);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";
+}
+
+def Axon_ReluOp : AxonDialect_Op<"relu", [
+  Pure,
+  SameOperandsAndResultType,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$operand);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+}
+
+def Axon_PowOp : AxonDialect_Op<"pow", [
+  Pure,
+  SameOperandsAndResultType,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$operand, F64Attr:$exponent);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `->` type($operand) attr-dict";
+}
+
 def Axon_TransposeOp : AxonDialect_Op<"transpose", [
   Pure,
   SameOperandsAndResultElementType,

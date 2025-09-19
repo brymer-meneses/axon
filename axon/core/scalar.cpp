@@ -33,6 +33,82 @@ export class Scalar {
     return *reinterpret_cast<const T*>(storage_.data());
   }
 
+  friend auto operator+(const Scalar& lhs, const Scalar& rhs) -> Scalar {
+    AXON_DCHECK(lhs.data_type() == rhs.data_type());
+    switch (lhs.data_type().kind()) {
+      case DataType::Float32: {
+        auto lhs_casted = lhs.as<f32>();
+        auto rhs_casted = rhs.as<f32>();
+        return Scalar(lhs_casted + rhs_casted);
+      }
+      case DataType::Float64: {
+        auto lhs_casted = lhs.as<f64>();
+        auto rhs_casted = rhs.as<f64>();
+        return Scalar(lhs_casted + rhs_casted);
+      }
+    }
+  }
+
+  template <Numeric T>
+  friend auto operator-(const Scalar& lhs, T rhs) -> Scalar {
+    AXON_DCHECK(lhs.data_type() == DataType::fromType<T>());
+    switch (lhs.data_type().kind()) {
+      case DataType::Float32: {
+        auto lhs_casted = lhs.as<f32>();
+        return Scalar(lhs_casted - rhs);
+      }
+      case DataType::Float64: {
+        auto lhs_casted = lhs.as<f64>();
+        return Scalar(lhs_casted - rhs);
+      }
+    }
+  }
+
+  template <Numeric T>
+  friend auto operator-(T lhs, const Scalar& rhs) -> Scalar {
+    AXON_DCHECK(lhs.data_type() == DataType::fromType<T>());
+    switch (lhs.data_type().kind()) {
+      case DataType::Float32: {
+        auto rhs_casted = rhs.as<f32>();
+        return Scalar(lhs - rhs_casted);
+      }
+      case DataType::Float64: {
+        auto rhs_casted = rhs.as<f32>();
+        return Scalar(lhs - rhs_casted);
+      }
+    }
+  }
+
+  template <Numeric T>
+  friend auto operator+(const Scalar& lhs, T rhs) -> Scalar {
+    AXON_DCHECK(lhs.data_type() == DataType::fromType<T>());
+    switch (lhs.data_type().kind()) {
+      case DataType::Float32: {
+        auto lhs_casted = lhs.as<f32>();
+        return Scalar(lhs_casted + rhs);
+      }
+      case DataType::Float64: {
+        auto lhs_casted = lhs.as<f64>();
+        return Scalar(lhs_casted + rhs);
+      }
+    }
+  }
+
+  template <Numeric T>
+  friend auto operator+(T lhs, const Scalar& rhs) -> Scalar {
+    AXON_DCHECK(lhs.data_type() == DataType::fromType<T>());
+    switch (lhs.data_type().kind()) {
+      case DataType::Float32: {
+        auto rhs_casted = rhs.as<f32>();
+        return Scalar(lhs + rhs_casted);
+      }
+      case DataType::Float64: {
+        auto rhs_casted = rhs.as<f32>();
+        return Scalar(lhs + rhs_casted);
+      }
+    }
+  }
+
   auto data_type() const -> DataType { return data_type_; }
 
   auto bytes() const -> const std::array<std::byte, 8>& { return storage_; }
