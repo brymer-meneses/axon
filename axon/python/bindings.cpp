@@ -53,14 +53,13 @@ static auto convertVectorToTuple(llvm::ArrayRef<i64> shape) -> nb::tuple {
 }
 
 template <Numeric T>
-static auto checkIsWithinTolerance(T* lhs, T* rhs, i64 total_elements,
-                                   T tolerance) -> bool {
-  for (i64 i = 0; i < total_elements; ++i) {
+static auto checkIsWithinTolerance(T* lhs, T* rhs, u64 total_elements,
+                                   f64 tolerance) -> void {
+  for (u64 i = 0; i < total_elements; ++i) {
     if (std::fabs(lhs[i] - rhs[i]) > tolerance) {
-      return false;
+      throw nb::value_error("Mismatch");
     }
   }
-  return true;
 }
 
 NB_MODULE(_core, m) {
@@ -114,14 +113,14 @@ NB_MODULE(_core, m) {
   nb::class_<Tensor>(m, "Tensor")
       .def(nb::new_([](nb::object object, bool requires_grad,
                        DataType::InternalType data_type) {
-             if (nb::isinstance<nb::ndarray<>>(object)) {
-               auto ndarray = nb::cast<nb::ndarray<>>(object);
+             if (nb::isinstance<nb::ndarray<nb::numpy, nb::ro>>(object)) {
+               auto ndarray = nb::cast<nb::ndarray<nb::numpy, nb::ro>>(object);
                auto ndarray_data_type = DataType::fromDlPack(ndarray.dtype());
                if (ndarray_data_type != data_type) {
                  throw nb::value_error("Does not match the received data type");
                }
 
-               auto storage = Storage::fromNanobind(ndarray, data_type);
+               auto storage = Storage::fromNumpy(ndarray, data_type);
                return std::make_shared<Tensor>(std::move(storage),
                                                requires_grad);
              }
@@ -191,9 +190,7 @@ NB_MODULE(_core, m) {
           nb::arg("shape"), nb::arg("requires_grad") = false,
           nb::arg("dtype") = DataType::Float64);
 
-  auto testing = m.def_submodule("testing");
-
-  testing.def(
+  m.def(
       "assert_are_close",
       [](std::shared_ptr<Tensor> tensor, nb::ndarray<>& array, f64 tolerance) {
         auto array_strides =
@@ -220,15 +217,15 @@ NB_MODULE(_core, m) {
         switch (tensor->data_type().kind()) {
           case DataType::Float32: {
             auto tensor_ptr = tensor->storage()->as<f32>();
-            auto data_ptr = reinterpret_cast<f32*>(array.data());
-            return checkIsWithinTolerance<const f32>(tensor_ptr, data_ptr, size,
-                                                     tolerance);
+            auto data_ptr = reinterpret_cast<const f32*>(array.data());
+            checkIsWithinTolerance<const f32>(tensor_ptr, data_ptr, size,
+                                              tolerance);
           }
           case DataType::Float64: {
             auto tensor_ptr = tensor->storage()->as<f64>();
-            auto data_ptr = reinterpret_cast<f64*>(array.data());
-            return checkIsWithinTolerance<const f64>(tensor_ptr, data_ptr, size,
-                                                     tolerance);
+            auto data_ptr = reinterpret_cast<const f64*>(array.data());
+            checkIsWithinTolerance<const f64>(tensor_ptr, data_ptr, size,
+                                              tolerance);
           }
         }
       },

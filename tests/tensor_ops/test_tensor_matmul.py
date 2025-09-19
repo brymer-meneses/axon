@@ -18,8 +18,8 @@ def test_matmul():
     expected_a1_grad = grad @ b2.T
     expected_a2_grad = b1.T @ grad
 
-    axon.testing.assert_are_close(a1.grad, expected_a1_grad.copy())
-    axon.testing.assert_are_close(a2.grad, expected_a2_grad.copy())
+    axon.testing.assert_are_close(a1.grad, expected_a1_grad)
+    axon.testing.assert_are_close(a2.grad, expected_a2_grad)
     axon.testing.assert_are_close(a3, b1 @ b2)
 
 

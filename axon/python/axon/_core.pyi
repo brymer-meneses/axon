@@ -1,6 +1,6 @@
 import enum
 
-from . import testing as testing
+from numpy.typing import ArrayLike
 
 
 class dtype(enum.Enum):
@@ -72,3 +72,5 @@ class Tensor:
 
     @staticmethod
     def randn(shape: tuple, requires_grad: bool = False, dtype: dtype = dtype.float64) -> Tensor: ...
+
+def assert_are_close(tensor: Tensor, ndarray: ArrayLike, tolerance: float = 1e-05) -> None: ...
