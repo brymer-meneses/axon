@@ -221,7 +221,7 @@ struct BackwardRule<insts::Sum> {
       return {};
     }
 
-    if (op.keep_dims) {
+    if (!op.keep_dims) {
       grad_id = ctx.createOp(insts::Unsqueeze(grad_id, op.axis));
     }
 

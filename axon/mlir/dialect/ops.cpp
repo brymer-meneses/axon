@@ -148,8 +148,10 @@ auto AccumulateOp::verify() -> mlir::LogicalResult {
   auto source_shape = getSource().getType().getShape();
 
   if (sink_shape != source_shape) {
-    emitOpError()
-        << "The shape of the value tensor must be equal to the accumulator";
+    emitOpError() << std::format(
+        "the shape of the value tensor must match the accumulator "
+        "expected {} got {}.",
+        sink_shape, source_shape);
     return mlir::failure();
   }
 

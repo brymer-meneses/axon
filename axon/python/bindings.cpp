@@ -159,6 +159,11 @@ NB_MODULE(_core, m) {
 
       .def("__matmul__", &performMatMul)
 
+      .def("softmax", &performReduceInst<insts::Softmax>, nb::arg("dim"),
+           nb::arg("keepdims") = false)
+      .def("sum", &performReduceInst<insts::Sum>, nb::arg("dim"),
+           nb::arg("keepdims") = false)
+
       .def_static(
           "ones",
           [](nb::tuple shape_tuple, bool requires_grad,

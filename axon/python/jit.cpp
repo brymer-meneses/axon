@@ -85,6 +85,7 @@ class CompiledFunction {
 
     auto lowering_result = pm.run(module_);
     if (lowering_result.failed()) {
+      module_.print(llvm::outs());
       throw std::runtime_error("Failed to compile graph.");
     }
 

@@ -328,4 +328,17 @@ auto performScalarMul(std::shared_ptr<Tensor> input, T scalar_value)
   return std::make_shared<Tensor>(session, product_inst_id, data_type);
 }
 
+export template <typename InstType>
+auto performReduceInst(std::shared_ptr<Tensor> input, i32 axis, bool keep_dims)
+    -> std::shared_ptr<Tensor> {
+  auto session = getTraceSession(*input);
+
+  auto& graph = session->graph();
+  auto input_inst_id = session->insts()[input.get()];
+  auto softmax_inst_id =
+      graph.createOp(InstType(input_inst_id, axis, keep_dims));
+
+  return std::make_shared<Tensor>(session, softmax_inst_id, input->data_type());
+}
+
 }  // namespace axon

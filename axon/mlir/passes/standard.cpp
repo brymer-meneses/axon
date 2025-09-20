@@ -26,6 +26,8 @@ module;
 
 export module axon.mlir.passes:standard_lowering;
 
+import axon.base;
+
 namespace axon {
 
 static auto createZerosLike(mlir::ConversionPatternRewriter& rewriter,
@@ -186,7 +188,7 @@ struct ExpandDimsOpLowering : mlir::OpConversionPattern<ExpandDimsOp> {
     auto result_tensor =
         mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
 
-    llvm::SmallVector<int64_t> dimensions_to_expand;
+    llvm::SmallVector<i64> dimensions_to_expand;
     for (auto attr : op.getMappings()) {
       auto pair = mlir::cast<mlir::ArrayAttr>(attr);
       auto dim = mlir::cast<mlir::IntegerAttr>(pair[0]).getInt();
@@ -237,42 +239,42 @@ struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
+    auto context = op.getContext();
     auto input_tensor =
         mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
     auto result_tensor =
         mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
 
     auto input_rank = input_tensor.getRank();
-    auto dim_to_reduce = static_cast<int64_t>(op.getDim());
+    auto dim_to_reduce = static_cast<i64>(op.getDim());
 
     // If we have keepDims on then we need to set `0` as the accumulator for
     // that dimension.
     mlir::AffineMap output_map;
     if (op.getKeepDims()) {
       llvm::SmallVector<mlir::AffineExpr> affine_exprs;
-      for (int64_t i = 0; i < input_rank; i += 1) {
+      for (i64 i = 0; i < input_rank; i += 1) {
         if (i == dim_to_reduce) {
-          affine_exprs.push_back(
-              mlir::getAffineConstantExpr(0, op.getContext()));
+          affine_exprs.push_back(mlir::getAffineConstantExpr(0, context));
         } else {
-          affine_exprs.push_back(mlir::getAffineDimExpr(i, op.getContext()));
+          affine_exprs.push_back(mlir::getAffineDimExpr(i, context));
         }
       }
       output_map = mlir::AffineMap::get(input_rank, /*symbolCount=*/0,
-                                        affine_exprs, op.getContext());
+                                        affine_exprs, context);
     } else {
       llvm::SmallVector<mlir::AffineExpr> affine_exprs;
-      for (int64_t i = 0; i < input_rank; i += 1) {
+      for (i64 i = 0; i < input_rank; i += 1) {
         if (i != dim_to_reduce) {
-          affine_exprs.push_back(mlir::getAffineDimExpr(i, op.getContext()));
+          affine_exprs.push_back(mlir::getAffineDimExpr(i, context));
         }
       }
       output_map = mlir::AffineMap::get(input_rank, /*symbolCount=*/0,
-                                        affine_exprs, op.getContext());
+                                        affine_exprs, context);
     }
 
     auto input_map = mlir::AffineMap::getMultiDimIdentityMap(
-        result_tensor.getRank(), op.getContext());
+        input_tensor.getRank(), context);
 
     llvm::SmallVector<mlir::AffineMap> indexing_maps = {input_map, output_map};
 
@@ -675,16 +677,23 @@ struct SoftmaxOpLowering : mlir::OpConversionPattern<SoftmaxOp> {
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
 
-    auto result_tensor_type = op.getResult().getType();
+    auto input_type = op.getOperand().getType();
+    auto result_type = op.getResult().getType();
 
-    auto init_op =
-        mlir::tensor::EmptyOp::create(rewriter, loc, result_tensor_type, {});
+    // The name of the operation `linalg.softmax` is counterintuitive. It does
+    // not reduce the tensor along the specified dimension. So we need to emit
+    // another operation to get the behavior we expect.
 
+    auto init_op = mlir::tensor::EmptyOp::create(rewriter, loc, input_type, {});
     auto softmax_op = mlir::linalg::SoftmaxOp::create(
-        rewriter, loc, mlir::TypeRange{result_tensor_type},
-        adaptor.getOperand(), init_op, op.getDim());
+                          rewriter, loc, mlir::TypeRange{input_type},
+                          adaptor.getOperand(), init_op, op.getDim())
+                          .getResults()[0];
 
-    rewriter.replaceOp(op, softmax_op);
+    auto softmax_reduced_op = SumOp::create(
+        rewriter, loc, result_type, softmax_op, op.getDim(), op.getKeepDims());
+
+    rewriter.replaceOp(op, softmax_reduced_op);
     return mlir::success();
   }
 };
