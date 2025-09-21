@@ -159,8 +159,8 @@ NB_MODULE(_core, m) {
 
       .def("__matmul__", &performMatMul)
 
-      .def("softmax", &performReduceInst<insts::Softmax>, nb::arg("dim"),
-           nb::arg("keepdims") = false)
+      .def("softmax", &performSoftmax, nb::arg("dim"))
+
       .def("sum", &performReduceInst<insts::Sum>, nb::arg("dim"),
            nb::arg("keepdims") = false)
 

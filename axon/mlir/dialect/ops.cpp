@@ -2,7 +2,9 @@
 #include <optional>
 #include <utility>
 
+#include "axon/base/macros.h"
 #include "dialect.h"
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Support/LLVM.h"
 

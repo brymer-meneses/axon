@@ -98,6 +98,7 @@ class CompiledFunction {
 
     auto maybe_engine = mlir::ExecutionEngine::create(module_, engine_options);
     if (!maybe_engine) {
+      module_.print(llvm::outs());
       throw std::runtime_error("Failed to create JIT engine");
     }
 

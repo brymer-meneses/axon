@@ -93,7 +93,9 @@ export template <>
 struct Hash<insts::Softmax> {
   static auto hash(const insts::Softmax& op, const IdMap<InstId, Shape>& shapes)
       -> llvm::hash_code {
-    return handleReduceInst(op, shapes);
+    constexpr auto tag = Inst::tag<insts::Softmax>();
+    llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
+    return llvm::hash_combine(operand_shape, tag, op.axis);
   }
 };
 

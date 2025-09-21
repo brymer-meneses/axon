@@ -291,9 +291,10 @@ def Axon_ArgMaxOp : AxonDialect_Op<"argmax", [
 
 def Axon_SoftmaxOp : AxonDialect_Op<"softmax", [
   Pure,
+  SameOperandsAndResultType,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, I64Attr:$dim, BoolAttr:$keep_dims);
+  let arguments = (ins AnyTensor:$operand, I64Attr:$dim);
   let results = (outs AnyTensor:$result);
 
   let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";

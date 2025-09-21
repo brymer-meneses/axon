@@ -1,6 +1,8 @@
 module;
+
 #include <algorithm>
 #include <optional>
+#include <ranges>
 #include <utility>
 
 #include "axon/base/macros.h"
@@ -9,6 +11,8 @@ module;
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Bufferization/Transforms/Bufferize.h"
+#include "mlir/Dialect/Bufferization/Transforms/OneShotModuleBufferize.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/Func/Transforms/Passes.h"
@@ -17,6 +21,7 @@ module;
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Utils/ReshapeOpsUtils.h"
+#include "mlir/Dialect/Utils/StructuredOpsUtils.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -57,7 +62,8 @@ struct ElementWiseBinaryOpLowering : mlir::OpConversionPattern<BinaryOp> {
 
     auto tensor_type =
         mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
-    auto empty_op = createZerosLike(rewriter, tensor_type, loc);
+    auto empty_op =
+        mlir::tensor::EmptyOp::create(rewriter, loc, tensor_type, {});
 
     auto new_op = LoweredBinaryOp::create(
         rewriter, loc, mlir::ValueRange{adaptor.getLhs(), adaptor.getRhs()},
@@ -228,77 +234,6 @@ struct ExpandDimsOpLowering : mlir::OpConversionPattern<ExpandDimsOp> {
         });
 
     rewriter.replaceOp(op, broadcast_op.getResult(0));
-    return mlir::success();
-  }
-};
-
-struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
-  using mlir::OpConversionPattern<SumOp>::OpConversionPattern;
-
-  auto matchAndRewrite(SumOp op, OpAdaptor adaptor,
-                       mlir::ConversionPatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto loc = op.getLoc();
-    auto context = op.getContext();
-    auto input_tensor =
-        mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
-    auto result_tensor =
-        mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
-
-    auto input_rank = input_tensor.getRank();
-    auto dim_to_reduce = static_cast<i64>(op.getDim());
-
-    // If we have keepDims on then we need to set `0` as the accumulator for
-    // that dimension.
-    mlir::AffineMap output_map;
-    if (op.getKeepDims()) {
-      llvm::SmallVector<mlir::AffineExpr> affine_exprs;
-      for (i64 i = 0; i < input_rank; i += 1) {
-        if (i == dim_to_reduce) {
-          affine_exprs.push_back(mlir::getAffineConstantExpr(0, context));
-        } else {
-          affine_exprs.push_back(mlir::getAffineDimExpr(i, context));
-        }
-      }
-      output_map = mlir::AffineMap::get(input_rank, /*symbolCount=*/0,
-                                        affine_exprs, context);
-    } else {
-      llvm::SmallVector<mlir::AffineExpr> affine_exprs;
-      for (i64 i = 0; i < input_rank; i += 1) {
-        if (i != dim_to_reduce) {
-          affine_exprs.push_back(mlir::getAffineDimExpr(i, context));
-        }
-      }
-      output_map = mlir::AffineMap::get(input_rank, /*symbolCount=*/0,
-                                        affine_exprs, context);
-    }
-
-    auto input_map = mlir::AffineMap::getMultiDimIdentityMap(
-        input_tensor.getRank(), context);
-
-    llvm::SmallVector<mlir::AffineMap> indexing_maps = {input_map, output_map};
-
-    llvm::SmallVector iterator_types(input_rank,
-                                     mlir::utils::IteratorType::parallel);
-    iterator_types[dim_to_reduce] = mlir::utils::IteratorType::reduction;
-
-    auto init_op = createZerosLike(rewriter, result_tensor, loc);
-
-    auto sum_op = mlir::linalg::GenericOp::create(
-        rewriter, loc,
-        /*resultTensorTypes=*/mlir::TypeRange{op.getResult().getType()},
-        /*inputs=*/mlir::ValueRange{adaptor.getOperand()},
-        /*outputs=*/mlir::ValueRange{init_op},
-
-        indexing_maps, iterator_types,
-        [&](mlir::OpBuilder& builder, mlir::Location loc,
-            mlir::ValueRange args) {
-          auto add =
-              mlir::arith::AddFOp::create(builder, loc, args[0], args[1]);
-          mlir::linalg::YieldOp::create(builder, loc, add.getResult());
-        });
-
-    rewriter.replaceOp(op, sum_op.getResult(0));
     return mlir::success();
   }
 };
@@ -509,11 +444,16 @@ struct AccumulateOpLowering : mlir::OpConversionPattern<AccumulateOp> {
             })
             .getResult(0);
 
-    auto materialize_op =
-        mlir::bufferization::MaterializeInDestinationOp::create(
-            rewriter, loc, accumulation_op, sink);
+    auto sink_memref_type = mlir::MemRefType::get(
+        sink_tensor_type.getShape(), sink_tensor_type.getElementType());
+    auto sink_as_memref = mlir::bufferization::ToBufferOp::create(
+        rewriter, loc, sink_memref_type, sink);
 
-    rewriter.replaceOp(op, materialize_op.getResult());
+    mlir::bufferization::MaterializeInDestinationOp::create(
+        rewriter, loc, std::nullopt, accumulation_op, sink_as_memref,
+        /*restrict=*/false, /*writable=*/true);
+
+    rewriter.eraseOp(op);
     return mlir::success();
   }
 };
@@ -669,6 +609,77 @@ struct PowOpLowering : mlir::OpConversionPattern<PowOp> {
   }
 };
 
+template <typename ReduceOp>
+static auto reduce(mlir::OpBuilder& rewriter, mlir::Location loc,
+                   mlir::Value input, bool keep_dims, i64 axis,
+                   mlir::arith::ConstantOp init_value) -> mlir::Value {
+  AXON_DCHECK(mlir::isa<mlir::RankedTensorType>(input.getType()));
+
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
+  auto rank = tensor_type.getRank();
+  auto context = rewriter.getContext();
+
+  llvm::SmallVector iterator_types(rank, mlir::utils::IteratorType::parallel);
+  iterator_types[axis] = mlir::utils::IteratorType::reduction;
+
+  llvm::SmallVector<mlir::AffineExpr, 4> output_affine_exprs;
+  for (auto i : std::views::iota(0, rank)) {
+    if (i == axis) {
+      // If we have keep_dims=True, then we should accumulate to the 0th
+      // dimension in the output map. Otherwise, we don't have to push it back
+      // to `affine_exprs`.
+      if (keep_dims) {
+        output_affine_exprs.push_back(mlir::getAffineConstantExpr(0, context));
+      }
+    } else {
+      output_affine_exprs.push_back(mlir::getAffineDimExpr(i, context));
+    }
+  }
+
+  auto output_map = mlir::AffineMap::get(rank, /*symbolCount=*/0,
+                                         output_affine_exprs, context);
+  auto input_map = mlir::AffineMap::getMultiDimIdentityMap(rank, context);
+
+  llvm::SmallVector<mlir::AffineMap> indexing_maps = {input_map, output_map};
+
+  llvm::SmallVector<i64> result_shape(tensor_type.getShape());
+  if (keep_dims) {
+    result_shape[axis] = 1;
+  } else {
+    result_shape.erase(result_shape.begin() + axis);
+  }
+
+  auto result_type =
+      mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
+
+  auto init_op =
+      mlir::tensor::SplatOp::create(rewriter, loc, init_value, result_shape);
+
+  auto reduce_op = mlir::linalg::GenericOp::create(
+      rewriter, loc, mlir::TypeRange{result_type}, mlir::ValueRange{input},
+      mlir::ValueRange{init_op},
+
+      indexing_maps, iterator_types,
+      [](mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args) {
+        auto reduce_op = ReduceOp::create(builder, loc, args[0], args[1]);
+        mlir::linalg::YieldOp::create(builder, loc, reduce_op.getResult());
+      });
+
+  return reduce_op.getResult(0);
+}
+
+static auto getIdentityMapWithout(i64 rank, llvm::ArrayRef<i64> excluded,
+                                  mlir::MLIRContext* context)
+    -> mlir::AffineMap {
+  llvm::SmallVector<mlir::AffineExpr> affine_exprs;
+  for (auto i : std::views::iota(0, rank)) {
+    if (!std::ranges::contains(excluded, i)) {
+      affine_exprs.push_back(mlir::getAffineDimExpr(i, context));
+    }
+  }
+  return mlir::AffineMap::get(rank, /*symbolCount=*/0, affine_exprs, context);
+}
+
 struct SoftmaxOpLowering : mlir::OpConversionPattern<SoftmaxOp> {
   using mlir::OpConversionPattern<SoftmaxOp>::OpConversionPattern;
 
@@ -676,24 +687,114 @@ struct SoftmaxOpLowering : mlir::OpConversionPattern<SoftmaxOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
+    auto input = adaptor.getOperand();
+    auto element_type = op.getResult().getType().getElementType();
+    auto axis = op.getDim();
 
-    auto input_type = op.getOperand().getType();
-    auto result_type = op.getResult().getType();
+    AXON_DCHECK(element_type.isFloat());
 
-    // The name of the operation `linalg.softmax` is counterintuitive. It does
-    // not reduce the tensor along the specified dimension. So we need to emit
-    // another operation to get the behavior we expect.
+    auto init_value = mlir::arith::ConstantOp::create(
+        rewriter, loc, rewriter.getFloatAttr(element_type, -1e30));
+    auto zero = mlir::arith::ConstantOp::create(
+        rewriter, loc, rewriter.getZeroAttr(element_type));
 
-    auto init_op = mlir::tensor::EmptyOp::create(rewriter, loc, input_type, {});
-    auto softmax_op = mlir::linalg::SoftmaxOp::create(
-                          rewriter, loc, mlir::TypeRange{input_type},
-                          adaptor.getOperand(), init_op, op.getDim())
-                          .getResults()[0];
+    auto max =
+        reduce<mlir::arith::MaxNumFOp>(rewriter, loc, input,
+                                       /*keep_dims=*/false, axis, init_value);
+    auto exp_diff = computeExpDiff(rewriter, loc, input, max, axis);
+    auto denominator =
+        reduce<mlir::arith::AddFOp>(rewriter, loc, exp_diff, false, axis, zero);
 
-    auto softmax_reduced_op = SumOp::create(
-        rewriter, loc, result_type, softmax_op, op.getDim(), op.getKeepDims());
+    auto softmax = computeSoftmax(rewriter, loc, exp_diff, denominator, axis);
+    rewriter.replaceOp(op, softmax);
+    return mlir::success();
+  }
 
-    rewriter.replaceOp(op, softmax_reduced_op);
+  static auto computeExpDiff(mlir::OpBuilder& builder, mlir::Location loc,
+                             mlir::Value input, mlir::Value max, i64 axis)
+      -> mlir::Value {
+    auto context = input.getContext();
+    auto input_type = mlir::cast<mlir::RankedTensorType>(input.getType());
+    auto rank = input_type.getRank();
+
+    llvm::SmallVector iterator_types(rank, mlir::utils::IteratorType::parallel);
+    llvm::SmallVector indexing_maps = {
+        // lhs map
+        mlir::AffineMap::getMultiDimIdentityMap(rank, context),
+        // rhs map
+        getIdentityMapWithout(rank, {axis}, context),
+        // output map
+        mlir::AffineMap::getMultiDimIdentityMap(rank, context),
+    };
+
+    auto init_op = mlir::tensor::EmptyOp::create(builder, loc, input_type, {});
+
+    auto generic_op = mlir::linalg::GenericOp::create(
+        builder, loc, mlir::TypeRange{input_type}, mlir::ValueRange{input, max},
+        mlir::ValueRange{init_op}, indexing_maps, iterator_types,
+        [](mlir::OpBuilder& builder, mlir::Location loc,
+           mlir::ValueRange args) {
+          auto diff =
+              mlir::arith::SubFOp::create(builder, loc, args[0], args[1]);
+          auto exp = mlir::math::ExpOp::create(builder, loc, diff).getResult();
+          mlir::linalg::YieldOp::create(builder, loc, exp);
+        });
+
+    return generic_op.getResult(0);
+  }
+
+  static auto computeSoftmax(mlir::OpBuilder& builder, mlir::Location loc,
+                             mlir::Value numerator, mlir::Value denominator,
+                             i64 axis) -> mlir::Value {
+    auto context = numerator.getContext();
+    auto input_type = mlir::cast<mlir::RankedTensorType>(numerator.getType());
+    auto rank = input_type.getRank();
+
+    llvm::SmallVector iterator_types(rank, mlir::utils::IteratorType::parallel);
+    llvm::SmallVector indexing_maps = {
+        // lhs map
+        mlir::AffineMap::getMultiDimIdentityMap(rank, context),
+        // rhs map
+        getIdentityMapWithout(rank, {axis}, context),
+        // output map
+        mlir::AffineMap::getMultiDimIdentityMap(rank, context),
+    };
+
+    auto init_op = mlir::tensor::EmptyOp::create(builder, loc, input_type, {});
+
+    auto generic_op = mlir::linalg::GenericOp::create(
+        builder, loc, mlir::TypeRange{input_type},
+        mlir::ValueRange{numerator, denominator}, mlir::ValueRange{init_op},
+        indexing_maps, iterator_types,
+        [](mlir::OpBuilder& builder, mlir::Location loc,
+           mlir::ValueRange args) {
+          auto div = mlir::arith::DivFOp::create(builder, loc, args[0], args[1])
+                         .getResult();
+          mlir::linalg::YieldOp::create(builder, loc, div);
+        });
+
+    return generic_op.getResult(0);
+  }
+};
+
+struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
+  using mlir::OpConversionPattern<SumOp>::OpConversionPattern;
+
+  auto matchAndRewrite(SumOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+
+    auto element_type = op.getResult().getType().getElementType();
+
+    auto init_value = mlir::arith::ConstantOp::create(
+        rewriter, loc, rewriter.getZeroAttr(element_type));
+
+    auto sum_op =
+        reduce<mlir::arith::AddFOp>(rewriter, loc, adaptor.getOperand(),
+                                    op.getKeepDims(), op.getDim(), init_value);
+
+    rewriter.replaceOp(op, sum_op);
     return mlir::success();
   }
 };

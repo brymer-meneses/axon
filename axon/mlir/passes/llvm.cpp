@@ -10,6 +10,7 @@ module;
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+#include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
 #include "mlir/Conversion/MemRefToEmitC/MemRefToEmitC.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
@@ -107,6 +108,8 @@ struct AxonToLlvmLoweringPass
     mlir::populateAffineToStdConversionPatterns(patterns);
     mlir::arith::populateArithToLLVMConversionPatterns(type_converter,
                                                        patterns);
+    mlir::populateMathToLLVMConversionPatterns(type_converter, patterns);
+
     mlir::populateSCFToControlFlowConversionPatterns(patterns);
     mlir::cf::populateControlFlowToLLVMConversionPatterns(type_converter,
                                                           patterns);

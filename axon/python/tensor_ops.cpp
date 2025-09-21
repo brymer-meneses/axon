@@ -341,4 +341,18 @@ auto performReduceInst(std::shared_ptr<Tensor> input, i32 axis, bool keep_dims)
   return std::make_shared<Tensor>(session, softmax_inst_id, input->data_type());
 }
 
+export auto performSoftmax(std::shared_ptr<Tensor> input, i32 axis)
+    -> std::shared_ptr<Tensor> {
+  if (axis >= input->rank()) {
+    throw nb::value_error("Passed `dim` exceeded the rank of the tensor.");
+  }
+  auto session = getTraceSession(*input);
+
+  auto& graph = session->graph();
+  auto input_inst_id = session->insts()[input.get()];
+  auto softmax_inst_id = graph.createOp(insts::Softmax(input_inst_id, axis));
+
+  return std::make_shared<Tensor>(session, softmax_inst_id, input->data_type());
+}
+
 }  // namespace axon

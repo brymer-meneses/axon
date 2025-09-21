@@ -25,6 +25,7 @@ target_link_libraries(mlir
     MLIRSCFToControlFlow
     MLIRTensorToLinalg
     MLIRFuncToLLVM
+    MLIRMathToLLVM
     MLIRMemRefToLLVM
     MLIRArithToLLVM
     MLIRBufferizationPipelines

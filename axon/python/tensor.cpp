@@ -34,7 +34,7 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream, const T* ptr,
   static constexpr auto dump_formatted = [](llvm::raw_string_ostream& stream,
                                             T elem) {
     if constexpr (std::is_floating_point_v<T>) {
-      stream << std::format("{:.4f}", elem);
+      stream << llvm::formatv("{0:F4}", elem);
     } else if constexpr (std::is_integral_v<T>) {
       stream << elem;
     }

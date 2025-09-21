@@ -106,14 +106,22 @@ static auto codegenReduceInst(const InstType& op, CompilationContext& ctx,
                             result_type, operand, op.axis, op.keep_dims);
 }
 
-static auto codegen(const insts::Softmax& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
-  codegenReduceInst<insts::Softmax, SoftmaxOp>(op, ctx, inst_id);
-}
-
 static auto codegen(const insts::Sum& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   codegenReduceInst<insts::Sum, SumOp>(op, ctx, inst_id);
+}
+
+static auto codegen(const insts::Softmax& op, CompilationContext& ctx,
+                    InstId inst_id) -> void {
+  auto operand = ctx.values[op.operand_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+
+  auto result_shape = ctx.graph.getShape(inst_id);
+  auto result_type =
+      mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
+
+  ctx.values[inst_id] = SoftmaxOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), result_type, operand, op.axis);
 }
 
 static auto codegen(const insts::ExpandDims& op, CompilationContext& ctx,

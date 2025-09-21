@@ -15,6 +15,7 @@ module;
 #include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/AllocationOpInterfaceImpl.h"
 #include "mlir/Dialect/MemRef/Transforms/BufferViewFlowOpInterfaceImpl.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
@@ -77,6 +78,20 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
 
   if (level >= LoweringLevel::Standard) {
     manager.addPass(axon::createStandardLoweringPass());
+    manager.addPass(mlir::createCanonicalizerPass());
+    manager.addPass(mlir::createCSEPass());
+  }
+
+  if (level >= LoweringLevel::Linalg) {
+    manager.addPass(mlir::createLinalgGeneralizeNamedOpsPass());
+    manager.addPass(mlir::createLinalgNamedOpConversionPass());
+
+    manager.addPass(mlir::createConvertElementwiseToLinalgPass());
+    manager.addPass(mlir::createLinalgElementwiseOpFusionPass());
+    manager.addPass(mlir::createLinalgFoldIntoElementwisePass());
+
+    manager.addPass(mlir::createCanonicalizerPass());
+    manager.addPass(mlir::createCSEPass());
 
     mlir::bufferization::OneShotBufferizePassOptions bufferization_options;
     bufferization_options.checkParallelRegions = true;
@@ -85,15 +100,6 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
 
     manager.addPass(
         mlir::bufferization::createOneShotBufferizePass(bufferization_options));
-
-    manager.addPass(mlir::createCanonicalizerPass());
-    manager.addPass(mlir::createCSEPass());
-  }
-
-  if (level >= LoweringLevel::Linalg) {
-    manager.addPass(mlir::createConvertElementwiseToLinalgPass());
-    manager.addPass(mlir::createLinalgElementwiseOpFusionPass());
-    manager.addPass(mlir::createLinalgFoldIntoElementwisePass());
 
     manager.addPass(mlir::createCanonicalizerPass());
     manager.addPass(mlir::createCSEPass());
@@ -140,21 +146,8 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     manager.addPass(mlir::createCanonicalizerPass());
     manager.addPass(mlir::createCSEPass());
 
-    manager.addNestedPass<mlir::func::FuncOp>(
-        mlir::bufferization::createBufferHoistingPass());
-    manager.addNestedPass<mlir::func::FuncOp>(
-        mlir::bufferization::createBufferLoopHoistingPass());
-    manager.addNestedPass<mlir::func::FuncOp>(
-        mlir::bufferization::createPromoteBuffersToStackPass());
-
-    manager.addPass(mlir::createCanonicalizerPass());
-    manager.addPass(mlir::createCSEPass());
-
     // TODO: investigate why this causes test failures
     // manager.addPass(mlir::affine::createLoopFusionPass());
-
-    manager.addPass(mlir::createCanonicalizerPass());
-    manager.addPass(mlir::createCSEPass());
   }
 
   if (level >= LoweringLevel::LLVM) {
