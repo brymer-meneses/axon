@@ -94,7 +94,7 @@ NB_MODULE(_core, m) {
         }
 
         auto& graph = session->graph();
-        auto inst_id = session->insts()[&tensor];
+        auto inst_id = session->getInstId(&tensor);
         graph.setReturned(inst_id);
 
         auto module = codegenGraph(graph, builder);

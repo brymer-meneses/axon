@@ -1,12 +1,12 @@
 module;
 
+#include <memory>
+
 #include "axon/base/macros.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "nanobind/nanobind.h"
-
-#include <memory>
 
 export module axon.python:tensor_impl;
 
@@ -21,23 +21,24 @@ namespace axon {
 
 export class TraceSession : public std::enable_shared_from_this<TraceSession> {
  public:
-  auto getShape(const Tensor* tensor) const -> llvm::ArrayRef<i64> {
+  auto getInstId(const Tensor* tensor) const -> InstId {
     AXON_DCHECK(insts_.contains(tensor));
-
-    auto inst_id = insts_.at(tensor);
+    return insts_.at(tensor);
+  }
+  auto getShape(const Tensor* tensor) const -> llvm::ArrayRef<i64> {
+    auto inst_id = getInstId(tensor);
     return graph_.getShape(inst_id);
   }
 
   auto getDataType(const Tensor* tensor) const -> DataType {
-    AXON_DCHECK(insts_.contains(tensor));
-    auto inst_id = insts_.at(tensor);
-
+    auto inst_id = getInstId(tensor);
     return graph_.getDataType(inst_id);
   }
 
   auto declareParam(const Tensor* tensor) -> void {
+    AXON_DCHECK(tensor->isEvaluated());
+
     auto storage = tensor->storage();
-    AXON_DCHECK(storage != nullptr);
 
     auto inst_id = graph_.declareParam(storage->shape(), storage->data_type(),
                                        tensor->requiresGrad());
@@ -103,48 +104,6 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
   llvm::SmallVector<Tensor*> parameters_;
 };
 
-template <Numeric T>
-static auto dumpRecursive(llvm::raw_string_ostream& stream, const T* ptr,
-                          size_t dim, llvm::ArrayRef<i64> shape,
-                          llvm::ArrayRef<i64> strides, int indent_width,
-                          int depth = 0) -> void {
-  static constexpr auto dump_formatted = [](llvm::raw_string_ostream& stream,
-                                            T elem) {
-    if constexpr (std::is_floating_point_v<T>) {
-      stream << llvm::formatv("{0:F4}", elem);
-    } else if constexpr (std::is_integral_v<T>) {
-      stream << elem;
-    }
-  };
-
-  if (dim == shape.size() - 1) {
-    // Base case: 1-D row
-    stream << "[";
-    for (i64 i = 0; i < shape[dim]; ++i) {
-      dump_formatted(stream, ptr[i * strides[dim]]);
-
-      if (i + 1 < shape[dim]) {
-        stream << ", ";
-      }
-    }
-    stream << "]";
-  } else {
-    // Recursive case: nested arrays
-    stream << "[";
-    for (i64 i = 0; i < shape[dim]; ++i) {
-      if (i > 0) {
-        stream << ",\n";
-        for (i64 j = 0; j < (depth + 1) * indent_width; ++j) {
-          stream << ' ';
-        }
-      }
-      dumpRecursive(stream, ptr + i * strides[dim], dim + 1, shape, strides,
-                    indent_width, depth + 1);
-    }
-    stream << "]";
-  }
-}
-
 Tensor::~Tensor() {
   if (session_) {
     session_->insts().erase(this);
@@ -161,42 +120,6 @@ auto Tensor::shape() const -> llvm::ArrayRef<i64> {
   // This is a lazy tensor, so get the shape from the trace session.
   AXON_DCHECK(session_ != nullptr);
   return session_->getShape(this);
-}
-
-auto Tensor::asString() -> std::string {
-  if (!isEvaluated()) {
-    evaluate();
-  }
-
-  AXON_DCHECK(isEvaluated());
-
-  std::string repr;
-  llvm::raw_string_ostream stream{repr};
-
-  auto shape = storage_->shape();
-  auto strides = storage_->strides();
-
-  stream << "tensor(";
-  switch (storage_->data_type().kind()) {
-    case DataType::Float64: {
-      auto base = reinterpret_cast<const f64*>(storage_->data_ptr());
-      dumpRecursive<f64>(stream, base, 0, shape, strides, /*indent_width=*/8);
-      break;
-    }
-    case DataType::Float32: {
-      auto base = reinterpret_cast<const f32*>(storage_->data_ptr());
-      dumpRecursive<f32>(stream, base, 0, shape, strides, /*indent_width=*/8);
-      break;
-    }
-  }
-
-  if (requires_grad_) {
-    stream << ", requires_grad=True";
-  }
-  stream << ")";
-
-  stream.flush();
-  return repr;
 }
 
 Tensor::Tensor(std::shared_ptr<TraceSession> session, InstId inst_id)
@@ -251,10 +174,9 @@ auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
     session_->declareParam(grad.get());
   }
 
-  auto& insts = session_->insts();
   auto& graph = session_->graph();
-  InstId grad_id = insts[grad.get()];
-  auto tensor_id = insts[this];
+  auto grad_id = session_->getInstId(grad.get());
+  auto tensor_id = session_->getInstId(this);
 
   axon::backward(graph, tensor_id, grad_id);
 
@@ -267,6 +189,84 @@ auto Tensor::isRoot() const -> bool {
     return session_->parameters().size() == 0;
   }
   return true;
+}
+
+template <Numeric T>
+static auto dumpRecursive(llvm::raw_string_ostream& stream, const T* ptr,
+                          size_t dim, llvm::ArrayRef<i64> shape,
+                          llvm::ArrayRef<i64> strides, int indent_width,
+                          int depth = 0) -> void {
+  static constexpr auto dump_formatted = [](llvm::raw_string_ostream& stream,
+                                            T elem) {
+    if constexpr (std::is_floating_point_v<T>) {
+      stream << llvm::formatv("{0:F4}", elem);
+    } else if constexpr (std::is_integral_v<T>) {
+      stream << elem;
+    }
+  };
+
+  if (dim == shape.size() - 1) {
+    // Base case: 1-D row
+    stream << "[";
+    for (i64 i = 0; i < shape[dim]; ++i) {
+      dump_formatted(stream, ptr[i * strides[dim]]);
+
+      if (i + 1 < shape[dim]) {
+        stream << ", ";
+      }
+    }
+    stream << "]";
+  } else {
+    // Recursive case: nested arrays
+    stream << "[";
+    for (i64 i = 0; i < shape[dim]; ++i) {
+      if (i > 0) {
+        stream << ",\n";
+        for (i64 j = 0; j < (depth + 1) * indent_width; ++j) {
+          stream << ' ';
+        }
+      }
+      dumpRecursive(stream, ptr + i * strides[dim], dim + 1, shape, strides,
+                    indent_width, depth + 1);
+    }
+    stream << "]";
+  }
+}
+
+auto Tensor::asString() -> std::string {
+  if (!isEvaluated()) {
+    evaluate();
+  }
+
+  AXON_DCHECK(isEvaluated());
+
+  std::string repr;
+  llvm::raw_string_ostream stream{repr};
+
+  auto shape = storage_->shape();
+  auto strides = storage_->strides();
+
+  stream << "tensor(";
+  switch (storage_->data_type().kind()) {
+    case DataType::Float64: {
+      auto base = reinterpret_cast<const f64*>(storage_->data_ptr());
+      dumpRecursive<f64>(stream, base, 0, shape, strides, /*indent_width=*/8);
+      break;
+    }
+    case DataType::Float32: {
+      auto base = reinterpret_cast<const f32*>(storage_->data_ptr());
+      dumpRecursive<f32>(stream, base, 0, shape, strides, /*indent_width=*/8);
+      break;
+    }
+  }
+
+  if (requires_grad_) {
+    stream << ", requires_grad=True";
+  }
+  stream << ")";
+
+  stream.flush();
+  return repr;
 }
 
 }  // namespace axon

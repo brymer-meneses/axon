@@ -144,8 +144,8 @@ auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
 
   auto session = getTraceSession(*lhs, *rhs);
 
-  auto lhs_id = session->insts()[lhs.get()];
-  auto rhs_id = session->insts()[rhs.get()];
+  auto lhs_id = session->getInstId(lhs.get());
+  auto rhs_id = session->getInstId(rhs.get());
 
   auto lhs_shape = lhs->shape();
   auto rhs_shape = rhs->shape();
@@ -193,8 +193,8 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
   llvm::ArrayRef<i64> lhs_shape = session->getShape(lhs.get());
   llvm::ArrayRef<i64> rhs_shape = session->getShape(rhs.get());
 
-  auto lhs_id = session->insts()[lhs.get()];
-  auto rhs_id = session->insts()[rhs.get()];
+  auto lhs_id = session->getInstId(lhs.get());
+  auto rhs_id = session->getInstId(rhs.get());
 
   if (lhs_shape.size() > 3 || rhs_shape.size() > 3 || lhs_shape.size() < 1 ||
       rhs_shape.size() < 1) {
@@ -259,7 +259,7 @@ auto performScalarMul(std::shared_ptr<Tensor> input, T scalar_value)
   }
 
   Scalar scalar{scalar_value};
-  auto input_id = session->insts().at(input.get());
+  auto input_id = session->getInstId(input.get());
   auto product_inst_id =
       session->graph().createOp(insts::ScalarMul(input_id, scalar));
   return std::make_shared<Tensor>(session, product_inst_id);
@@ -271,7 +271,7 @@ auto performReduceInst(std::shared_ptr<Tensor> input, i32 axis, bool keep_dims)
   auto session = getTraceSession(*input);
 
   auto& graph = session->graph();
-  auto input_inst_id = session->insts()[input.get()];
+  auto input_inst_id = session->getInstId(input.get());
   auto softmax_inst_id =
       graph.createOp(InstType(input_inst_id, axis, keep_dims));
 
@@ -285,9 +285,9 @@ export auto performSoftmax(std::shared_ptr<Tensor> input, i32 axis)
   }
   auto session = getTraceSession(*input);
 
-  auto& graph = session->graph();
-  auto input_inst_id = session->insts()[input.get()];
-  auto softmax_inst_id = graph.createOp(insts::Softmax(input_inst_id, axis));
+  auto input_inst_id = session->getInstId(input.get());
+  auto softmax_inst_id =
+      session->graph().createOp(insts::Softmax(input_inst_id, axis));
 
   return std::make_shared<Tensor>(session, softmax_inst_id);
 }
