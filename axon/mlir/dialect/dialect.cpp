@@ -1,6 +1,7 @@
 #include "dialect.h"
 
 #include "generated/dialect.cpp.inc"
+#include "generated/dialect_enums.cpp.inc"
 
 #define GET_TYPEDEF_CLASSES
 #include "generated/dialect_type_defs.cpp.inc"

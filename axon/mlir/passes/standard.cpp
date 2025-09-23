@@ -777,6 +777,83 @@ struct SoftmaxOpLowering : mlir::OpConversionPattern<SoftmaxOp> {
   }
 };
 
+struct CompareOpLowering : mlir::OpConversionPattern<CompareOp> {
+  using mlir::OpConversionPattern<CompareOp>::OpConversionPattern;
+
+  auto matchAndRewrite(CompareOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+    auto result_type = op.getResult().getType();
+    auto element_type = result_type.getElementType();
+
+    AXON_DCHECK(element_type.isFloat(), "Other types TODO");
+
+    auto arith_cmp_attr = getArithCmpAttr(element_type, op.getPredicate());
+    auto arith_cmp_result_type = mlir::RankedTensorType::get(
+        result_type.getShape(), rewriter.getI1Type());
+
+    auto comparison_op = mlir::arith::CmpFOp::create(
+        rewriter, loc, arith_cmp_result_type, arith_cmp_attr, adaptor.getLhs(),
+        adaptor.getRhs());
+
+    auto cast_op = mlir::arith::UIToFPOp::create(rewriter, loc, result_type,
+                                                 comparison_op);
+
+    rewriter.replaceOp(op, cast_op);
+    return mlir::success();
+  }
+
+  static auto getArithCmpAttr(mlir::Type type, ComparePredicate predicate)
+      -> mlir::arith::CmpFPredicate {
+    if (type.isFloat()) {
+      switch (predicate) {
+        case ComparePredicate::le:
+          return mlir::arith::CmpFPredicate::ULE;
+        case ComparePredicate::lt:
+          return mlir::arith::CmpFPredicate::ULT;
+        case ComparePredicate::ge:
+          return mlir::arith::CmpFPredicate::UGE;
+        case ComparePredicate::gt:
+          return mlir::arith::CmpFPredicate::UGT;
+        case ComparePredicate::eq:
+          return mlir::arith::CmpFPredicate::UEQ;
+        case ComparePredicate::ne:
+          return mlir::arith::CmpFPredicate::UNE;
+      }
+    }
+
+    if (type.isInteger()) {
+      switch (predicate) {
+        case ComparePredicate::le:
+          return mlir::arith::CmpFPredicate::OLE;
+        case ComparePredicate::lt:
+          return mlir::arith::CmpFPredicate::OLT;
+        case ComparePredicate::ge:
+          return mlir::arith::CmpFPredicate::OGE;
+        case ComparePredicate::gt:
+          return mlir::arith::CmpFPredicate::OGT;
+        case ComparePredicate::eq:
+          return mlir::arith::CmpFPredicate::OEQ;
+        case ComparePredicate::ne:
+          return mlir::arith::CmpFPredicate::ONE;
+      }
+    }
+
+    AXON_UNREACHABLE("This should be an unreachable point");
+  }
+};
+
+struct ReluOpLowering : mlir::OpConversionPattern<ReluOp> {
+  using mlir::OpConversionPattern<ReluOp>::OpConversionPattern;
+
+  auto matchAndRewrite(ReluOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+  }
+};
+
 struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
   using mlir::OpConversionPattern<SumOp>::OpConversionPattern;
 
@@ -856,6 +933,8 @@ struct AxonToStandardLoweringPass
       GetDataOpLowering, 
       GetGradOpLowering,
       AccumulateOpLowering, 
+
+      CompareOpLowering,
 
       AddOpLowering, 
       MulOpLowering, 

@@ -20,6 +20,7 @@
 
 // Dialect
 #include "generated/dialect.h.inc"
+#include "generated/dialect_enums.h.inc"
 
 #define GET_TYPEDEF_CLASSES
 #include "generated/dialect_type_defs.h.inc"

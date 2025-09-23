@@ -107,10 +107,19 @@ endif()
 set(LLVM_TARGET_DEFINITIONS axon/mlir/dialect/dialect.td)
 mlir_tablegen(generated/dialect.h.inc -gen-dialect-decls)
 mlir_tablegen(generated/dialect.cpp.inc -gen-dialect-defs)
+
 mlir_tablegen(generated/dialect_type_defs.h.inc -gen-typedef-decls)
 mlir_tablegen(generated/dialect_type_defs.cpp.inc -gen-typedef-defs)
+
 mlir_tablegen(generated/dialect_ops.h.inc -gen-op-decls)
 mlir_tablegen(generated/dialect_ops.cpp.inc -gen-op-defs)
+
+mlir_tablegen(generated/dialect_attributes_decls.h.inc -gen-attrdef-decls)
+mlir_tablegen(generated/dialect_attributes_defs.cpp.inc -gen-attrdef-defs)
+
+mlir_tablegen(generated/dialect_enums.h.inc -gen-enum-decls)
+mlir_tablegen(generated/dialect_enums.cpp.inc -gen-enum-defs)
+
 add_public_tablegen_target(AxonDialectIncGen)
 add_dependencies(axon AxonDialectIncGen)
 

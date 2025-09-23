@@ -286,6 +286,40 @@ static auto codegen(const insts::Pow& op, CompilationContext& ctx,
                     getFloatAttr(element_type, op.exponent.as<f64>()));
 }
 
+static auto codegen(const insts::ScalarMax& op, CompilationContext& ctx,
+                    InstId inst_id) -> void {
+  AXON_UNREACHABLE("TODO");
+}
+
+static auto codegen(const insts::Compare& op, CompilationContext& ctx,
+                    InstId inst_id) -> void {
+  static constexpr auto comparison_predicate =
+      [](mlir::MLIRContext* context, insts::Compare::Predicate predicate) {
+        switch (predicate) {
+          case insts::Compare::Predicate::Equal:
+            return ComparePredicateAttr::get(context, ComparePredicate::eq);
+          case insts::Compare::Predicate::Less:
+            return ComparePredicateAttr::get(context, ComparePredicate::lt);
+          case insts::Compare::Predicate::LessEq:
+            return ComparePredicateAttr::get(context, ComparePredicate::le);
+          case insts::Compare::Predicate::Greater:
+            return ComparePredicateAttr::get(context, ComparePredicate::gt);
+          case insts::Compare::Predicate::GreaterEq:
+            return ComparePredicateAttr::get(context, ComparePredicate::ge);
+          case insts::Compare::Predicate::NotEqual:
+            return ComparePredicateAttr::get(context, ComparePredicate::ne);
+        }
+      };
+
+  auto lhs = ctx.values[op.lhs_id];
+  auto rhs = ctx.values[op.rhs_id];
+  auto context = ctx.builder.getContext();
+  auto predicate = comparison_predicate(context, op.predicate);
+
+  ctx.values[inst_id] = CompareOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs, predicate);
+}
+
 static auto codegen(const insts::Sub& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto lhs = ctx.values[op.lhs_id];

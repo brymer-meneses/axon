@@ -1,6 +1,7 @@
 #ifndef AXON_DIALECT
 #define AXON_DIALECT
 
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -308,7 +309,29 @@ def Axon_ReluOp : AxonDialect_Op<"relu", [
   let arguments = (ins AnyTensor:$operand);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$operand `->` type($result) attr-dict";
+}
+
+def ComparePredicateAttr : I32EnumAttr<"ComparePredicate", "comparison predicate", [
+  I32EnumAttrCase<"eq", 0>, 
+  I32EnumAttrCase<"ne", 6>, 
+  I32EnumAttrCase<"lt", 2>, 
+  I32EnumAttrCase<"le", 3>,
+  I32EnumAttrCase<"gt", 4>, 
+  I32EnumAttrCase<"ge", 5>
+]> {
+  let cppNamespace = "axon";
+}
+
+def Axon_CompareOp : AxonDialect_Op<"compare", [
+  Pure,
+  SameOperandsAndResultType,
+  SameOperandsAndResultElementType,
+]> {
+  let arguments = (ins AnyTensor:$lhs, AnyTensor:$rhs, ComparePredicateAttr:$predicate);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$lhs $rhs $predicate`->` type($result) attr-dict";
 }
 
 def Axon_PowOp : AxonDialect_Op<"pow", [

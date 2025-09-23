@@ -83,10 +83,16 @@ static auto performBroadcasting(Graph& graph, InstId source_id,
       insts::ExpandDims(source_id, broadcast_info->expand_dim_mappings));
 }
 
-static auto validateDataType(Tensor& lhs, Tensor& rhs) -> void {
+static auto ensureHasSameDataType(Tensor& lhs, Tensor& rhs) -> void {
   if (lhs.data_type() != rhs.data_type()) {
     throw nb::value_error(
         "Cannot operate on two tensors with different data types");
+  }
+}
+
+static auto ensureHasSameShape(Tensor& lhs, Tensor& rhs) -> void {
+  if (lhs.shape() != rhs.shape()) {
+    throw nb::value_error("Expected the two tensors to have the same shape.");
   }
 }
 
@@ -140,7 +146,7 @@ export template <typename ElementWiseInst>
 auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
                                        std::shared_ptr<Tensor> rhs)
     -> std::shared_ptr<Tensor> {
-  validateDataType(*lhs, *rhs);
+  ensureHasSameDataType(*lhs, *rhs);
 
   auto session = getTraceSession(*lhs, *rhs);
 
@@ -192,7 +198,7 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
         "Attempted to multiply tensors with more than rank of 3.");
   }
 
-  validateDataType(*lhs, *rhs);
+  ensureHasSameDataType(*lhs, *rhs);
   auto session = getTraceSession(*lhs, *rhs);
   auto& graph = session->graph();
 
@@ -290,6 +296,21 @@ export auto performSoftmax(std::shared_ptr<Tensor> input, i32 axis)
       session->graph().createOp(insts::Softmax(input_inst_id, axis));
 
   return std::make_shared<Tensor>(session, softmax_inst_id);
+}
+
+export template <insts::Compare::Predicate predicate>
+auto performComparison(std::shared_ptr<Tensor> lhs, std::shared_ptr<Tensor> rhs)
+    -> std::shared_ptr<Tensor> {
+  ensureHasSameDataType(*lhs, *rhs);
+  ensureHasSameShape(*lhs, *rhs);
+
+  auto session = getTraceSession(*lhs, *rhs);
+  auto lhs_id = session->getInstId(lhs.get());
+  auto rhs_id = session->getInstId(rhs.get());
+  auto result_id =
+      session->graph().createOp(insts::Compare(lhs_id, rhs_id, predicate));
+
+  return std::make_shared<Tensor>(session, result_id);
 }
 
 }  // namespace axon

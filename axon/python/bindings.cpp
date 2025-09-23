@@ -191,6 +191,13 @@ NB_MODULE(_core, m) {
 
       .def("__repr__", &Tensor::asString)
 
+      .def("__eq__", &performComparison<insts::Compare::Predicate::Equal>)
+      .def("__ne__", &performComparison<insts::Compare::Predicate::NotEqual>)
+      .def("__le__", &performComparison<insts::Compare::Predicate::LessEq>)
+      .def("__lt__", &performComparison<insts::Compare::Predicate::Less>)
+      .def("__ge__", &performComparison<insts::Compare::Predicate::GreaterEq>)
+      .def("__gt__", &performComparison<insts::Compare::Predicate::Greater>)
+
       .def("__add__", &performBinaryElementWiseOperation<insts::Add>)
       .def("__mul__", &performBinaryElementWiseOperation<insts::Mul>)
       .def("__sub__", &performBinaryElementWiseOperation<insts::Sub>)

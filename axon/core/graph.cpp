@@ -230,7 +230,8 @@ export class Graph {
 
       if constexpr (InstType::traits.shape_rule == ShapeInfo::SameAsOperands) {
         if constexpr (InstType::traits.num_operands == 2) {
-          auto [lhs_id, rhs_id] = op;
+          auto lhs_id = op.lhs_id;
+          auto rhs_id = op.rhs_id;
           Shape shape = *shapes_.get(lhs_id);
           shapes_.set(inst_id, std::move(shape));
         } else if constexpr (InstType::traits.num_operands == 1) {

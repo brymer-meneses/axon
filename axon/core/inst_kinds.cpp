@@ -193,7 +193,7 @@ struct Constant {
 struct AccumulateGrad {
   constexpr static auto traits = InstTraits{
       .num_operands = 2,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .shape_rule = ShapeInfo::None,
       .differentiable = false,
   };
 
@@ -283,17 +283,41 @@ struct Softmax {
   i32 axis;
 };
 
-struct Relu {
+struct ScalarMax {
   constexpr static auto traits = InstTraits{
       .num_operands = 1,
-      .shape_rule = ShapeInfo::Custom,
-      // TODO: add backward rule for this set it to false for now.
+      .shape_rule = ShapeInfo::SameAsOperands,
       .differentiable = true,
   };
 
-  auto operator==(const Relu&) const -> bool = default;
+  auto operator==(const ScalarMax&) const -> bool = default;
 
+  Scalar scalar;
   InstId operand_id;
+};
+
+// Performs binary comparison
+struct Compare {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 2,
+      .shape_rule = ShapeInfo::SameAsOperands,
+      .differentiable = false,
+  };
+
+  enum class Predicate {
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+    Equal,
+    NotEqual,
+  };
+
+  auto operator==(const Compare&) const -> bool = default;
+
+  InstId lhs_id;
+  InstId rhs_id;
+  Predicate predicate;
 };
 
 }  // namespace insts
@@ -305,6 +329,8 @@ using InstInternalType =
       insts::Mul, 
       insts::Pow,
       insts::Softmax,
+      insts::ScalarMax,
+      insts::Compare,
       insts::Sub,
       insts::Neg,
       insts::ScalarMul,
