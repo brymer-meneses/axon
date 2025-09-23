@@ -125,6 +125,7 @@ auto Tensor::shape() const -> llvm::ArrayRef<i64> {
 Tensor::Tensor(std::shared_ptr<TraceSession> session, InstId inst_id)
     : session_(std::move(session)) {
   session_->insts()[this] = inst_id;
+  requires_grad_ = session_->graph().checkRequiresGrad(inst_id);
 }
 
 auto Tensor::data_type() const -> DataType {
@@ -160,6 +161,11 @@ auto Tensor::evaluate() -> void {
 
 auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
   AXON_DCHECK(session_ != nullptr);
+
+  if (!grad) {
+    // we should make a scalar tensor and propagate that instead.
+    AXON_UNREACHABLE("TODO");
+  }
 
   if (grad->data_type() != data_type()) {
     throw nb::value_error(

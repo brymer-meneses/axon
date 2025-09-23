@@ -230,12 +230,14 @@ NB_MODULE(_core, m) {
             auto data_ptr = reinterpret_cast<const f32*>(array.data());
             checkIsWithinTolerance<const f32>(tensor_ptr, data_ptr, size,
                                               tolerance);
+            break;
           }
           case DataType::Float64: {
             auto tensor_ptr = tensor->storage()->as<f64>();
             auto data_ptr = reinterpret_cast<const f64*>(array.data());
             checkIsWithinTolerance<const f64>(tensor_ptr, data_ptr, size,
                                               tolerance);
+            break;
           }
         }
       },

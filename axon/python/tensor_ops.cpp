@@ -186,6 +186,12 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
     return false;
   };
 
+  if (lhs->rank() > 3 || rhs->rank() > 3 || lhs->rank() < 1 ||
+      rhs->rank() < 1) {
+    throw std::runtime_error(
+        "Attempted to multiply tensors with more than rank of 3.");
+  }
+
   validateDataType(*lhs, *rhs);
   auto session = getTraceSession(*lhs, *rhs);
   auto& graph = session->graph();
@@ -195,12 +201,6 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
 
   auto lhs_id = session->getInstId(lhs.get());
   auto rhs_id = session->getInstId(rhs.get());
-
-  if (lhs_shape.size() > 3 || rhs_shape.size() > 3 || lhs_shape.size() < 1 ||
-      rhs_shape.size() < 1) {
-    throw std::runtime_error(
-        "Attempted to multiply tensors with more than rank of 3.");
-  }
 
   auto lhs_elems = computeNumElems(lhs_shape);
   auto rhs_elems = computeNumElems(rhs_shape);

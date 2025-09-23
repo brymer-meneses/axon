@@ -16,7 +16,7 @@ class Module:
         self.__dict__[name] = value
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        return self.forward(args, kwargs)
+        return self.forward(*args, **kwargs)
 
     @property
     def parameters(self) -> List[Tensor]:
