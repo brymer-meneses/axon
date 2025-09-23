@@ -199,6 +199,10 @@ export class GlobalContext {
     return std::move(storage);
   }
 
+  auto getTotalNumberOfCompiledFunctions() const -> u64 {
+    return graph_registry_.size();
+  }
+
  private:
   GlobalContext() : mlir_context_(createDialectRegistry()) {
     mlir_context_.loadAllAvailableDialects();

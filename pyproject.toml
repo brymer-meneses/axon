@@ -7,7 +7,7 @@ dependencies = [
 
 [tool.setuptools]
 package-dir = {"" = "axon/python"}
-packages = ["axon", "axon.nn", "axon.testing"]
+packages = ["axon", "axon.nn", "axon.testing", "axon.runtime"]
 
 [tool.setuptools.package-data]
 "*" = ["*.so", "*.pyd", "*.dll", "*.pyi", "py.typed"]

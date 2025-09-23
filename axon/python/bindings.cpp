@@ -146,6 +146,8 @@ NB_MODULE(_core, m) {
 
       .def("zero_grad", &Tensor::zeroGrad)
 
+      .def("evaluate", &Tensor::evaluate)
+
       .def("backward", &Tensor::backward, nb::arg("grad") = nullptr)
 
       .def("__repr__", &Tensor::asString)
@@ -238,4 +240,9 @@ NB_MODULE(_core, m) {
         }
       },
       nb::arg("tensor"), nb::arg("ndarray"), nb::arg("tolerance") = 1e-5);
+
+  m.def("total_number_of_compiled_functions", []() {
+    auto& instance = GlobalContext::get();
+    return instance.getTotalNumberOfCompiledFunctions();
+  });
 }
