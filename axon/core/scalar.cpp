@@ -73,7 +73,7 @@ export class Scalar {
         return Scalar(lhs - rhs_casted);
       }
       case DataType::Float64: {
-        auto rhs_casted = rhs.as<f32>();
+        auto rhs_casted = rhs.as<f64>();
         return Scalar(lhs - rhs_casted);
       }
     }
@@ -103,7 +103,7 @@ export class Scalar {
         return Scalar(lhs + rhs_casted);
       }
       case DataType::Float64: {
-        auto rhs_casted = rhs.as<f32>();
+        auto rhs_casted = rhs.as<f64>();
         return Scalar(lhs + rhs_casted);
       }
     }

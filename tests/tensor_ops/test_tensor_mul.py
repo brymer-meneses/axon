@@ -1,12 +1,12 @@
 import axon
-import numpy as np
+import torch
 
 from axon import Tensor
 
 
 def test_mul():
-    b1 = np.random.rand(10, 10)
-    b2 = np.random.rand(10, 10)
+    b1 = torch.randn(10, 10)
+    b2 = torch.randn(10, 10)
 
     a1 = Tensor(b1, requires_grad=True)
     a2 = Tensor(b2, requires_grad=True)
@@ -20,8 +20,8 @@ def test_mul():
 
 
 def test_broadcast_mul():
-    b1 = np.random.rand(10, 10)
-    b2 = np.random.rand(1, 10)
+    b1 = torch.randn(10, 10)
+    b2 = torch.randn(1, 10)
 
     a1 = Tensor(b1, requires_grad=True)  # Shape: (10, 10)
     a2 = Tensor(b2, requires_grad=True)  # Shape: (1, 10)
@@ -33,11 +33,11 @@ def test_broadcast_mul():
 
     # a1.grad should be a2 broadcasted to (10, 10)
     # we need the copy here since nanobind cannot take this as an input :<
-    expected_a1_grad = np.broadcast_to(b2, (10, 10)).copy()
+    expected_a1_grad = torch.broadcast_to(b2, (10, 10))
     axon.testing.assert_are_close(a1.grad, expected_a1_grad)
 
     # a2.grad should be a1 summed along axis 0 to get shape (1, 10)
-    expected_a2_grad = np.sum(b1, axis=0, keepdims=True)
+    expected_a2_grad = torch.sum(b1, axis=0, keepdims=True)
     axon.testing.assert_are_close(a2.grad, expected_a2_grad)
 
     axon.testing.assert_are_close(a3, b1 * b2)

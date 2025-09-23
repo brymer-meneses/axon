@@ -1,9 +1,9 @@
 [project]
 name = "axon"
 version = "0.1"
-dependencies = [
-    "pytest>=8.4.1",
-]
+
+[tool.pytest.ini_options]
+pythonpath = [ "axon/python" ]
 
 [tool.setuptools]
 package-dir = {"" = "axon/python"}
@@ -14,6 +14,7 @@ packages = ["axon", "axon.nn", "axon.testing", "axon.runtime"]
 
 [dependency-groups]
 dev = [
+    "numpy>=2.2.6",
     "pytest>=8.4.1",
     "torch>=2.8.0",
 ]

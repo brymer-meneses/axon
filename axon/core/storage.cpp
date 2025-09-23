@@ -132,8 +132,8 @@ export class Storage {
     return {data_type, data, shape, strides, /*is_owned=*/true};
   }
 
-  static auto fromNumpy(nb::ndarray<nb::numpy, nb::ro>& array,
-                        DataType data_type) -> Storage {
+  static auto fromDlPack(nb::ndarray<nb::c_contig, nb::ro>& array,
+                         DataType data_type) -> Storage {
     // TODO: Explore ways to avoid copying the memory.
     auto buffer_size = array.size() * data_type.getSizeInBytes();
     auto* data_ptr = new std::byte[buffer_size];

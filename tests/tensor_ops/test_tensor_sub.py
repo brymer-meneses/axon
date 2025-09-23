@@ -1,12 +1,12 @@
 import axon
-import numpy as np
+import torch
 
 from axon import Tensor
 
 
 def test_sub():
-    b1 = np.random.rand(10, 10)
-    b2 = np.random.rand(10, 10)
+    b1 = torch.rand(10, 10)
+    b2 = torch.rand(10, 10)
 
     a1 = Tensor(b1, requires_grad=True)
     a2 = Tensor(b2, requires_grad=True)
@@ -15,13 +15,13 @@ def test_sub():
     a3.backward(Tensor.ones((10, 10)))
 
     axon.testing.assert_are_close(a3, b1 - b2)
-    axon.testing.assert_are_close(a1.grad, np.ones(a3.shape))
-    axon.testing.assert_are_close(a2.grad, -np.ones(a3.shape))
+    axon.testing.assert_are_close(a1.grad, torch.ones(a3.shape))
+    axon.testing.assert_are_close(a2.grad, -torch.ones(a3.shape))
 
 
 def test_broadcast_sub():
-    b1 = np.random.rand(10, 10)
-    b2 = np.random.rand(1, 10)
+    b1 = torch.rand(10, 10)
+    b2 = torch.rand(1, 10)
 
     a1 = Tensor(b1, requires_grad=True)  # Shape: (10, 10)
     a2 = Tensor(b2, requires_grad=True)  # Shape: (1, 10)
@@ -30,8 +30,8 @@ def test_broadcast_sub():
 
     axon.testing.assert_are_close(a3, b1 - b2)
 
-    expected_a1_grad = np.ones_like(b1)
+    expected_a1_grad = torch.ones_like(b1)
     axon.testing.assert_are_close(a1.grad, expected_a1_grad)
 
-    expected_a2_grad = -np.sum(np.ones_like(b1), axis=0, keepdims=True)
+    expected_a2_grad = -torch.sum(torch.ones_like(b1), axis=0, keepdims=True)
     axon.testing.assert_are_close(a2.grad, expected_a2_grad)

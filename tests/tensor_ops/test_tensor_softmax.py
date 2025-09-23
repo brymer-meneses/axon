@@ -1,20 +1,18 @@
-import axon
-from axon._core import LoweringLevel
-import numpy as np
+import torch
+import torch.nn.functional as F
 
+import axon
 from axon import Tensor
 
 
-def softmax(x, axis):
-    shifted_x = x - np.max(x, axis=axis, keepdims=True)
-    e_x = np.exp(shifted_x)
-    return e_x / np.sum(e_x, axis=axis, keepdims=True)
-
-
 def test_softmax():
-    b = np.random.randn(100, 100)
+    b = torch.randn(100, 100, 100)
     t = Tensor(b, requires_grad=True)
 
     s0 = t.softmax(0)
+    s1 = t.softmax(1)
+    s2 = t.softmax(2)
 
-    axon.testing.assert_are_close(s0, softmax(b, 0))
+    axon.testing.assert_are_close(s0, F.softmax(b, 0))
+    axon.testing.assert_are_close(s1, F.softmax(b, 1))
+    axon.testing.assert_are_close(s2, F.softmax(b, 2))
