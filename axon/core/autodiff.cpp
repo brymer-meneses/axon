@@ -28,6 +28,9 @@ auto backward(Graph& graph, InstId output_id, InstId grad_id) -> void {
     // This should take by copy since `graph.insts` will grow.
     auto inst = graph.insts().get(dep.inst_id);
 
+    // Provide current op id to backward rules that may reference it.
+    ctx.setCurrentInstId(dep.inst_id);
+
     inst.visit([&, dep](const auto& op) {
       using InstType = std::decay_t<decltype(op)>;
       if constexpr (HasBackwardRule<InstType>) {

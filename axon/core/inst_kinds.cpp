@@ -274,8 +274,7 @@ struct Softmax {
   constexpr static auto traits = InstTraits{
       .num_operands = 1,
       .shape_rule = ShapeInfo::SameAsOperands,
-      // TODO: add backward rule for this set it to false for now.
-      .differentiable = false,
+      .differentiable = true,
   };
 
   auto operator==(const Softmax&) const -> bool = default;

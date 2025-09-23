@@ -2,6 +2,7 @@ module;
 
 #include <print>
 
+#include "axon/base/macros.h"
 #include "llvm/ADT/SmallVector.h"
 
 export module axon.core:backward_rules;
@@ -10,14 +11,14 @@ import :graph;
 import :inst_kinds;
 import :inst;
 
-export namespace axon {
+namespace axon {
 
-struct Dependency {
+export struct Dependency {
   InstId inst_id;
   InstId grad_id;
 };
 
-class BackwardContext {
+export class BackwardContext {
  public:
   BackwardContext(Graph& graph) : graph_(graph) {}
 
@@ -28,6 +29,9 @@ class BackwardContext {
   auto createOp(Inst&& inst) -> InstId {
     return graph_.createOp(std::move(inst), /*emit_grad=*/false);
   }
+
+  auto setCurrentInstId(InstId inst_id) -> void { current_inst_id_ = inst_id; }
+  auto getCurrentInstId() const -> InstId { return current_inst_id_; }
 
   auto accumulateGrad(Dependency dep) -> void {
     if (auto current_grad_id = graph_.gradients().get(dep.inst_id)) {
@@ -42,12 +46,28 @@ class BackwardContext {
 
  private:
   Graph& graph_;
+  InstId current_inst_id_ = InstId::None;
 };
 
-template <typename T>
+// Expand a reduced tensor along `axis` to match the size of `ref_id` at that
+// axis. Assumes the input has keepdims=1 at `axis`.
+static auto expandAlongAxisToMatch(BackwardContext& ctx, InstId inst_id,
+                                   u64 axis, InstId ref_id) -> InstId {
+  llvm::SmallVector<insts::ExpandDims::Mapping, 1> mappings;
+  auto inst_shape = ctx.getShape(inst_id);
+  auto ref_shape = ctx.getShape(ref_id);
+
+  AXON_DCHECK(axis < ref_shape.size());
+  AXON_DCHECK(inst_shape[axis] == 1);
+
+  mappings.push_back({.dim = static_cast<i64>(axis), .scale = ref_shape[axis]});
+  return ctx.createOp(insts::ExpandDims(inst_id, std::move(mappings)));
+}
+
+export template <typename T>
 struct BackwardRule;
 
-template <>
+export template <>
 struct BackwardRule<insts::MatMul> {
   static auto apply(const insts::MatMul& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
@@ -91,7 +111,7 @@ struct BackwardRule<insts::MatMul> {
   }
 };
 
-template <>
+export template <>
 struct BackwardRule<insts::Add> {
   static auto apply(const insts::Add& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
@@ -107,7 +127,7 @@ struct BackwardRule<insts::Add> {
   }
 };
 
-template <>
+export template <>
 struct BackwardRule<insts::Sub> {
   static auto apply(const insts::Sub& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
@@ -125,7 +145,7 @@ struct BackwardRule<insts::Sub> {
   }
 };
 
-template <>
+export template <>
 struct BackwardRule<insts::Mul> {
   static auto apply(const insts::Mul& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
@@ -158,7 +178,7 @@ struct BackwardRule<insts::ExpandDims> {
   }
 };
 
-template <>
+export template <>
 struct BackwardRule<insts::Unsqueeze> {
   static auto apply(const insts::Unsqueeze& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
@@ -171,7 +191,7 @@ struct BackwardRule<insts::Unsqueeze> {
   }
 };
 
-template <>
+export template <>
 struct BackwardRule<insts::Reshape> {
   static auto apply(const insts::Reshape& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
@@ -185,7 +205,7 @@ struct BackwardRule<insts::Reshape> {
   }
 };
 
-template <>
+export template <>
 struct BackwardRule<insts::Neg> {
   static auto apply(const insts::Neg& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
@@ -198,7 +218,7 @@ struct BackwardRule<insts::Neg> {
   }
 };
 
-template <>
+export template <>
 struct BackwardRule<insts::ScalarMul> {
   static auto apply(const insts::ScalarMul& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
@@ -211,9 +231,7 @@ struct BackwardRule<insts::ScalarMul> {
   }
 };
 
-// Reduce Insts
-
-template <>
+export template <>
 struct BackwardRule<insts::Sum> {
   static auto apply(const insts::Sum& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
@@ -225,16 +243,12 @@ struct BackwardRule<insts::Sum> {
       grad_id = ctx.createOp(insts::Unsqueeze(grad_id, op.axis));
     }
 
-    llvm::SmallVector<insts::ExpandDims::Mapping, 1> expansions;
-    auto scale = ctx.getShape(op.operand_id)[op.axis];
-    expansions.push_back({.dim = op.axis, .scale = scale});
-
-    grad_id = ctx.createOp(insts::ExpandDims(grad_id, std::move(expansions)));
+    grad_id = expandAlongAxisToMatch(ctx, grad_id, op.axis, op.operand_id);
     return {{op.operand_id, grad_id}};
   }
 };
 
-template <>
+export template <>
 struct BackwardRule<insts::Pow> {
   static auto apply(const insts::Pow& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
@@ -249,7 +263,33 @@ struct BackwardRule<insts::Pow> {
   }
 };
 
-template <typename T>
+export template <>
+struct BackwardRule<insts::Softmax> {
+  static auto apply(const insts::Softmax& op, InstId grad_id,
+                    BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
+    if (!ctx.checkRequiresGrad(op.operand_id)) {
+      return {};
+    }
+
+    // Use the current op's output as the softmax activation `y` to avoid
+    // recomputation: dx = y * (g - sum(g * y, axis, keepdims=True))
+    auto y_id = ctx.getCurrentInstId();
+
+    auto gy = ctx.createOp(insts::Mul(grad_id, y_id));
+    auto sum_gy = ctx.createOp(insts::Sum(gy, op.axis, /*keepdims=*/true));
+
+    // Expand the reduced axis back to match the gradient's shape so that
+    // binary ops have identical shapes.
+    auto sum_gy_expanded = expandAlongAxisToMatch(ctx, sum_gy, op.axis, y_id);
+
+    auto sub = ctx.createOp(insts::Sub(grad_id, sum_gy_expanded));
+    auto dx = ctx.createOp(insts::Mul(y_id, sub));
+
+    return {{op.operand_id, dx}};
+  }
+};
+
+export template <typename T>
 concept HasBackwardRule =
     requires(const T& op, InstId grad_id, BackwardContext& ctx) {
       {
