@@ -283,16 +283,15 @@ struct Softmax {
   i32 axis;
 };
 
-struct ScalarMax {
+struct Relu {
   constexpr static auto traits = InstTraits{
       .num_operands = 1,
       .shape_rule = ShapeInfo::SameAsOperands,
       .differentiable = true,
   };
 
-  auto operator==(const ScalarMax&) const -> bool = default;
+  auto operator==(const Relu&) const -> bool = default;
 
-  Scalar scalar;
   InstId operand_id;
 };
 
@@ -329,7 +328,7 @@ using InstInternalType =
       insts::Mul, 
       insts::Pow,
       insts::Softmax,
-      insts::ScalarMax,
+      insts::Relu,
       insts::Compare,
       insts::Sub,
       insts::Neg,
