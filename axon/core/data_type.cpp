@@ -50,7 +50,8 @@ export class DataType {
     } else if constexpr (std::is_same_v<T, f64>) {
       return DataType::Float64;
     } else {
-      static_assert("Passed template parameter has no corresponding DataType");
+      static_assert(false,
+                    "Passed template parameter has no corresponding DataType");
     }
   }
 

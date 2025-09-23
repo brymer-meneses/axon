@@ -76,7 +76,7 @@ struct EliminateAdditionOfSelfNegative : mlir::OpRewritePattern<AddOp> {
       }
     }
 
-    if (auto rhs_neg = op.getLhs().getDefiningOp<NegOp>()) {
+    if (auto rhs_neg = op.getRhs().getDefiningOp<NegOp>()) {
       if (rhs_neg.getOperand() == op.getLhs()) {
         auto fill_type = op.getResult().getType();
         auto element_type =
@@ -223,7 +223,7 @@ static auto handleElementWiseBinaryFold(typename Op::FoldAdaptor adaptor,
   auto lhs =
       mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
   auto rhs =
-      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getRhs());
   if (!lhs || !rhs) {
     return nullptr;
   }
@@ -266,7 +266,7 @@ auto AddOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
       return mlir::DenseElementsAttr::get(fill_type, 0.0);
     }
   }
-  if (auto rhs_neg = getLhs().getDefiningOp<NegOp>()) {
+  if (auto rhs_neg = getRhs().getDefiningOp<NegOp>()) {
     if (rhs_neg.getOperand() == getLhs()) {
       return mlir::DenseElementsAttr::get(fill_type, 0.0);
     }
@@ -281,7 +281,7 @@ auto MulOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
   auto lhs =
       mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
   auto rhs =
-      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getRhs());
   if (!lhs || !rhs) {
     return nullptr;
   }
@@ -306,7 +306,7 @@ auto MatMulOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
   auto lhs =
       mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
   auto rhs =
-      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getRhs());
   if (!lhs || !rhs) {
     return nullptr;
   }
@@ -322,7 +322,7 @@ auto SubOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
   auto lhs =
       mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
   auto rhs =
-      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getLhs());
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getRhs());
   if (!lhs || !rhs) {
     return nullptr;
   }

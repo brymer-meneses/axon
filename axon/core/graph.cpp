@@ -138,7 +138,7 @@ export class Graph {
     auto add_offset_to_inst = [add_offset, param_size](auto& op) -> void {
       using InstType = std::decay_t<decltype(op)>;
       if constexpr (std::is_same_v<InstType, insts::AccumulateGrad>) {
-        op.inst_id = add_offset(op.value_id);
+        op.inst_id = add_offset(op.inst_id);
         op.value_id = add_offset(op.value_id);
       } else if constexpr (std::is_same_v<InstType, insts::GetParameter>) {
         op.param_id = ParamId(param_size + op.param_id.value());
@@ -147,8 +147,9 @@ export class Graph {
         op.rhs_id = add_offset(op.rhs_id);
       } else if constexpr (InstType::traits.num_operands == 1) {
         op.operand_id = add_offset(op.operand_id);
+      } else if constexpr (InstType::traits.num_operands == 0) {
       } else {
-        // static_assert(false, "Unhandled inst");
+        static_assert(false, "Unhandled inst");
       }
     };
 
@@ -231,7 +232,6 @@ export class Graph {
       if constexpr (InstType::traits.shape_rule == ShapeInfo::SameAsOperands) {
         if constexpr (InstType::traits.num_operands == 2) {
           auto lhs_id = op.lhs_id;
-          auto rhs_id = op.rhs_id;
           Shape shape = *shapes_.get(lhs_id);
           shapes_.set(inst_id, std::move(shape));
         } else if constexpr (InstType::traits.num_operands == 1) {

@@ -137,7 +137,7 @@ export template <>
 struct Hash<insts::Transpose> {
   static auto hash(const insts::Transpose& op,
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
-    constexpr auto tag = Inst::tag<insts::Squeeze>();
+    constexpr auto tag = Inst::tag<insts::Transpose>();
 
     llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
     return llvm::hash_combine(tag, operand_shape, op.from, op.to);

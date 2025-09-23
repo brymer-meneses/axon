@@ -1,5 +1,6 @@
 module;
 
+#include <algorithm>
 #include <memory>
 
 #include "axon/base/macros.h"

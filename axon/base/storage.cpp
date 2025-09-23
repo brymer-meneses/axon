@@ -131,12 +131,12 @@ class RelationalStore {
   auto relations() -> auto& { return relations_; }
 
   auto keys() const -> auto {
-    return std::views::transform(relations_,
-                                 [](auto relation) { return relation.first; });
+    return relations_ |
+           std::views::transform([](const auto& relation) { return relation.first; });
   }
   auto values() const -> auto {
-    return std::views::transform(relations_,
-                                 [](auto relation) { return relation.second; });
+    return relations_ |
+           std::views::transform([](const auto& relation) { return relation.second; });
   }
 
  private:
@@ -200,12 +200,14 @@ class IdStore {
   auto pairs() const -> const auto& { return pairs_; }
 
   auto keys() const -> auto {
-    return std::views::transform(pairs_,
-                                 [](KeyValuePair pair) { return pair.key; });
+    return pairs_ | std::views::transform([](const KeyValuePair& pair) {
+             return pair.key;
+           });
   }
   auto values() const -> auto {
-    return std::views::transform(pairs_,
-                                 [](KeyValuePair pair) { return pair.value; });
+    return pairs_ | std::views::transform([](const KeyValuePair& pair) {
+             return pair.value;
+           });
   }
 
  private:
@@ -235,13 +237,13 @@ class IdMap {
   auto set(KeyType key, const ValueType& value) -> void {
     for (uint64_t i = 0; i < keys_.size(); i += 1) {
       if (keys_[i] == key) {
-        values_[i] = std::move(value);
+        values_[i] = value;
         return;
       }
     }
 
     keys_.emplace_back(key);
-    values_.emplace_back(std::move(value));
+    values_.emplace_back(value);
   }
 
   auto get(KeyType key) -> std::optional<ValueTypeRef> {

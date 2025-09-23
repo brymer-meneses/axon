@@ -66,8 +66,8 @@ export class Scalar {
 
   template <Numeric T>
   friend auto operator-(T lhs, const Scalar& rhs) -> Scalar {
-    AXON_DCHECK(lhs.data_type() == DataType::fromType<T>());
-    switch (lhs.data_type().kind()) {
+    AXON_DCHECK(rhs.data_type() == DataType::fromType<T>());
+    switch (rhs.data_type().kind()) {
       case DataType::Float32: {
         auto rhs_casted = rhs.as<f32>();
         return Scalar(lhs - rhs_casted);
@@ -96,8 +96,8 @@ export class Scalar {
 
   template <Numeric T>
   friend auto operator+(T lhs, const Scalar& rhs) -> Scalar {
-    AXON_DCHECK(lhs.data_type() == DataType::fromType<T>());
-    switch (lhs.data_type().kind()) {
+    AXON_DCHECK(rhs.data_type() == DataType::fromType<T>());
+    switch (rhs.data_type().kind()) {
       case DataType::Float32: {
         auto rhs_casted = rhs.as<f32>();
         return Scalar(lhs + rhs_casted);

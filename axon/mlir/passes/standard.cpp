@@ -839,8 +839,6 @@ struct CompareOpLowering : mlir::OpConversionPattern<CompareOp> {
           return mlir::arith::CmpFPredicate::ONE;
       }
     }
-
-    AXON_UNREACHABLE("This should be an unreachable point");
   }
 };
 

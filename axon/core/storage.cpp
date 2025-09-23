@@ -192,6 +192,7 @@ export class Storage {
         return create(type_erased_ptr, shape, data_type, /*is_owned=*/true);
       }
     }
+    AXON_UNREACHABLE("Unhandled data type");
   }
 
   static auto createZerosLike(const Storage& storage) -> Storage {
@@ -201,8 +202,7 @@ export class Storage {
 
   ~Storage() {
     if (is_owned_) {
-      auto bytes = reinterpret_cast<std::byte*>(data_);
-      delete[] bytes;
+      delete[] data_;
     }
   }
 
@@ -304,11 +304,11 @@ export class Storage {
                            /*is_owned=*/true);
   };
 
-  std::byte* data_;
+  std::byte* data_ = nullptr;
   llvm::SmallVector<i64> shape_;
   llvm::SmallVector<i64> strides_;
-  DataType data_type_;
-  bool is_owned_;
+  DataType data_type_{};
+  bool is_owned_ = false;
 };
 
 }  // namespace axon

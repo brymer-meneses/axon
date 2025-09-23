@@ -286,7 +286,7 @@ static auto codegen(const insts::Pow& op, CompilationContext& ctx,
                     getFloatAttr(element_type, op.exponent.as<f64>()));
 }
 
-static auto codegen(const insts::ScalarMax& op, CompilationContext& ctx,
+static auto codegen(const insts::Relu& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   AXON_UNREACHABLE("TODO");
 }
