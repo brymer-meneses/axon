@@ -14,73 +14,11 @@ import axon.core;
 
 import :tensor;
 import :jit;
+import :tensor_impl;
 
 namespace nb = nanobind;
 
 namespace axon {
-
-static auto evaluateTraceSession(std::shared_ptr<TraceSession> session,
-                                 Tensor* tensor) -> std::unique_ptr<Storage> {
-  AXON_DCHECK(session != nullptr);
-  AXON_DCHECK(session->insts().contains(tensor));
-
-  auto& graph = session->graph();
-  graph.setReturned(session->insts()[tensor]);
-
-  auto storage =
-      GlobalContext::get().execute(session->parameters(), tensor, graph);
-  graph.setReturned(InstId::None);
-  return std::move(storage);
-}
-
-static auto resetTraceSession(std::shared_ptr<TraceSession> session) -> void {
-  AXON_DCHECK(session != nullptr);
-
-  for (auto& [tensor, _] : session->insts()) {
-    if (tensor->session() != nullptr) {
-      tensor->session() = nullptr;
-    }
-  }
-
-  session->insts().clear();
-  session->parameters().clear();
-}
-
-auto Tensor::evaluate() -> void {
-  storage_ = evaluateTraceSession(session_, this);
-
-  // If this tensor doesn't require gradients, then we can prune this graph.
-  if (!requires_grad_) {
-    resetTraceSession(session_);
-  }
-}
-
-auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
-  AXON_DCHECK(session_ != nullptr);
-
-  if (grad->data_type() != data_type_) {
-    throw nb::value_error(
-        "Received gradient has different dtype with this tensor");
-  }
-
-  if (!grad && rank() != 0) {
-    throw nb::value_error(
-        "Only scalar tensors can have their gradient inferred.");
-  }
-  if (!session_->insts().contains(grad.get())) {
-    grad->declareAsParam(session_);
-  }
-
-  auto& insts = session_->insts();
-  auto& graph = session_->graph();
-  InstId grad_id = insts[grad.get()];
-  auto tensor_id = insts[this];
-
-  axon::backward(graph, tensor_id, grad_id);
-
-  storage_ = evaluateTraceSession(session_, this);
-  resetTraceSession(session_);
-}
 
 struct BroadcastInfo {
   llvm::SmallVector<insts::ExpandDims::Mapping> expand_dim_mappings;
@@ -145,33 +83,31 @@ static auto performBroadcasting(Graph& graph, InstId source_id,
       insts::ExpandDims(source_id, broadcast_info->expand_dim_mappings));
 }
 
-static auto getAndValidateDataType(Tensor& lhs, Tensor& rhs) -> DataType {
+static auto validateDataType(Tensor& lhs, Tensor& rhs) -> void {
   if (lhs.data_type() != rhs.data_type()) {
     throw nb::value_error(
         "Cannot operate on two tensors with different data types");
   }
-
-  return lhs.data_type();
 }
 
-auto getTraceSession(Tensor& lhs, Tensor& rhs)
+static auto getTraceSession(Tensor& lhs, Tensor& rhs)
     -> std::shared_ptr<TraceSession> {
   if (lhs.isRoot() && rhs.isRoot()) {
     auto session = std::make_shared<TraceSession>();
-    lhs.declareAsParam(session);
-    rhs.declareAsParam(session);
+    session->declareParam(&lhs);
+    session->declareParam(&rhs);
     return session;
   }
 
   if (lhs.isRoot() && !rhs.isRoot()) {
     auto session = rhs.session();
-    lhs.declareAsParam(session);
+    session->declareParam(&lhs);
     return session;
   }
 
   if (!lhs.isRoot() && rhs.isRoot()) {
     auto session = lhs.session();
-    rhs.declareAsParam(session);
+    session->declareParam(&rhs);
     return session;
   }
 
@@ -190,10 +126,10 @@ auto getTraceSession(Tensor& lhs, Tensor& rhs)
   AXON_UNREACHABLE("This should be an unreachable point");
 }
 
-auto getTraceSession(Tensor& input) -> std::shared_ptr<TraceSession> {
+static auto getTraceSession(Tensor& input) -> std::shared_ptr<TraceSession> {
   if (input.isRoot()) {
     auto session = std::make_shared<TraceSession>();
-    input.declareAsParam(session);
+    session->declareParam(&input);
     return session;
   }
 
@@ -204,7 +140,8 @@ export template <typename ElementWiseInst>
 auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
                                        std::shared_ptr<Tensor> rhs)
     -> std::shared_ptr<Tensor> {
-  auto data_type = getAndValidateDataType(*lhs, *rhs);
+  validateDataType(*lhs, *rhs);
+
   auto session = getTraceSession(*lhs, *rhs);
 
   auto lhs_id = session->insts()[lhs.get()];
@@ -215,7 +152,7 @@ auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
 
   if (lhs_shape.equals(rhs_shape)) {
     auto inst_id = session->graph().createOp(ElementWiseInst(lhs_id, rhs_id));
-    return std::make_shared<Tensor>(session, inst_id, data_type);
+    return std::make_shared<Tensor>(session, inst_id);
   }
 
   auto lhs_elems = computeNumElems(lhs_shape);
@@ -230,7 +167,7 @@ auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
   }
 
   auto inst_id = session->graph().createOp(ElementWiseInst(lhs_id, rhs_id));
-  return std::make_shared<Tensor>(session, inst_id, data_type);
+  return std::make_shared<Tensor>(session, inst_id);
 }
 
 export auto performMatMul(std::shared_ptr<Tensor> lhs,
@@ -249,7 +186,7 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
     return false;
   };
 
-  auto data_type = getAndValidateDataType(*lhs, *rhs);
+  validateDataType(*lhs, *rhs);
   auto session = getTraceSession(*lhs, *rhs);
   auto& graph = session->graph();
 
@@ -306,7 +243,7 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
   }
 
   auto inst_id = graph.createOp(insts::MatMul(lhs_id, rhs_id));
-  return std::make_shared<Tensor>(session, inst_id, data_type);
+  return std::make_shared<Tensor>(session, inst_id);
 }
 
 export template <Numeric T>
@@ -325,7 +262,7 @@ auto performScalarMul(std::shared_ptr<Tensor> input, T scalar_value)
   auto input_id = session->insts().at(input.get());
   auto product_inst_id =
       session->graph().createOp(insts::ScalarMul(input_id, scalar));
-  return std::make_shared<Tensor>(session, product_inst_id, data_type);
+  return std::make_shared<Tensor>(session, product_inst_id);
 }
 
 export template <typename InstType>
@@ -338,7 +275,7 @@ auto performReduceInst(std::shared_ptr<Tensor> input, i32 axis, bool keep_dims)
   auto softmax_inst_id =
       graph.createOp(InstType(input_inst_id, axis, keep_dims));
 
-  return std::make_shared<Tensor>(session, softmax_inst_id, input->data_type());
+  return std::make_shared<Tensor>(session, softmax_inst_id);
 }
 
 export auto performSoftmax(std::shared_ptr<Tensor> input, i32 axis)
@@ -352,7 +289,7 @@ export auto performSoftmax(std::shared_ptr<Tensor> input, i32 axis)
   auto input_inst_id = session->insts()[input.get()];
   auto softmax_inst_id = graph.createOp(insts::Softmax(input_inst_id, axis));
 
-  return std::make_shared<Tensor>(session, softmax_inst_id, input->data_type());
+  return std::make_shared<Tensor>(session, softmax_inst_id);
 }
 
 }  // namespace axon
