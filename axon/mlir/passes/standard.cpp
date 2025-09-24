@@ -821,9 +821,7 @@ struct CompareOpLowering : mlir::OpConversionPattern<CompareOp> {
         case ComparePredicate::ne:
           return mlir::arith::CmpFPredicate::UNE;
       }
-    }
-
-    if (type.isInteger()) {
+    } else if (type.isInteger()) {
       switch (predicate) {
         case ComparePredicate::le:
           return mlir::arith::CmpFPredicate::OLE;
@@ -839,6 +837,8 @@ struct CompareOpLowering : mlir::OpConversionPattern<CompareOp> {
           return mlir::arith::CmpFPredicate::ONE;
       }
     }
+
+    AXON_UNREACHABLE("Unsupported type");
   }
 };
 
@@ -849,8 +849,44 @@ struct ReluOpLowering : mlir::OpConversionPattern<ReluOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
+    auto result_type = op.getResult().getType();
+    auto rank = result_type.getRank();
+    auto context = op.getContext();
+
+    llvm::SmallVector indexing_maps = {
+        mlir::AffineMap::getMultiDimIdentityMap(rank, context),
+        mlir::AffineMap::getMultiDimIdentityMap(rank, context),
+    };
+
+    llvm::SmallVector iterator_types(rank, mlir::utils::IteratorType::parallel);
+
+    auto init_op =
+        mlir::tensor::EmptyOp::create(rewriter, loc, result_type, {});
+
+    auto zero_constant =
+        mlir::arith::ConstantOp::create(
+            rewriter, loc, rewriter.getZeroAttr(result_type.getElementType()))
+            .getResult();
+
+    auto generic_op = mlir::linalg::GenericOp::create(
+        rewriter, loc, mlir::TypeRange{result_type},
+        mlir::ValueRange{adaptor.getOperand()}, mlir::ValueRange{init_op},
+        indexing_maps, iterator_types,
+        [zero_constant](mlir::OpBuilder& builder, mlir::Location loc,
+                        mlir::ValueRange args) {
+          auto result_type = args[0].getType();
+          auto relu = mlir::arith::MaxNumFOp::create(
+                          builder, loc, result_type, zero_constant, args[0],
+                          mlir::arith::FastMathFlags::none)
+                          .getResult();
+
+          mlir::linalg::YieldOp::create(builder, loc, relu);
+        });
+
+    rewriter.replaceOp(op, generic_op.getResult(0));
+    return mlir::success();
   }
-};
+};  // namespace axon
 
 struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
   using mlir::OpConversionPattern<SumOp>::OpConversionPattern;
@@ -931,9 +967,8 @@ struct AxonToStandardLoweringPass
       GetDataOpLowering, 
       GetGradOpLowering,
       AccumulateOpLowering, 
-
+      ReluOpLowering,
       CompareOpLowering,
-
       AddOpLowering, 
       MulOpLowering, 
       SubOpLowering,
@@ -941,11 +976,9 @@ struct AxonToStandardLoweringPass
       NegOpLowering,
       PowOpLowering,
       SoftmaxOpLowering,
-
       TransposeOpLowering, 
       SumOpLowering,
       ScalarMulOpLowering,
-
       ConstantOpLowering,
       FillOpLowering,
       ExpandDimsOpLowering, 

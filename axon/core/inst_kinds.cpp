@@ -215,7 +215,7 @@ struct GetParameter {
   auto operator==(const GetParameter&) const -> bool = default;
 };
 
-struct OnesLike {
+struct FillLike {
   constexpr static auto traits = InstTraits{
       .num_operands = 1,
       .shape_rule = ShapeInfo::SameAsOperands,
@@ -223,8 +223,9 @@ struct OnesLike {
   };
 
   InstId operand_id;
+  Scalar fill_value;
 
-  auto operator==(const OnesLike&) const -> bool = default;
+  auto operator==(const FillLike&) const -> bool = default;
 };
 
 struct Pow {
@@ -342,7 +343,7 @@ using InstInternalType =
       insts::AccumulateGrad, 
       insts::Constant,
       insts::GetParameter, 
-      insts::OnesLike,
+      insts::FillLike,
       insts::Reshape
     >;
 

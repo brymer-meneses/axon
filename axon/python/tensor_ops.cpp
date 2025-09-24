@@ -313,4 +313,13 @@ auto performComparison(std::shared_ptr<Tensor> lhs, std::shared_ptr<Tensor> rhs)
   return std::make_shared<Tensor>(session, result_id);
 }
 
+export auto performRelu(std::shared_ptr<Tensor> input)
+    -> std::shared_ptr<Tensor> {
+  auto session = getTraceSession(*input);
+  auto input_id = session->getInstId(input.get());
+  auto relu_id = session->graph().createOp(insts::Relu(input_id));
+
+  return std::make_shared<Tensor>(session, relu_id);
+}
+
 }  // namespace axon

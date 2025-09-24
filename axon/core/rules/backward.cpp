@@ -289,6 +289,25 @@ struct BackwardRule<insts::Softmax> {
   }
 };
 
+export template <>
+struct BackwardRule<insts::Relu> {
+  static auto apply(const insts::Relu& op, InstId grad_id, BackwardContext& ctx)
+      -> llvm::SmallVector<Dependency> {
+    if (!ctx.checkRequiresGrad(op.operand_id)) {
+      return {};
+    }
+
+    auto predicate = insts::Compare::Predicate::Greater;
+    auto zeros_like =
+        ctx.createOp(insts::FillLike(op.operand_id, Scalar(0.0f)));
+    auto mask =
+        ctx.createOp(insts::Compare(op.operand_id, zeros_like, predicate));
+    auto masked = ctx.createOp(insts::Mul(mask, grad_id));
+
+    return {{op.operand_id, masked}};
+  }
+};
+
 export template <typename T>
 concept HasBackwardRule =
     requires(const T& op, InstId grad_id, BackwardContext& ctx) {

@@ -160,15 +160,16 @@ static auto codegen(const insts::GetParameter& op, CompilationContext& ctx,
       GetDataOp::create(ctx.builder, ctx.builder.getUnknownLoc(), tensor_ref);
 }
 
-static auto codegen(const insts::OnesLike& op, CompilationContext& ctx,
+static auto codegen(const insts::FillLike& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto like = ctx.values[op.operand_id];
+  auto fill = op.fill_value.as<f32>();
   auto like_type = mlir::cast<mlir::RankedTensorType>(like.getType());
   auto element_type = like_type.getElementType();
 
   ctx.values[inst_id] =
       FillOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like.getType(),
-                     getFloatAttr(element_type, 1.0));
+                     getFloatAttr(element_type, fill));
 }
 
 static auto codegen(const insts::Add& op, CompilationContext& ctx,
@@ -288,7 +289,10 @@ static auto codegen(const insts::Pow& op, CompilationContext& ctx,
 
 static auto codegen(const insts::Relu& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  AXON_UNREACHABLE("TODO");
+  auto operand = ctx.values[op.operand_id];
+
+  ctx.values[inst_id] =
+      ReluOp::create(ctx.builder, ctx.builder.getUnknownLoc(), operand);
 }
 
 static auto codegen(const insts::Compare& op, CompilationContext& ctx,

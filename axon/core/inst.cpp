@@ -81,7 +81,7 @@ export class Inst {
 
   auto index() const -> size_t { return value_.index(); }
 
-  template <typename T>
+  template <InstConvertible T>
   static consteval auto tag() -> size_t {
     return getVariantIndex<InstInternalType, T>();
   }
