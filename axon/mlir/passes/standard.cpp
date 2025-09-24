@@ -910,6 +910,38 @@ struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
   }
 };
 
+struct MeanOpLowering : mlir::OpConversionPattern<MeanOp> {
+  using mlir::OpConversionPattern<MeanOp>::OpConversionPattern;
+
+  auto matchAndRewrite(MeanOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+    auto input_type = op.getOperand().getType();
+    auto result_type = op.getResult().getType();
+
+    auto element_type = input_type.getElementType();
+    AXON_DCHECK(element_type.isFloat());
+
+    auto init_value = mlir::arith::ConstantOp::create(
+        rewriter, loc, rewriter.getZeroAttr(element_type));
+
+    auto sum_op =
+        reduce<mlir::arith::AddFOp>(rewriter, loc, adaptor.getOperand(),
+                                    op.getKeepDims(), op.getDim(), init_value);
+    auto num_elements_along_axis =
+        static_cast<f32>(input_type.getShape()[op.getDim()]);
+
+    auto divisor = 1.0f / num_elements_along_axis;
+
+    auto scaled = ScalarMulOp::create(rewriter, loc, sum_op,
+                                      rewriter.getF32FloatAttr(divisor));
+
+    rewriter.replaceOp(op, scaled);
+    return mlir::success();
+  }
+};
+
 struct AxonToStandardTypeConverter : mlir::TypeConverter {
   AxonToStandardTypeConverter(mlir::MLIRContext* ctx) {
     addConversion([](mlir::Type type) -> mlir::Type { return type; });

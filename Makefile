@@ -7,6 +7,7 @@ ENABLE_ASAN := ON
 .PHONY: test clean build 
 
 config:
+	@mkdir -p build
 	cmake -S . -B build -G Ninja \
 		-DCMAKE_LINKER=$(LINKER) \
 		-DCMAKE_CXX_COMPILER=$(CXX) \

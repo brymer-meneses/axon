@@ -111,6 +111,11 @@ static auto codegen(const insts::Sum& op, CompilationContext& ctx,
   codegenReduceInst<insts::Sum, SumOp>(op, ctx, inst_id);
 }
 
+static auto codegen(const insts::Mean& op, CompilationContext& ctx,
+                    InstId inst_id) -> void {
+  codegenReduceInst<insts::Mean, MeanOp>(op, ctx, inst_id);
+}
+
 static auto codegen(const insts::Softmax& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto operand = ctx.values[op.operand_id];

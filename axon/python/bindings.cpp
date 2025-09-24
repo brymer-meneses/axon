@@ -212,10 +212,12 @@ NB_MODULE(_core, m) {
 
       .def("softmax", &performSoftmax, nb::arg("dim"))
 
+      .def("relu", &performRelu)
+
       .def("sum", &performReduceInst<insts::Sum>, nb::arg("dim"),
            nb::arg("keepdims") = false)
-
-      .def("relu", &performRelu)
+      .def("mean", &performReduceInst<insts::Mean>, nb::arg("dim"),
+           nb::arg("keepdims") = false)
 
       .def_static(
           "ones",
@@ -266,8 +268,6 @@ NB_MODULE(_core, m) {
         if (tensor->shape() != array_shape) {
           throw nb::value_error("Do not have the same shape");
         }
-        // Strides may differ (e.g. reduced dims in PyTorch can have stride 0).
-        // Compare using per-dimension strides instead of requiring equality.
 
         auto data_type = DataType::fromDlPack(array.dtype());
         if (data_type != tensor->data_type()) {

@@ -32,7 +32,8 @@ class Model(nn.Module):
         return x @ self.W + self.B
 
 def mse_loss(y, y_hat):
-    return 0.5 * (y-y_hat) ** 2
+    square_error = (y-y_hat) ** 2
+    return square_error.mean(dim=1)
 
 optim = optim.SGD(model.parameters(), lr=0.01)
 

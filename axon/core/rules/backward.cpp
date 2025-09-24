@@ -249,6 +249,28 @@ struct BackwardRule<insts::Sum> {
 };
 
 export template <>
+struct BackwardRule<insts::Mean> {
+  static auto apply(const insts::Mean& op, InstId grad_id, BackwardContext& ctx)
+      -> llvm::SmallVector<Dependency> {
+    if (!ctx.checkRequiresGrad(op.operand_id)) {
+      return {};
+    }
+
+    if (!op.keep_dims) {
+      grad_id = ctx.createOp(insts::Unsqueeze(grad_id, op.axis));
+    }
+
+    auto expanded =
+        expandAlongAxisToMatch(ctx, grad_id, op.axis, op.operand_id);
+    auto num_elements_in_axis = ctx.getShape(op.operand_id)[op.axis];
+    auto scalar = Scalar(1.0f / static_cast<f32>(num_elements_in_axis));
+
+    auto scaled = ctx.createOp(insts::ScalarMul(expanded, scalar));
+    return {{op.operand_id, scaled}};
+  }
+};
+
+export template <>
 struct BackwardRule<insts::Pow> {
   static auto apply(const insts::Pow& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {

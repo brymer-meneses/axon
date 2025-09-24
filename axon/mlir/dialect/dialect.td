@@ -281,6 +281,16 @@ def Axon_SumOp : AxonDialect_Op<"sum", [
   let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";
 }
 
+def Axon_MeanOp : AxonDialect_Op<"mean", [
+  Pure,
+  SameOperandsAndResultElementType
+]> {
+  let arguments = (ins AnyTensor:$operand, I64Attr:$dim, BoolAttr:$keep_dims);
+  let results = (outs AnyTensor:$result);
+
+  let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";
+}
+
 def Axon_ArgMaxOp : AxonDialect_Op<"argmax", [
   Pure,
   SameOperandsAndResultElementType

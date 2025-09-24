@@ -125,6 +125,14 @@ struct InferShapeRule<insts::Sum> {
 };
 
 export template <>
+struct InferShapeRule<insts::Mean> {
+  static auto apply(const insts::Mean& op, const ShapeMapping& shapes)
+      -> Shape {
+    return inferShapeOfReduceInst(op, shapes);
+  }
+};
+
+export template <>
 struct InferShapeRule<insts::ExpandDims> {
   static auto apply(const insts::ExpandDims& op, const ShapeMapping& shapes)
       -> Shape {

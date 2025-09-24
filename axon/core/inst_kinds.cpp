@@ -256,18 +256,17 @@ struct Sum {
   bool keep_dims;
 };
 
-struct ArgMax {
+struct Mean {
   constexpr static auto traits = InstTraits{
       .num_operands = 1,
       .shape_rule = ShapeInfo::Custom,
-      // TODO: add backward rule for this set it to false for now.
-      .differentiable = false,
+      .differentiable = true,
   };
 
-  auto operator==(const ArgMax&) const -> bool = default;
+  auto operator==(const Mean& other) const -> bool = default;
 
   InstId operand_id;
-  i32 axis;
+  i64 axis;
   bool keep_dims;
 };
 
@@ -296,7 +295,6 @@ struct Relu {
   InstId operand_id;
 };
 
-// Performs binary comparison
 struct Compare {
   constexpr static auto traits = InstTraits{
       .num_operands = 2,
@@ -336,6 +334,7 @@ using InstInternalType =
       insts::ScalarMul,
       insts::MatMul,
       insts::Sum,
+      insts::Mean,
       insts::ExpandDims,
       insts::Unsqueeze,
       insts::Squeeze,
