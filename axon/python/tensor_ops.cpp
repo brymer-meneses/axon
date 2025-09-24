@@ -271,6 +271,22 @@ auto performScalarMul(std::shared_ptr<Tensor> input, T scalar_value)
   return std::make_shared<Tensor>(session, product_inst_id);
 }
 
+export template <Numeric T>
+auto performPow(std::shared_ptr<Tensor> input, T exponent_value)
+    -> std::shared_ptr<Tensor> {
+  auto session = getTraceSession(*input);
+  auto data_type = DataType::fromType<T>();
+
+  if (data_type != input->data_type()) {
+    throw nb::value_error("Tried to pow a tensor with different dtype");
+  }
+
+  Scalar exponent{exponent_value};
+  auto input_id = session->getInstId(input.get());
+  auto pow_inst_id = session->graph().createOp(insts::Pow(input_id, exponent));
+  return std::make_shared<Tensor>(session, pow_inst_id);
+}
+
 export template <typename InstType>
 auto performReduceInst(std::shared_ptr<Tensor> input, i32 axis, bool keep_dims)
     -> std::shared_ptr<Tensor> {

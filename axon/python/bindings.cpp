@@ -205,6 +205,9 @@ NB_MODULE(_core, m) {
       .def("__mul__", &performScalarMul<f32>)
       .def("__rmul__", &performScalarMul<f32>)
 
+      .def("pow", &performPow<f32>, nb::arg("exponent"))
+      .def("__pow__", &performPow<f32>)
+
       .def("__matmul__", &performMatMul)
 
       .def("softmax", &performSoftmax, nb::arg("dim"))

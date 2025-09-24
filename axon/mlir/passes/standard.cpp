@@ -596,7 +596,7 @@ struct PowOpLowering : mlir::OpConversionPattern<PowOp> {
 
     auto exponent_constant = mlir::arith::ConstantFloatOp::create(
         rewriter, loc,
-        rewriter.getF64FloatAttr(op.getExponent().convertToDouble()));
+        rewriter.getF32FloatAttr(op.getExponent().convertToFloat()));
 
     auto exponent_tensor = mlir::tensor::SplatOp::create(
         rewriter, loc, exponent_constant, result_tensor_type.getShape());

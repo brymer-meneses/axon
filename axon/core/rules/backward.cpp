@@ -256,10 +256,12 @@ struct BackwardRule<insts::Pow> {
       return {};
     }
 
-    auto pow_grad = ctx.createOp(insts::Pow(grad_id, op.exponent - 1.0));
-    auto scalar_grad = ctx.createOp(insts::ScalarMul(pow_grad, op.exponent));
+    // d/dx (x^a) = a * x^(a-1)
+    auto x_pow = ctx.createOp(insts::Pow(op.operand_id, op.exponent - 1.0f));
+    auto scaled = ctx.createOp(insts::ScalarMul(x_pow, op.exponent));
+    auto dx = ctx.createOp(insts::Mul(grad_id, scaled));
 
-    return {{op.operand_id, scalar_grad}};
+    return {{op.operand_id, dx}};
   }
 };
 

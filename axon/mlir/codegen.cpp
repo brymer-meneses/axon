@@ -163,7 +163,18 @@ static auto codegen(const insts::GetParameter& op, CompilationContext& ctx,
 static auto codegen(const insts::FillLike& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto like = ctx.values[op.operand_id];
-  auto fill = op.fill_value.as<f32>();
+  // Extract the scalar value according to its stored dtype.
+  double fill;
+  switch (op.fill_value.data_type().kind()) {
+    case DataType::Float32: {
+      fill = static_cast<double>(op.fill_value.as<f32>());
+      break;
+    }
+    case DataType::Float64: {
+      fill = static_cast<double>(op.fill_value.as<f64>());
+      break;
+    }
+  }
   auto like_type = mlir::cast<mlir::RankedTensorType>(like.getType());
   auto element_type = like_type.getElementType();
 
@@ -282,9 +293,11 @@ static auto codegen(const insts::Pow& op, CompilationContext& ctx,
   auto element_type =
       mlir::cast<mlir::RankedTensorType>(operand.getType()).getElementType();
 
+  auto exponent_value = op.exponent.as<f32>();
+
   ctx.values[inst_id] =
       PowOp::create(ctx.builder, ctx.builder.getUnknownLoc(), operand,
-                    getFloatAttr(element_type, op.exponent.as<f64>()));
+                    ctx.builder.getF64FloatAttr(exponent_value));
 }
 
 static auto codegen(const insts::Relu& op, CompilationContext& ctx,
