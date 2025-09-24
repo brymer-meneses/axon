@@ -7,7 +7,7 @@ pythonpath = [ "axon/python" ]
 
 [tool.setuptools]
 package-dir = {"" = "axon/python"}
-packages = ["axon", "axon.nn", "axon.testing", "axon.runtime"]
+packages = ["axon", "axon.nn", "axon.testing", "axon.runtime", "axon.datasets", "axon.builtin"]
 
 [tool.setuptools.package-data]
 "*" = ["*.so", "*.pyd", "*.dll", "*.pyi", "py.typed"]

@@ -18,7 +18,6 @@ class Module:
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.forward(*args, **kwargs)
 
-    @property
     def parameters(self) -> List[Tensor]:
         return self._parameters
 

@@ -60,7 +60,8 @@ static auto checkIsWithinTolerance(T* lhs, llvm::ArrayRef<i64> lhs_strides,
   auto rank = static_cast<i64>(shape.size());
   if (rank == 0) {
     if (std::fabs(*lhs - *rhs) > tolerance) {
-      throw nb::value_error("Mismatch at [] (scalar)");
+      throw nb::value_error(
+          std::format("Mismatch expected {} got {}", *rhs, *lhs).c_str());
     }
     return;
   }
@@ -214,10 +215,11 @@ NB_MODULE(_core, m) {
 
       .def("relu", &performRelu)
 
-      .def("sum", &performReduceInst<insts::Sum>, nb::arg("dim"),
+      .def("sum", &performReduceInst<insts::Sum>, nb::arg("dim") = std::nullopt,
            nb::arg("keepdims") = false)
-      .def("mean", &performReduceInst<insts::Mean>, nb::arg("dim"),
-           nb::arg("keepdims") = false)
+
+      .def("mean", &performReduceInst<insts::Mean>,
+           nb::arg("dim") = std::nullopt, nb::arg("keepdims") = false)
 
       .def_static(
           "ones",

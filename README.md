@@ -19,7 +19,7 @@ uv run examples/simple_autograd.py
 
 ```python
 import axon
-from axon import nn, optim, Tensor
+from axon import nn, optim, builtin, Tensor
 
 class Model(nn.Module):
     def __init__(self, in_features, out_features):
@@ -31,15 +31,13 @@ class Model(nn.Module):
     def forward(self, x):
         return x @ self.W + self.B
 
-def mse_loss(y, y_hat):
-    square_error = (y-y_hat) ** 2
-    return square_error.mean(dim=1)
 
 optim = optim.SGD(model.parameters(), lr=0.01)
+model = Model()
 
 for (x, y) in dataset:
     y_hat = model(x)
-    l = mse_loss(y, y_hat)
+    l = builtin.mse_loss(y, y_hat)
     l.backward()
 
     optim.zero_grad()

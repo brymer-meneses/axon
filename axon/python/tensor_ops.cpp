@@ -288,16 +288,26 @@ auto performPow(std::shared_ptr<Tensor> input, T exponent_value)
 }
 
 export template <typename InstType>
-auto performReduceInst(std::shared_ptr<Tensor> input, i32 axis, bool keep_dims)
+auto performReduceInst(std::shared_ptr<Tensor> input,
+                       std::optional<i32> optional_axis, bool keep_dims)
     -> std::shared_ptr<Tensor> {
   auto session = getTraceSession(*input);
-
   auto& graph = session->graph();
-  auto input_inst_id = session->getInstId(input.get());
-  auto softmax_inst_id =
-      graph.createOp(InstType(input_inst_id, axis, keep_dims));
 
-  return std::make_shared<Tensor>(session, softmax_inst_id);
+  if (auto axis = optional_axis) {
+    auto input_inst_id = session->getInstId(input.get());
+    auto softmax_inst_id =
+        graph.createOp(InstType(input_inst_id, *axis, keep_dims));
+
+    return std::make_shared<Tensor>(session, softmax_inst_id);
+  }
+
+  InstId reduce_id = session->getInstId(input.get());
+  for (auto dim : input->shape()) {
+    reduce_id = graph.createOp(InstType(reduce_id, 0, keep_dims = false));
+  }
+
+  return std::make_shared<Tensor>(session, reduce_id);
 }
 
 export auto performSoftmax(std::shared_ptr<Tensor> input, i32 axis)

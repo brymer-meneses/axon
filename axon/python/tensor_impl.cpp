@@ -164,8 +164,20 @@ auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
   AXON_DCHECK(session_ != nullptr);
 
   if (!grad) {
-    // we should make a scalar tensor and propagate that instead.
-    AXON_UNREACHABLE("TODO");
+    if (rank() != 0) {
+      throw nb::value_error(
+          "Only scalar tensors can have their gradient inferred.");
+    }
+
+    auto& graph = session_->graph();
+    auto tensor_id = session_->getInstId(this);
+    auto grad_id = graph.createOp(insts::FillLike(tensor_id, Scalar(1.0f)));
+
+    axon::backward(graph, tensor_id, grad_id);
+
+    session_->evaluate(this);
+    session_->reset();
+    return;
   }
 
   if (grad->data_type() != data_type()) {
@@ -173,10 +185,6 @@ auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
         "Received gradient has different dtype with this tensor");
   }
 
-  if (!grad && rank() != 0) {
-    throw nb::value_error(
-        "Only scalar tensors can have their gradient inferred.");
-  }
   if (!session_->insts().contains(grad.get())) {
     session_->declareParam(grad.get());
   }

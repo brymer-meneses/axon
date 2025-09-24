@@ -1004,6 +1004,7 @@ struct AxonToStandardLoweringPass
       AddOpLowering, 
       MulOpLowering, 
       SubOpLowering,
+      MeanOpLowering,
       MatMulOpLowering, 
       NegOpLowering,
       PowOpLowering,
