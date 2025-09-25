@@ -5,7 +5,7 @@ a = Tensor.ones((2, 5, 5), requires_grad=True)
 b = Tensor.ones((5, 5), requires_grad=True)
 
 c = (a @ b) ** 2
-l = c.mean()
+l = c.sum()
 l.backward()
 
 

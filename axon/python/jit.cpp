@@ -169,47 +169,4 @@ class CompiledFunction {
   mlir::ModuleOp module_;
 };
 
-export class GlobalContext {
- public:
-  GlobalContext(const GlobalContext&) = delete;
-  auto operator=(const GlobalContext&) -> GlobalContext& = delete;
-
-  static auto get() -> GlobalContext& {
-    // FIXME:
-    // Remove this intentional leak memory since llvm has complex internal
-    // destructors, that will result to a std::terminate if not done properly.
-    static auto context = new GlobalContext();
-    return *context;
-  }
-
-  auto execute(llvm::ArrayRef<Tensor*> parameters, Tensor* returned,
-               Graph& graph) -> std::unique_ptr<Storage> {
-    auto hash = graph.hash();
-
-    if (graph_registry_.contains(graph)) {
-      std::println("reusing hash {}", hash);
-      return graph_registry_[graph]->execute(parameters, returned);
-    }
-
-    std::println("creating function with hash {}", hash);
-    auto compiled_function =
-        std::make_unique<CompiledFunction>(&mlir_context_, graph);
-    auto storage = compiled_function->execute(parameters, returned);
-    graph_registry_[graph] = std::move(compiled_function);
-    return std::move(storage);
-  }
-
-  auto getTotalNumberOfCompiledFunctions() const -> u64 {
-    return graph_registry_.size();
-  }
-
- private:
-  GlobalContext() : mlir_context_(createDialectRegistry()) {
-    mlir_context_.loadAllAvailableDialects();
-  }
-
-  mlir::MLIRContext mlir_context_;
-  std::unordered_map<Graph, std::unique_ptr<CompiledFunction>> graph_registry_;
-};
-
 }  // namespace axon

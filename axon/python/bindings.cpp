@@ -120,23 +120,21 @@ NB_MODULE(_core, m) {
 
   m.def(
       "inspect_ir",
-      [](Tensor& tensor, LoweringLevel level) {
+      [](std::shared_ptr<Tensor> tensor, LoweringLevel level) {
         mlir::MLIRContext context(createDialectRegistry());
         context.loadAllAvailableDialects();
 
         mlir::OpBuilder builder(&context);
         mlir::PassManager pm(&context);
 
-        auto session = tensor.session();
+        auto session = tensor->session();
         if (!session) {
           throw nb::value_error("Failed to inspect a non-lazy tensor.");
         }
 
-        auto& graph = session->graph();
-        auto inst_id = session->getInstId(&tensor);
-        graph.setReturned(inst_id);
+        session->setReturned(tensor);
 
-        auto module = codegenGraph(graph, builder);
+        auto module = codegenGraph(session->graph(), builder);
         axon::buildLlvmLoweringPipeline(pm, level);
 
         auto lowering_result = pm.run(module);
@@ -144,7 +142,8 @@ NB_MODULE(_core, m) {
           throw std::runtime_error("Failed to compile graph.");
         }
 
-        graph.setReturned(InstId::None);
+        session->setReturnedToNone();
+
         module.print(llvm::outs());
       },
       nb::arg("tensor"), nb::arg("level"));
@@ -299,7 +298,12 @@ NB_MODULE(_core, m) {
       nb::arg("tensor"), nb::arg("ndarray"), nb::arg("tolerance") = 1e-5);
 
   m.def("total_number_of_compiled_functions", []() {
-    auto& instance = GlobalContext::get();
+    auto& instance = Runtime::get();
     return instance.getTotalNumberOfCompiledFunctions();
+  });
+
+  m.def("set_emit_grad", [](bool value) {
+    auto& instance = Runtime::get();
+    instance.setEmitGrad(value);
   });
 }

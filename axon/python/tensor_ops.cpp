@@ -64,7 +64,7 @@ static auto tryGetBroadcastInfo(llvm::ArrayRef<i64> source_shape,
   return broadcast_info;
 }
 
-static auto performBroadcasting(Graph& graph, InstId source_id,
+static auto performBroadcasting(TraceSession& session, InstId source_id,
                                 llvm::ArrayRef<i64> source_shape,
                                 llvm::ArrayRef<i64> target_shape) -> InstId {
   auto broadcast_info = tryGetBroadcastInfo(source_shape, target_shape);
@@ -75,12 +75,12 @@ static auto performBroadcasting(Graph& graph, InstId source_id,
 
   // Add unit dimensions since they are not equal
   if (target_shape.size() != source_shape.size()) {
-    source_id = graph.createOp(
-        insts::Reshape(source_id, broadcast_info->unsqueezed_shape));
+    source_id = session.createInst<insts::Reshape>(
+        source_id, broadcast_info->unsqueezed_shape);
   }
 
-  return graph.createOp(
-      insts::ExpandDims(source_id, broadcast_info->expand_dim_mappings));
+  return session.createInst<insts::ExpandDims>(
+      source_id, broadcast_info->expand_dim_mappings);
 }
 
 static auto ensureHasSameDataType(Tensor& lhs, Tensor& rhs) -> void {
@@ -157,23 +157,19 @@ auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
   auto rhs_shape = rhs->shape();
 
   if (lhs_shape.equals(rhs_shape)) {
-    auto inst_id = session->graph().createOp(ElementWiseInst(lhs_id, rhs_id));
-    return std::make_shared<Tensor>(session, inst_id);
+    return session->createTensor<ElementWiseInst>(lhs_id, rhs_id);
   }
 
   auto lhs_elems = computeNumElems(lhs_shape);
   auto rhs_elems = computeNumElems(rhs_shape);
 
   if (lhs_elems < rhs_elems) {
-    lhs_id =
-        performBroadcasting(session->graph(), lhs_id, lhs_shape, rhs_shape);
+    lhs_id = performBroadcasting(*session, lhs_id, lhs_shape, rhs_shape);
   } else if (lhs_elems > rhs_elems) {
-    rhs_id =
-        performBroadcasting(session->graph(), rhs_id, rhs_shape, lhs_shape);
+    rhs_id = performBroadcasting(*session, rhs_id, rhs_shape, lhs_shape);
   }
 
-  auto inst_id = session->graph().createOp(ElementWiseInst(lhs_id, rhs_id));
-  return std::make_shared<Tensor>(session, inst_id);
+  return session->createTensor<ElementWiseInst>(lhs_id, rhs_id);
 }
 
 export auto performMatMul(std::shared_ptr<Tensor> lhs,
@@ -200,7 +196,6 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
 
   ensureHasSameDataType(*lhs, *rhs);
   auto session = getTraceSession(*lhs, *rhs);
-  auto& graph = session->graph();
 
   llvm::ArrayRef<i64> lhs_shape = session->getShape(lhs.get());
   llvm::ArrayRef<i64> rhs_shape = session->getShape(rhs.get());
@@ -227,7 +222,7 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
                       lhs_shape, rhs_shape));
     }
 
-    lhs_id = performBroadcasting(graph, lhs_id, lhs_shape, target_shape);
+    lhs_id = performBroadcasting(*session, lhs_id, lhs_shape, target_shape);
   }
 
   if (lhs_elems > rhs_elems) {
@@ -245,11 +240,10 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
                       lhs_shape, rhs_shape));
     }
 
-    rhs_id = performBroadcasting(graph, rhs_id, rhs_shape, target_shape);
+    rhs_id = performBroadcasting(*session, rhs_id, rhs_shape, target_shape);
   }
 
-  auto inst_id = graph.createOp(insts::MatMul(lhs_id, rhs_id));
-  return std::make_shared<Tensor>(session, inst_id);
+  return session->createTensor<insts::MatMul>(lhs_id, rhs_id);
 }
 
 export template <Numeric T>
@@ -265,10 +259,7 @@ auto performScalarMul(std::shared_ptr<Tensor> input, T scalar_value)
   }
 
   Scalar scalar{scalar_value};
-  auto input_id = session->getInstId(input.get());
-  auto product_inst_id =
-      session->graph().createOp(insts::ScalarMul(input_id, scalar));
-  return std::make_shared<Tensor>(session, product_inst_id);
+  return session->createTensor<insts::ScalarMul>(input, scalar);
 }
 
 export template <Numeric T>
@@ -282,9 +273,7 @@ auto performPow(std::shared_ptr<Tensor> input, T exponent_value)
   }
 
   Scalar exponent{exponent_value};
-  auto input_id = session->getInstId(input.get());
-  auto pow_inst_id = session->graph().createOp(insts::Pow(input_id, exponent));
-  return std::make_shared<Tensor>(session, pow_inst_id);
+  return session->createTensor<insts::Pow>(input, exponent);
 }
 
 export template <typename InstType>
@@ -292,21 +281,15 @@ auto performReduceInst(std::shared_ptr<Tensor> input,
                        std::optional<i32> optional_axis, bool keep_dims)
     -> std::shared_ptr<Tensor> {
   auto session = getTraceSession(*input);
-  auto& graph = session->graph();
 
   if (auto axis = optional_axis) {
-    auto input_inst_id = session->getInstId(input.get());
-    auto softmax_inst_id =
-        graph.createOp(InstType(input_inst_id, *axis, keep_dims));
-
-    return std::make_shared<Tensor>(session, softmax_inst_id);
+    return session->createTensor<InstType>(input, *axis, keep_dims);
   }
 
   InstId reduce_id = session->getInstId(input.get());
   for (auto dim : input->shape()) {
-    reduce_id = graph.createOp(InstType(reduce_id, 0, keep_dims = false));
+    reduce_id = session->createInst<InstType>(reduce_id, 0, keep_dims = false);
   }
-
   return std::make_shared<Tensor>(session, reduce_id);
 }
 
@@ -316,12 +299,7 @@ export auto performSoftmax(std::shared_ptr<Tensor> input, i32 axis)
     throw nb::value_error("Passed `dim` exceeded the rank of the tensor.");
   }
   auto session = getTraceSession(*input);
-
-  auto input_inst_id = session->getInstId(input.get());
-  auto softmax_inst_id =
-      session->graph().createOp(insts::Softmax(input_inst_id, axis));
-
-  return std::make_shared<Tensor>(session, softmax_inst_id);
+  return session->createTensor<insts::Softmax>(input, axis);
 }
 
 export template <insts::Compare::Predicate predicate>
@@ -331,21 +309,13 @@ auto performComparison(std::shared_ptr<Tensor> lhs, std::shared_ptr<Tensor> rhs)
   ensureHasSameShape(*lhs, *rhs);
 
   auto session = getTraceSession(*lhs, *rhs);
-  auto lhs_id = session->getInstId(lhs.get());
-  auto rhs_id = session->getInstId(rhs.get());
-  auto result_id =
-      session->graph().createOp(insts::Compare(lhs_id, rhs_id, predicate));
-
-  return std::make_shared<Tensor>(session, result_id);
+  return session->createTensor<insts::Compare>(lhs, rhs, predicate);
 }
 
 export auto performRelu(std::shared_ptr<Tensor> input)
     -> std::shared_ptr<Tensor> {
   auto session = getTraceSession(*input);
-  auto input_id = session->getInstId(input.get());
-  auto relu_id = session->graph().createOp(insts::Relu(input_id));
-
-  return std::make_shared<Tensor>(session, relu_id);
+  return session->createTensor<insts::Relu>(input);
 }
 
 }  // namespace axon

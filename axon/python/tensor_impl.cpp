@@ -1,6 +1,7 @@
 module;
 
 #include <algorithm>
+#include <cstring>
 #include <memory>
 
 #include "axon/base/macros.h"
@@ -15,7 +16,7 @@ import axon.base;
 import axon.core;
 
 import :tensor;
-
+import :runtime;
 import :jit;
 
 namespace axon {
@@ -34,6 +35,46 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
   auto getDataType(const Tensor* tensor) const -> DataType {
     auto inst_id = getInstId(tensor);
     return graph_.getDataType(inst_id);
+  }
+
+  template <typename InstType, typename... Args>
+  auto createTensor(Args&&... args) -> std::shared_ptr<Tensor> {
+    auto emit_grad = Runtime::get().shouldEmitGrad();
+
+    auto inst_id = graph_.createOp(InstType(forward(args)...), emit_grad);
+    auto session = shared_from_this();
+    return std::make_shared<Tensor>(session, inst_id);
+  }
+
+  template <typename InstType, typename... Args>
+  auto createInst(Args&&... args) -> InstId {
+    auto emit_grad = Runtime::get().shouldEmitGrad();
+    auto inst_id = graph_.createOp(InstType(forward(args)...), emit_grad);
+    return inst_id;
+  }
+
+  auto checkRequiresGrad(InstId inst_id) const -> bool {
+    return graph_.checkRequiresGrad(inst_id);
+  }
+
+  auto setReturned(std::shared_ptr<Tensor>& tensor) -> void {
+    graph_.setReturned(getInstId(tensor.get()));
+  }
+
+  auto setReturnedToNone() -> void { graph_.setReturned(InstId::None); }
+
+  auto performBackward(Tensor* tensor, Tensor* grad) -> void {
+    auto tensor_id = getInstId(tensor);
+    InstId grad_id;
+    if (grad == nullptr) {
+      grad_id = graph_.createOp(insts::FillLike(tensor_id, Scalar(1.0f)));
+    } else {
+      grad_id = getInstId(grad);
+    }
+
+    axon::backward(graph_, tensor_id, grad_id);
+    evaluate(tensor);
+    reset();
   }
 
   auto declareParam(const Tensor* tensor) -> void {
@@ -67,7 +108,7 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
     auto tensor_inst_id = insts_[tensor];
 
     graph_.setReturned(tensor_inst_id);
-    auto storage = GlobalContext::get().execute(parameters_, tensor, graph_);
+    auto storage = Runtime::get().execute(parameters_, tensor, graph_);
     graph_.setReturned(InstId::None);
 
     tensor->setStorage(std::move(storage));
@@ -86,7 +127,6 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
     parameters_.clear();
   }
 
-  auto graph() -> Graph& { return graph_; }
   auto graph() const -> const Graph& { return graph_; }
 
   auto insts() -> llvm::DenseMap<Tensor*, InstId>& { return insts_; }
@@ -98,6 +138,17 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
   auto parameters() const -> const llvm::SmallVector<Tensor*>& {
     return parameters_;
   }
+
+ private:
+  // forward or get inst id
+  auto forward(auto&& arg) -> auto {
+    using T = std::decay_t<decltype(arg)>;
+    if constexpr (std::is_same_v<T, std::shared_ptr<Tensor>>) {
+      return getInstId(arg.get());
+    } else {
+      return std::forward<T>(arg);
+    }
+  };
 
  private:
   Graph graph_;
@@ -126,7 +177,7 @@ auto Tensor::shape() const -> llvm::ArrayRef<i64> {
 Tensor::Tensor(std::shared_ptr<TraceSession> session, InstId inst_id)
     : session_(std::move(session)) {
   session_->insts()[this] = inst_id;
-  requires_grad_ = session_->graph().checkRequiresGrad(inst_id);
+  requires_grad_ = session_->checkRequiresGrad(inst_id);
 }
 
 auto Tensor::data_type() const -> DataType {
@@ -168,15 +219,7 @@ auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
       throw nb::value_error(
           "Only scalar tensors can have their gradient inferred.");
     }
-
-    auto& graph = session_->graph();
-    auto tensor_id = session_->getInstId(this);
-    auto grad_id = graph.createOp(insts::FillLike(tensor_id, Scalar(1.0f)));
-
-    axon::backward(graph, tensor_id, grad_id);
-
-    session_->evaluate(this);
-    session_->reset();
+    session_->performBackward(this, grad.get());
     return;
   }
 
@@ -188,15 +231,7 @@ auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
   if (!session_->insts().contains(grad.get())) {
     session_->declareParam(grad.get());
   }
-
-  auto& graph = session_->graph();
-  auto grad_id = session_->getInstId(grad.get());
-  auto tensor_id = session_->getInstId(this);
-
-  axon::backward(graph, tensor_id, grad_id);
-
-  session_->evaluate(this);
-  session_->reset();
+  session_->performBackward(this, grad.get());
 }
 
 auto Tensor::isRoot() const -> bool {

@@ -22,7 +22,7 @@ import axon.base;
 namespace axon {
 
 struct CompilationContext {
-  Graph& graph;
+  const Graph& graph;
   mlir::OpBuilder& builder;
   mlir::func::FuncOp& func_op;
 
@@ -359,7 +359,7 @@ static auto codegen(const insts::Neg& op, CompilationContext& ctx,
       NegOp::create(ctx.builder, ctx.builder.getUnknownLoc(), operand);
 };
 
-static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
+static auto getFunctionType(const Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {
   llvm::SmallVector<mlir::Type> arg_types;
   auto context = builder.getContext();
@@ -388,7 +388,7 @@ static auto getFunctionType(Graph& graph, mlir::OpBuilder& builder)
   return builder.getFunctionType(arg_types, {returned_type});
 }
 
-export auto codegenGraph(Graph& graph, mlir::OpBuilder& builder)
+export auto codegenGraph(const Graph& graph, mlir::OpBuilder& builder)
     -> mlir::ModuleOp {
   auto module = mlir::ModuleOp::create(builder.getUnknownLoc());
   builder.setInsertionPointToEnd(module.getBody());
