@@ -33,7 +33,8 @@ struct InferShapeRule<insts::MatMul> {
     auto rhs_shape = shapes.get(op.rhs_id)->get();
 
     AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
-                "lhs and rhs must have the same rank.");
+                "lhs and rhs must have the same rank got {} and {}.",
+                lhs_shape.size(), rhs_shape.size());
 
     Shape shape = lhs_shape;
     // (N, A, B) @ (N, B, C) => (N, A, C)

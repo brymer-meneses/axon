@@ -1,5 +1,6 @@
 module;
 
+#include <algorithm>
 #include <format>
 
 #include "axon/base/macros.h"
@@ -142,6 +143,30 @@ static auto getTraceSession(Tensor& input) -> std::shared_ptr<TraceSession> {
   return input.session();
 }
 
+// Compute the broadcasted target shape following NumPy/PyTorch rules.
+// Align from the right; each axis must be equal or 1; result dim is max.
+static auto computeBroadcastedShape(llvm::ArrayRef<i64> a,
+                                    llvm::ArrayRef<i64> b)
+    -> llvm::SmallVector<i64> {
+  i64 ar = static_cast<i64>(a.size());
+  i64 br = static_cast<i64>(b.size());
+  i64 r = std::max(ar, br);
+  llvm::SmallVector<i64> out;
+  out.resize(r);
+
+  for (i64 i = 0; i < r; ++i) {
+    i64 ai = (i < r - ar) ? 1 : a[i - (r - ar)];
+    i64 bi = (i < r - br) ? 1 : b[i - (r - br)];
+
+    if (ai != bi && ai != 1 && bi != 1) {
+      throw std::runtime_error(
+          std::format("Incompatible shapes for broadcasting {} and {}", a, b));
+    }
+    out[i] = ai == 1 ? bi : ai;
+  }
+  return out;
+}
+
 export template <typename ElementWiseInst>
 auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
                                        std::shared_ptr<Tensor> rhs)
@@ -160,13 +185,13 @@ auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
     return session->createTensor<ElementWiseInst>(lhs_id, rhs_id);
   }
 
-  auto lhs_elems = computeNumElems(lhs_shape);
-  auto rhs_elems = computeNumElems(rhs_shape);
+  auto target = computeBroadcastedShape(lhs_shape, rhs_shape);
 
-  if (lhs_elems < rhs_elems) {
-    lhs_id = performBroadcasting(*session, lhs_id, lhs_shape, rhs_shape);
-  } else if (lhs_elems > rhs_elems) {
-    rhs_id = performBroadcasting(*session, rhs_id, rhs_shape, lhs_shape);
+  if (!lhs_shape.equals(target)) {
+    lhs_id = performBroadcasting(*session, lhs_id, lhs_shape, target);
+  }
+  if (!rhs_shape.equals(target)) {
+    rhs_id = performBroadcasting(*session, rhs_id, rhs_shape, target);
   }
 
   return session->createTensor<ElementWiseInst>(lhs_id, rhs_id);
@@ -288,7 +313,8 @@ auto performReduceInst(std::shared_ptr<Tensor> input,
 
   InstId reduce_id = session->getInstId(input.get());
   for (auto dim : input->shape()) {
-    reduce_id = session->createInst<InstType>(reduce_id, 0, keep_dims = false);
+    reduce_id =
+        session->createInst<InstType>(reduce_id, 0, /*keep_dims=*/false);
   }
   return std::make_shared<Tensor>(session, reduce_id);
 }
