@@ -178,19 +178,18 @@ auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
   auto lhs_id = session->getInstId(lhs.get());
   auto rhs_id = session->getInstId(rhs.get());
 
-  auto lhs_shape = lhs->shape();
-  auto rhs_shape = rhs->shape();
+  llvm::SmallVector<i64> lhs_shape(lhs->shape());
+  llvm::SmallVector<i64> rhs_shape(rhs->shape());
 
-  if (lhs_shape.equals(rhs_shape)) {
+  if (lhs_shape == rhs_shape) {
     return session->createTensor<ElementWiseInst>(lhs_id, rhs_id);
   }
 
   auto target = computeBroadcastedShape(lhs_shape, rhs_shape);
-
-  if (!lhs_shape.equals(target)) {
+  if (lhs_shape != target) {
     lhs_id = performBroadcasting(*session, lhs_id, lhs_shape, target);
   }
-  if (!rhs_shape.equals(target)) {
+  if (rhs_shape != target) {
     rhs_id = performBroadcasting(*session, rhs_id, rhs_shape, target);
   }
 
@@ -200,21 +199,13 @@ auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
 export auto performMatMul(std::shared_ptr<Tensor> lhs,
                           std::shared_ptr<Tensor> rhs)
     -> std::shared_ptr<Tensor> {
-  static constexpr auto is_valid_matmul = [](llvm::ArrayRef<i64> lhs_shape,
-                                             llvm::ArrayRef<i64> rhs_shape) {
-    AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
-                "At this point lhs and rhs must have the same rank");
-    if (lhs_shape.size() == 3) {
-      return lhs_shape[2] == rhs_shape[1];
-    }
-    if (lhs_shape.size() == 2) {
-      return lhs_shape[1] == rhs_shape[0];
-    }
-    return false;
-  };
+  // Support vectors/2D/3D with at most one batch dim. Broadcast batch dims
+  // using computeBroadcastedShape, then validate/handle the last two dims.
+  if (lhs->rank() == 0 || rhs->rank() == 0) {
+    throw std::runtime_error("MatMul does not support scalar operands.");
+  }
 
-  if (lhs->rank() > 3 || rhs->rank() > 3 || lhs->rank() < 1 ||
-      rhs->rank() < 1) {
+  if (lhs->rank() > 3 || rhs->rank() > 3) {
     throw std::runtime_error(
         "Attempted to multiply tensors with more than rank of 3.");
   }
@@ -222,53 +213,93 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
   ensureHasSameDataType(*lhs, *rhs);
   auto session = getTraceSession(*lhs, *rhs);
 
-  llvm::ArrayRef<i64> lhs_shape = session->getShape(lhs.get());
-  llvm::ArrayRef<i64> rhs_shape = session->getShape(rhs.get());
+  llvm::SmallVector<i64> lhs_shape(session->getShape(lhs.get()));
+  llvm::SmallVector<i64> rhs_shape(session->getShape(rhs.get()));
+
+  bool lhs_is_vec = lhs_shape.size() == 1;
+  bool rhs_is_vec = rhs_shape.size() == 1;
+
+  static constexpr auto getMK = [](llvm::ArrayRef<i64> shape,
+                                   bool is_vec) -> std::pair<i64, i64> {
+    if (is_vec) {
+      return {1, shape[0]};
+    }
+    AXON_DCHECK(shape.size() >= 2);
+    return {shape[shape.size() - 2], shape[shape.size() - 1]};
+  };
+
+  static constexpr auto getKN = [](llvm::ArrayRef<i64> shape,
+                                   bool is_vec) -> std::pair<i64, i64> {
+    if (is_vec) {
+      return {shape[0], 1};
+    }
+    AXON_DCHECK(shape.size() >= 2);
+    return {shape[shape.size() - 2], shape[shape.size() - 1]};
+  };
+
+  auto [M, K_lhs] = getMK(lhs_shape, lhs_is_vec);
+  auto [K_rhs, N] = getKN(rhs_shape, rhs_is_vec);
+  if (K_lhs != K_rhs) {
+    throw std::runtime_error(std::format(
+        "Incompatible shapes for matmul {} and {} (contracted dims)", lhs_shape,
+        rhs_shape));
+  }
+
+  llvm::SmallVector<i64> lhs_batch;
+  llvm::SmallVector<i64> rhs_batch;
+  if (!lhs_is_vec && lhs_shape.size() == 3) {
+    lhs_batch.push_back(lhs_shape[0]);
+  }
+  if (!rhs_is_vec && rhs_shape.size() == 3) {
+    rhs_batch.push_back(rhs_shape[0]);
+  }
+
+  llvm::SmallVector<i64> batch_target =
+      computeBroadcastedShape(lhs_batch, rhs_batch);
+  if (batch_target.size() > 1) {
+    throw std::runtime_error(std::format(
+        "Only up to rank-3 tensors are supported for matmul; got batch dims {}",
+        batch_target));
+  }
+
+  // Build targets and broadcast both sides to targets if needed.
+  llvm::SmallVector<i64> lhs_target(batch_target.begin(), batch_target.end());
+  lhs_target.push_back(M);
+  lhs_target.push_back(K_lhs);
+
+  llvm::SmallVector<i64> rhs_target(batch_target.begin(), batch_target.end());
+  rhs_target.push_back(K_rhs);
+  rhs_target.push_back(N);
 
   auto lhs_id = session->getInstId(lhs.get());
   auto rhs_id = session->getInstId(rhs.get());
 
-  auto lhs_elems = computeNumElems(lhs_shape);
-  auto rhs_elems = computeNumElems(rhs_shape);
-
-  if (lhs_elems < rhs_elems) {
-    llvm::SmallVector<i64> target_shape(lhs_shape);
-
-    if (lhs_shape.size() == 2 && rhs_shape.size() == 3) {
-      target_shape.insert(target_shape.begin(), rhs_shape[0]);
-    } else if (lhs_shape.size() == 3 && rhs_shape.size() == 3) {
-      target_shape[0] = rhs_shape[0];
-    }
-
-    if (not is_valid_matmul(target_shape, rhs_shape)) {
-      throw std::runtime_error(
-          std::format("Cannot perform matrix multiplication on tensors with "
-                      "shape {} and {}",
-                      lhs_shape, rhs_shape));
-    }
-
-    lhs_id = performBroadcasting(*session, lhs_id, lhs_shape, target_shape);
+  if (lhs_shape != lhs_target) {
+    lhs_id = performBroadcasting(*session, lhs_id, lhs_shape, lhs_target);
+    lhs_shape = lhs_target;
+  }
+  if (rhs_shape != rhs_target) {
+    rhs_id = performBroadcasting(*session, rhs_id, rhs_shape, rhs_target);
+    rhs_shape = rhs_target;
   }
 
-  if (lhs_elems > rhs_elems) {
-    llvm::SmallVector<i64> target_shape(rhs_shape);
-    if (lhs_shape.size() == 3 && rhs_shape.size() == 2) {
-      target_shape.insert(target_shape.begin(), lhs_shape[0]);
-    } else if (lhs_shape.size() == 3 && rhs_shape.size() == 3) {
-      target_shape[0] = rhs_shape[0];
-    }
+  // Create matmul
+  InstId result_id = session->createInst<insts::MatMul>(lhs_id, rhs_id);
 
-    if (not is_valid_matmul(lhs_shape, target_shape)) {
-      throw std::runtime_error(
-          std::format("Cannot perform matrix multiplication on tensors with "
-                      "shape {} and {}",
-                      lhs_shape, rhs_shape));
-    }
-
-    rhs_id = performBroadcasting(*session, rhs_id, rhs_shape, target_shape);
+  // Squeeze vector results if necessary
+  i64 current_rank = static_cast<i64>(batch_target.size()) + 2;
+  if (lhs_is_vec && current_rank >= 2) {
+    result_id = session->createInst<insts::Squeeze>(
+        result_id, static_cast<i32>(current_rank - 2));
+    current_rank -= 1;
+  }
+  if (rhs_is_vec && current_rank >= 1) {
+    result_id = session->createInst<insts::Squeeze>(
+        result_id, static_cast<i32>(current_rank - 1));
+    current_rank -= 1;
   }
 
-  return session->createTensor<insts::MatMul>(lhs_id, rhs_id);
+  return std::make_shared<Tensor>(session, result_id);
 }
 
 export template <Numeric T>
