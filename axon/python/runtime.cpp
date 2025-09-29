@@ -1,6 +1,7 @@
 module;
 
 #include <atomic>
+#include <memory>
 #include <print>
 #include <unordered_map>
 
@@ -30,7 +31,7 @@ export class Runtime {
     return *context;
   }
 
-  auto execute(Graph& graph, llvm::ArrayRef<Tensor*> parameters,
+  auto execute(Graph& graph, llvm::ArrayRef<std::shared_ptr<Tensor>> parameters,
                Tensor* returned = nullptr) {
     auto hash = graph.hash();
     if (graph_registry_.contains(graph)) {

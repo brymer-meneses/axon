@@ -97,50 +97,54 @@ static auto ensureHasSameShape(Tensor& lhs, Tensor& rhs) -> void {
   }
 }
 
-static auto getTraceSession(Tensor& lhs, Tensor& rhs)
+static auto getTraceSession(std::shared_ptr<Tensor>& lhs,
+                            std::shared_ptr<Tensor>& rhs)
     -> std::shared_ptr<TraceSession> {
-  if (lhs.isRoot() && rhs.isRoot()) {
+  if (lhs->isRoot() && rhs->isRoot()) {
     auto session = std::make_shared<TraceSession>();
-    session->declareParam(&lhs);
-    session->declareParam(&rhs);
+    session->declareParam(lhs);
+    session->declareParam(rhs);
     return session;
   }
 
-  if (lhs.isRoot() && !rhs.isRoot()) {
-    auto session = rhs.session();
-    session->declareParam(&lhs);
+  if (lhs->isRoot() && !rhs->isRoot()) {
+    auto session = rhs->session();
+    session->ensureReadyForNewTrace();
+    session->declareParam(lhs);
     return session;
   }
 
-  if (!lhs.isRoot() && rhs.isRoot()) {
-    auto session = lhs.session();
-    session->declareParam(&rhs);
+  if (!lhs->isRoot() && rhs->isRoot()) {
+    auto session = lhs->session();
+    session->ensureReadyForNewTrace();
+    session->declareParam(rhs);
     return session;
   }
 
-  if (!lhs.isRoot() && !rhs.isRoot()) {
-    if (lhs.session() != rhs.session()) {
-      auto session = lhs.session();
+  if (!lhs->isRoot() && !rhs->isRoot()) {
+    if (lhs->session() != rhs->session()) {
+      auto session = lhs->session();
       // merge with the trace session from the rhs;
-      session->merge(*rhs.session());
+      session->merge(*rhs->session());
       // set the session for rhs
-      rhs.session() = session;
+      rhs->session() = session;
       return session;
     }
 
-    return lhs.session();
+    return lhs->session();
   }
   AXON_UNREACHABLE("This should be an unreachable point");
 }
 
-static auto getTraceSession(Tensor& input) -> std::shared_ptr<TraceSession> {
-  if (input.isRoot()) {
+static auto getTraceSession(std::shared_ptr<Tensor>& input)
+    -> std::shared_ptr<TraceSession> {
+  if (input->isRoot()) {
     auto session = std::make_shared<TraceSession>();
-    session->declareParam(&input);
+    session->declareParam(input);
     return session;
   }
 
-  return input.session();
+  return input->session();
 }
 
 // Compute the broadcasted target shape following NumPy/PyTorch rules.
@@ -173,7 +177,7 @@ auto performBinaryElementWiseOperation(std::shared_ptr<Tensor> lhs,
     -> std::shared_ptr<Tensor> {
   ensureHasSameDataType(*lhs, *rhs);
 
-  auto session = getTraceSession(*lhs, *rhs);
+  auto session = getTraceSession(lhs, rhs);
 
   auto lhs_id = session->getInstId(lhs.get());
   auto rhs_id = session->getInstId(rhs.get());
@@ -211,7 +215,7 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
   }
 
   ensureHasSameDataType(*lhs, *rhs);
-  auto session = getTraceSession(*lhs, *rhs);
+  auto session = getTraceSession(lhs, rhs);
 
   llvm::SmallVector<i64> lhs_shape(session->getShape(lhs.get()));
   llvm::SmallVector<i64> rhs_shape(session->getShape(rhs.get()));
@@ -305,7 +309,7 @@ export auto performMatMul(std::shared_ptr<Tensor> lhs,
 export template <Numeric T>
 auto performScalarMul(std::shared_ptr<Tensor> input, T scalar_value)
     -> std::shared_ptr<Tensor> {
-  auto session = getTraceSession(*input);
+  auto session = getTraceSession(input);
   auto data_type = DataType::fromType<T>();
 
   if (data_type != input->data_type()) {
@@ -321,7 +325,7 @@ auto performScalarMul(std::shared_ptr<Tensor> input, T scalar_value)
 export template <Numeric T>
 auto performPow(std::shared_ptr<Tensor> input, T exponent_value)
     -> std::shared_ptr<Tensor> {
-  auto session = getTraceSession(*input);
+  auto session = getTraceSession(input);
   auto data_type = DataType::fromType<T>();
 
   if (data_type != input->data_type()) {
@@ -336,7 +340,7 @@ export template <typename InstType>
 auto performReduceInst(std::shared_ptr<Tensor> input,
                        std::optional<i32> optional_axis, bool keep_dims)
     -> std::shared_ptr<Tensor> {
-  auto session = getTraceSession(*input);
+  auto session = getTraceSession(input);
 
   if (auto axis = optional_axis) {
     return session->createTensor<InstType>(input, *axis, keep_dims);
@@ -355,7 +359,7 @@ export auto performSoftmax(std::shared_ptr<Tensor> input, i32 axis)
   if (axis >= input->rank()) {
     throw nb::value_error("Passed `dim` exceeded the rank of the tensor.");
   }
-  auto session = getTraceSession(*input);
+  auto session = getTraceSession(input);
   return session->createTensor<insts::Softmax>(input, axis);
 }
 
@@ -365,13 +369,13 @@ auto performComparison(std::shared_ptr<Tensor> lhs, std::shared_ptr<Tensor> rhs)
   ensureHasSameDataType(*lhs, *rhs);
   ensureHasSameShape(*lhs, *rhs);
 
-  auto session = getTraceSession(*lhs, *rhs);
+  auto session = getTraceSession(lhs, rhs);
   return session->createTensor<insts::Compare>(lhs, rhs, predicate);
 }
 
 export auto performRelu(std::shared_ptr<Tensor> input)
     -> std::shared_ptr<Tensor> {
-  auto session = getTraceSession(*input);
+  auto session = getTraceSession(input);
   return session->createTensor<insts::Relu>(input);
 }
 
@@ -383,7 +387,7 @@ export auto performAccumulate(std::shared_ptr<Tensor> sink,
         "tensor.accumulate should be performed on a no gradient context.");
   }
 
-  auto session = getTraceSession(*sink, *source);
+  auto session = getTraceSession(sink, source);
   session->createInst<insts::AccumulateData>(sink, source);
   session->evaluate();
 }

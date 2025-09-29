@@ -54,8 +54,8 @@ class CompiledFunction {
     abi::MemRefDescriptor::destroy(returned_descriptor);
   }
 
-  auto execute(llvm::ArrayRef<Tensor*> parameters, Tensor* returned = nullptr)
-      -> void {
+  auto execute(llvm::ArrayRef<std::shared_ptr<Tensor>> parameters,
+               Tensor* returned = nullptr) -> void {
     // context contains a graph that is isomorphic to the one that was used to
     // construct this CompiledFunction.
     configureDescriptors(parameters, returned);
@@ -110,16 +110,13 @@ class CompiledFunction {
     engine_ = std::move(maybe_engine.get());
   }
 
-  auto initializeDescriptors(llvm::ArrayRef<Tensor*> parameters,
+  auto initializeDescriptors(llvm::ArrayRef<std::shared_ptr<Tensor>> parameters,
                              Tensor* returned_value) -> void {
     AXON_DCHECK(parameters.size() > 0);
 
-    for (auto tensor : parameters) {
+    for (auto& tensor_ptr : parameters) {
+      auto* tensor = tensor_ptr.get();
       AXON_DCHECK(tensor != nullptr);
-
-      if (tensor->requiresGrad() && tensor->grad() == nullptr) {
-        tensor->zeroGrad();
-      }
 
       auto ptr =
           reinterpret_cast<void*>(abi::TensorDescriptor::create(*tensor));
@@ -136,7 +133,7 @@ class CompiledFunction {
     }
   }
 
-  auto configureDescriptors(llvm::ArrayRef<Tensor*> parameters,
+  auto configureDescriptors(llvm::ArrayRef<std::shared_ptr<Tensor>> parameters,
                             Tensor* returned_value) -> void {
     if (descriptors_.empty()) {
       initializeDescriptors(parameters, returned_value);
@@ -144,15 +141,10 @@ class CompiledFunction {
     }
 
     AXON_DCHECK(returned_value != nullptr);
-    AXON_DCHECK(descriptors_.size() == parameters.size() + 1);
-
-    for (auto [tensor, ptr] : std::views::zip(parameters, descriptors_)) {
+    for (auto [tensor_ptr, ptr] : std::views::zip(parameters, descriptors_)) {
+      auto* tensor = tensor_ptr.get();
       AXON_DCHECK(tensor != nullptr);
       AXON_DCHECK(tensor->isEvaluated());
-
-      if (tensor->requiresGrad() && tensor->grad() == nullptr) {
-        tensor->zeroGrad();
-      }
 
       auto descriptor = reinterpret_cast<abi::TensorDescriptor*>(ptr);
       abi::TensorDescriptor::setStorage(descriptor, *tensor);

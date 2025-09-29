@@ -74,19 +74,18 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
 
     axon::backward(graph_, tensor_id, grad_id);
     evaluate(tensor);
-    reset();
+    markForReset();
   }
 
-  auto declareParam(const Tensor* tensor) -> void {
+  auto declareParam(std::shared_ptr<Tensor> tensor) -> void {
     AXON_DCHECK(tensor->isEvaluated());
 
     auto storage = tensor->storage();
-
     auto inst_id = graph_.declareParam(storage->shape(), storage->data_type(),
                                        tensor->requiresGrad());
 
-    insts_[const_cast<Tensor*>(tensor)] = inst_id;
-    parameters_.push_back(const_cast<Tensor*>(tensor));
+    insts_[tensor.get()] = inst_id;
+    parameters_.push_back(std::move(tensor));
   }
 
   auto merge(TraceSession& other) -> void {
@@ -108,23 +107,41 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
     auto returned_id = insts_[returned];
 
     graph_.setReturned(returned_id);
+    // Ensure gradient buffers are available for parameters that require them.
+    for (auto& p : parameters_) {
+      if (p && p->requiresGrad() && p->grad() == nullptr) {
+        p->zeroGrad();
+      }
+    }
     Runtime::get().execute(graph_, parameters_, returned);
     graph_.setReturned(InstId::None);
   }
 
-  auto evaluate() -> void { Runtime::get().execute(graph_, parameters_); }
+  auto evaluate() -> void {
+    for (auto& p : parameters_) {
+      if (p && p->requiresGrad() && p->grad() == nullptr) {
+        p->zeroGrad();
+      }
+    }
+    Runtime::get().execute(graph_, parameters_);
+  }
 
-  auto reset() -> void {
+  // Mark this session to be reset the next time a new trace starts.
+  auto markForReset() -> void { should_reset_ = true; }
+
+  // Reset internal mappings if previously marked. Call when starting a new trace.
+  auto ensureReadyForNewTrace() -> void {
+    if (!should_reset_) return;
+
     auto keep_alive = shared_from_this();
-
     for (auto& [tensor, _] : insts_) {
       if (tensor->session() != nullptr) {
         tensor->session() = nullptr;
       }
     }
-
     insts_.clear();
     parameters_.clear();
+    should_reset_ = false;
   }
 
   auto graph() const -> const Graph& { return graph_; }
@@ -134,8 +151,8 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
     return insts_;
   }
 
-  auto parameters() -> llvm::SmallVector<Tensor*>& { return parameters_; }
-  auto parameters() const -> const llvm::SmallVector<Tensor*>& {
+  auto parameters() -> llvm::SmallVector<std::shared_ptr<Tensor>>& { return parameters_; }
+  auto parameters() const -> const llvm::SmallVector<std::shared_ptr<Tensor>>& {
     return parameters_;
   }
 
@@ -153,14 +170,18 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
  private:
   Graph graph_;
   llvm::DenseMap<Tensor*, InstId> insts_;
-  llvm::SmallVector<Tensor*> parameters_;
+  llvm::SmallVector<std::shared_ptr<Tensor>> parameters_;
+  bool should_reset_ = false;
 };
 
 Tensor::~Tensor() {
   if (session_) {
     session_->insts().erase(this);
     auto& params = session_->parameters();
-    params.erase(std::remove(params.begin(), params.end(), this), params.end());
+    params.erase(std::remove_if(params.begin(), params.end(), [&](auto& p) {
+                    return p.get() == this;
+                  }),
+                 params.end());
   }
 }
 
@@ -207,7 +228,7 @@ auto Tensor::evaluate() -> void {
 
   // If this tensor doesn't require gradients, then we can prune this graph.
   if (!requires_grad_) {
-    session_->reset();
+    session_->markForReset();
   }
 }
 
@@ -229,7 +250,7 @@ auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
   }
 
   if (!session_->insts().contains(grad.get())) {
-    session_->declareParam(grad.get());
+    session_->declareParam(grad);
   }
   session_->performBackward(this, grad.get());
 }
