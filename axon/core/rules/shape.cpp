@@ -26,13 +26,13 @@ export template <>
 struct InferShapeRule<insts::MatMul> {
   static auto apply(const insts::MatMul& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_DCHECK(shapes.get(op.lhs_id), "op.lhs_id must have a shape already.");
-    AXON_DCHECK(shapes.get(op.rhs_id), "op.rhs_id must have a shape already.");
+    AXON_ASSERT(shapes.get(op.lhs_id), "op.lhs_id must have a shape already.");
+    AXON_ASSERT(shapes.get(op.rhs_id), "op.rhs_id must have a shape already.");
 
     auto lhs_shape = shapes.get(op.lhs_id)->get();
     auto rhs_shape = shapes.get(op.rhs_id)->get();
 
-    AXON_DCHECK(lhs_shape.size() == rhs_shape.size(),
+    AXON_ASSERT(lhs_shape.size() == rhs_shape.size(),
                 "lhs and rhs must have the same rank got {} and {}.",
                 lhs_shape.size(), rhs_shape.size());
 
@@ -59,13 +59,13 @@ export template <>
 struct InferShapeRule<insts::Transpose> {
   static auto apply(const insts::Transpose& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_DCHECK(shapes.get(op.operand_id),
+    AXON_ASSERT(shapes.get(op.operand_id),
                 "op.operand_id must have a shape already.");
 
     Shape shape = shapes.get(op.operand_id)->get();
-    AXON_DCHECK(op.from < shape.size(),
+    AXON_ASSERT(op.from < shape.size(),
                 "op.from must not exceed the rank of the tensor");
-    AXON_DCHECK(op.to < shape.size(),
+    AXON_ASSERT(op.to < shape.size(),
                 "op.to must not exceed the rank of the tensor");
     std::swap(shape[op.from], shape[op.to]);
     return shape;
@@ -76,7 +76,7 @@ export template <>
 struct InferShapeRule<insts::Unsqueeze> {
   static auto apply(const insts::Unsqueeze& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_DCHECK(shapes.get(op.operand_id),
+    AXON_ASSERT(shapes.get(op.operand_id),
                 "op.operand_id must have a shape already.");
 
     Shape shape = shapes.get(op.operand_id)->get();
@@ -89,11 +89,11 @@ export template <>
 struct InferShapeRule<insts::Squeeze> {
   static auto apply(const insts::Squeeze& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_DCHECK(shapes.get(op.operand_id),
+    AXON_ASSERT(shapes.get(op.operand_id),
                 "op.operand_id must have a shape already.");
 
     Shape shape = shapes.get(op.operand_id)->get();
-    AXON_DCHECK(op.dim < static_cast<i32>(shape.size()),
+    AXON_ASSERT(op.dim < static_cast<i32>(shape.size()),
                 "Dimension must be less than the rank of the operand");
     shape.erase(shape.begin() + op.dim);
     return shape;
@@ -101,16 +101,16 @@ struct InferShapeRule<insts::Squeeze> {
 };
 
 template <typename T>
-static auto inferShapeOfReduceInst(const T& op, const ShapeMapping& shapes)
-    -> Shape {
-  AXON_DCHECK(shapes.get(op.operand_id),
+  static auto inferShapeOfReduceInst(const T& op, const ShapeMapping& shapes)
+      -> Shape {
+  AXON_ASSERT(shapes.get(op.operand_id),
               "op.operand_id must have a shape already.");
 
   Shape shape = shapes.get(op.operand_id)->get();
   auto rank = static_cast<i32>(shape.size());
 
   if (op.keep_dims) {
-    AXON_DCHECK(op.axis < rank, "Axis must not exceed rank");
+    AXON_ASSERT(op.axis < rank, "Axis must not exceed rank");
     shape[op.axis] = 1;
     return shape;
   }
@@ -137,13 +137,13 @@ export template <>
 struct InferShapeRule<insts::ExpandDims> {
   static auto apply(const insts::ExpandDims& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_DCHECK(shapes.get(op.operand_id),
+    AXON_ASSERT(shapes.get(op.operand_id),
                 "op.operand_id must have a shape already.");
 
     Shape shape = shapes.get(op.operand_id)->get();
     auto rank = static_cast<i32>(shape.size());
     for (auto expansion : op.mappings) {
-      AXON_DCHECK(expansion.dim < rank, "Dim {} exceeded the rank {}",
+      AXON_ASSERT(expansion.dim < rank, "Dim {} exceeded the rank {}",
                   expansion.dim, rank);
       shape[expansion.dim] = expansion.scale;
     }
@@ -155,7 +155,7 @@ export template <>
 struct InferShapeRule<insts::Reshape> {
   static auto apply(const insts::Reshape& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_DCHECK(shapes.get(op.operand_id),
+    AXON_ASSERT(shapes.get(op.operand_id),
                 "op.operand_id must have a shape already.");
     return {op.target_shape.begin(), op.target_shape.end()};
   }

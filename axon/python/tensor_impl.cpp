@@ -24,7 +24,7 @@ namespace axon {
 export class TraceSession : public std::enable_shared_from_this<TraceSession> {
  public:
   auto getInstId(const Tensor* tensor) const -> InstId {
-    AXON_DCHECK(insts_.contains(tensor));
+    AXON_ASSERT(insts_.contains(tensor));
     return insts_.at(tensor);
   }
   auto getShape(const Tensor* tensor) const -> llvm::ArrayRef<i64> {
@@ -104,7 +104,7 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
   }
 
   auto evaluate(Tensor* returned) -> void {
-    AXON_DCHECK(insts_.contains(returned));
+    AXON_ASSERT(insts_.contains(returned));
     auto returned_id = insts_[returned];
 
     graph_.setReturned(returned_id);
@@ -170,7 +170,7 @@ auto Tensor::shape() const -> llvm::ArrayRef<i64> {
   }
 
   // This is a lazy tensor, so get the shape from the trace session.
-  AXON_DCHECK(session_ != nullptr);
+  AXON_ASSERT(session_ != nullptr);
   return session_->getShape(this);
 }
 
@@ -288,7 +288,7 @@ auto Tensor::asString() -> std::string {
     evaluate();
   }
 
-  AXON_DCHECK(isEvaluated());
+  AXON_ASSERT(isEvaluated());
 
   std::string repr;
   llvm::raw_string_ostream stream{repr};

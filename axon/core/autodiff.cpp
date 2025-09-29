@@ -12,8 +12,8 @@ import :ids;
 export namespace axon {
 
 auto backward(Graph& graph, InstId output_id, InstId grad_id) -> void {
-  AXON_DCHECK(output_id.isValid(), "`output_id` has no value.");
-  AXON_DCHECK(grad_id.isValid());
+  AXON_ASSERT(output_id.isValid(), "`output_id` has no value.");
+  AXON_ASSERT(grad_id.isValid());
 
   llvm::SmallVector<Dependency> work_list;
   work_list.emplace_back(output_id, grad_id);
@@ -28,7 +28,7 @@ auto backward(Graph& graph, InstId output_id, InstId grad_id) -> void {
     // This should take by copy since `graph.insts` will grow.
     auto inst = graph.insts().get(dep.inst_id);
 
-    // Provide current op id to backward rules that may reference it.
+    // Provide current inst id to backward rules that may reference it.
     ctx.setCurrentInstId(dep.inst_id);
 
     inst.visit([&, dep](const auto& op) {

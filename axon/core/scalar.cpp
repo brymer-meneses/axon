@@ -28,13 +28,13 @@ export class Scalar {
 
   template <Numeric T>
   auto as() const -> const T {
-    AXON_DCHECK(DataType::fromType<T>() == data_type_,
+    AXON_ASSERT(DataType::fromType<T>() == data_type_,
                 "Invalid passed data type.");
     return *reinterpret_cast<const T*>(storage_.data());
   }
 
   friend auto operator+(const Scalar& lhs, const Scalar& rhs) -> Scalar {
-    AXON_DCHECK(lhs.data_type() == rhs.data_type());
+    AXON_ASSERT(lhs.data_type() == rhs.data_type());
     switch (lhs.data_type().kind()) {
       case DataType::Float32: {
         auto lhs_casted = lhs.as<f32>();
@@ -51,7 +51,7 @@ export class Scalar {
 
   template <Numeric T>
   friend auto operator-(const Scalar& lhs, T rhs) -> Scalar {
-    AXON_DCHECK(lhs.data_type() == DataType::fromType<T>());
+    AXON_ASSERT(lhs.data_type() == DataType::fromType<T>());
     switch (lhs.data_type().kind()) {
       case DataType::Float32: {
         auto lhs_casted = lhs.as<f32>();
@@ -66,7 +66,7 @@ export class Scalar {
 
   template <Numeric T>
   friend auto operator-(T lhs, const Scalar& rhs) -> Scalar {
-    AXON_DCHECK(rhs.data_type() == DataType::fromType<T>());
+    AXON_ASSERT(rhs.data_type() == DataType::fromType<T>());
     switch (rhs.data_type().kind()) {
       case DataType::Float32: {
         auto rhs_casted = rhs.as<f32>();
@@ -81,7 +81,7 @@ export class Scalar {
 
   template <Numeric T>
   friend auto operator+(const Scalar& lhs, T rhs) -> Scalar {
-    AXON_DCHECK(lhs.data_type() == DataType::fromType<T>());
+    AXON_ASSERT(lhs.data_type() == DataType::fromType<T>());
     switch (lhs.data_type().kind()) {
       case DataType::Float32: {
         auto lhs_casted = lhs.as<f32>();
@@ -96,7 +96,7 @@ export class Scalar {
 
   template <Numeric T>
   friend auto operator+(T lhs, const Scalar& rhs) -> Scalar {
-    AXON_DCHECK(rhs.data_type() == DataType::fromType<T>());
+    AXON_ASSERT(rhs.data_type() == DataType::fromType<T>());
     switch (rhs.data_type().kind()) {
       case DataType::Float32: {
         auto rhs_casted = rhs.as<f32>();

@@ -257,13 +257,13 @@ export class Storage {
 
   template <Numeric T>
   auto as() const -> const T* {
-    AXON_DCHECK(data_type_.isSameAs<T>());
+    AXON_ASSERT(data_type_.isSameAs<T>());
     return reinterpret_cast<T*>(data_);
   }
 
   template <Numeric T>
   auto as() -> T* {
-    AXON_DCHECK(data_type_.isSameAs<T>());
+    AXON_ASSERT(data_type_.isSameAs<T>());
     return reinterpret_cast<T*>(data_);
   }
 

@@ -26,12 +26,12 @@ class ValueStore {
   }
 
   auto get(KeyType index) -> ValueType& {
-    AXON_DCHECK(index.isValid(), "Passed index has no value.");
+    AXON_ASSERT(index.isValid(), "Passed index has no value.");
     return values_[index.value()];
   }
 
   auto get(KeyType index) const -> const ValueType& {
-    AXON_DCHECK(index.isValid(), "Passed index has no value.");
+    AXON_ASSERT(index.isValid(), "Passed index has no value.");
     return values_[index.value()];
   }
 
@@ -64,7 +64,7 @@ class ValueStore {
   auto values() const -> const auto& { return values_; }
 
   auto containsKey(KeyType index) const -> bool {
-    AXON_DCHECK(index.isValid(), "Passed index has no value.");
+    AXON_ASSERT(index.isValid(), "Passed index has no value.");
     return static_cast<int32_t>(index.value()) < values_.size();
   }
 
@@ -80,9 +80,9 @@ class RelationalStore {
   auto operator==(const RelationalStore& rhs) const -> bool = default;
 
   auto createRelation(KeyType lhs, ValueType rhs) -> void {
-    AXON_DCHECK(not containsKey(lhs),
+    AXON_ASSERT(not containsKey(lhs),
                 "Passed source has already an existing relation.");
-    AXON_DCHECK(not containsKey(rhs),
+    AXON_ASSERT(not containsKey(rhs),
                 "Passed target has already an existing relation.");
     relations_.push_back({lhs, rhs});
   }
@@ -157,7 +157,7 @@ class IdStore {
   auto operator==(const IdStore& rhs) const -> bool = default;
 
   auto add(KeyType key, ValueType value) -> void {
-    AXON_DCHECK(not containsKey(key), "Passed key must not be used.");
+    AXON_ASSERT(not containsKey(key), "Passed key must not be used.");
     pairs_.emplace_back(key, value);
   }
 
@@ -171,7 +171,7 @@ class IdStore {
   }
 
   auto get(KeyType target_key) const -> ValueType {
-    AXON_DCHECK(target_key.isValid(), "Passed key must have a value.");
+    AXON_ASSERT(target_key.isValid(), "Passed key must have a value.");
     for (auto [key, value] : pairs_) {
       if (target_key == key) {
         return value;
@@ -182,7 +182,7 @@ class IdStore {
   }
 
   auto set(KeyType target_key, ValueType target_value) -> void {
-    AXON_DCHECK(target_key.isValid(), "Passed key must have a value.");
+    AXON_ASSERT(target_key.isValid(), "Passed key must have a value.");
     for (auto& pair : pairs_) {
       if (pair.key == target_key) {
         pair.value = target_value;

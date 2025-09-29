@@ -57,8 +57,8 @@ static auto expandAlongAxisToMatch(BackwardContext& ctx, InstId inst_id,
   auto inst_shape = ctx.getShape(inst_id);
   auto ref_shape = ctx.getShape(ref_id);
 
-  AXON_DCHECK(axis < ref_shape.size());
-  AXON_DCHECK(inst_shape[axis] == 1);
+  AXON_ASSERT(axis < ref_shape.size());
+  AXON_ASSERT(inst_shape[axis] == 1);
 
   mappings.push_back({.dim = static_cast<i64>(axis), .scale = ref_shape[axis]});
   return ctx.createOp(insts::ExpandDims(inst_id, std::move(mappings)));

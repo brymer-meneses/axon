@@ -75,7 +75,7 @@ export class Inst {
   template <InstConvertible InstType>
   auto getAs() const -> InstType {
     auto* value = std::get_if<InstType>(&value_);
-    AXON_DCHECK(value != nullptr, "Invalid type.");
+    AXON_ASSERT(value != nullptr, "Invalid type.");
     return *value;
   }
 

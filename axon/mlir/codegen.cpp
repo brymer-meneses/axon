@@ -74,7 +74,7 @@ static auto codegen(const insts::AccumulateData& op, CompilationContext& ctx,
 static auto codegen(const insts::Constant& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   Storage* constant = ctx.graph.constants().get(inst_id)->get();
-  AXON_DCHECK(constant != nullptr);
+  AXON_ASSERT(constant != nullptr);
 
   auto element_type = getElementType(constant->data_type(), ctx.builder);
   auto result_type =
@@ -374,7 +374,7 @@ static auto getFunctionType(const Graph& graph, mlir::OpBuilder& builder)
     -> mlir::FunctionType {
   llvm::SmallVector<mlir::Type> arg_types;
   auto context = builder.getContext();
-  AXON_DCHECK(context != nullptr);
+  AXON_ASSERT(context != nullptr);
 
   for (auto& param : graph.parameters().values()) {
     auto requires_grad = param.requires_grad;

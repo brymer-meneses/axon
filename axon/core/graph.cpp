@@ -105,7 +105,7 @@ export class Graph {
   }
 
   auto merge(Graph& graph) -> void {
-    AXON_DCHECK(!graph.returned_id_.isValid());
+    AXON_ASSERT(!graph.returned_id_.isValid());
 
     auto add_offset = [offset =
                            insts_.size()](InstId foreign_inst_id) -> InstId {
@@ -193,7 +193,7 @@ export class Graph {
 
   auto getDataType(InstId inst_id) const -> DataType {
     auto data_type = data_types_.get(inst_id);
-    AXON_DCHECK(data_type, "No data type registered for inst");
+    AXON_ASSERT(data_type, "No data type registered for inst");
     return data_type->get();
   }
 
@@ -263,7 +263,7 @@ export class Graph {
         // Constant data type is set at creation time.
       } else if constexpr (std::is_same_v<InstType, insts::AccumulateGrad>) {
         auto value = data_types_.get(op.source_id);
-        AXON_DCHECK(value, "Value data type missing");
+        AXON_ASSERT(value, "Value data type missing");
         data_types_.set(inst_id, value->get());
       } else if constexpr (requires {
                              op.lhs_id;
@@ -271,14 +271,14 @@ export class Graph {
                            }) {
         auto lhs = data_types_.get(op.lhs_id);
         auto rhs = data_types_.get(op.rhs_id);
-        AXON_DCHECK(lhs && rhs,
+        AXON_ASSERT(lhs && rhs,
                     "Binary op operand data types should be available");
-        AXON_DCHECK(lhs->get() == rhs->get(),
+        AXON_ASSERT(lhs->get() == rhs->get(),
                     "Binary op operands must share the same data type");
         data_types_.set(inst_id, lhs->get());
       } else if constexpr (requires { op.operand_id; }) {
         auto operand = data_types_.get(op.operand_id);
-        AXON_DCHECK(operand, "Operand data type missing");
+        AXON_ASSERT(operand, "Operand data type missing");
         data_types_.set(inst_id, operand->get());
       }
     });
