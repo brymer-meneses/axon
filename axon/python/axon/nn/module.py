@@ -1,9 +1,11 @@
 from typing import Any, List
 
+from abc import ABC, abstractmethod
+
 from axon._core import Tensor
 
 
-class Module:
+class Module(ABC):
     def __init__(self) -> None:
         self._parameters: List[Tensor] = []
 
@@ -21,7 +23,6 @@ class Module:
     def parameters(self) -> List[Tensor]:
         return self._parameters
 
+    @abstractmethod
     def forward(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError(
-            "Inherting from `axon.Module` requires the forward method to be implemented."
-        )
+        pass
