@@ -4,6 +4,7 @@ from . import testing
 from . import runtime
 from . import datasets
 from . import builtin
+from . import optim
 
 from axon.runtime import no_grad
 
@@ -13,6 +14,7 @@ __all__ = [
     "runtime",
     "datasets",
     "builtin",
+    "optim",
     # misc
     "no_grad",
 ]

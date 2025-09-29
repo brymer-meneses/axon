@@ -107,47 +107,44 @@ export class Graph {
   auto merge(Graph& graph) -> void {
     AXON_ASSERT(!graph.returned_id_.isValid());
 
-    auto add_offset = [offset =
-                           insts_.size()](InstId foreign_inst_id) -> InstId {
-      return InstId(static_cast<i32>(offset) + foreign_inst_id.value());
-    };
+    auto param_offset = static_cast<i32>(parameters_.size());
+    auto inst_offset = static_cast<i32>(insts_.size());
 
     for (auto& param : graph.parameters().values()) {
-      param.inst_id = add_offset(param.inst_id);
+      param.inst_id = param.inst_id.add_offset(inst_offset);
       parameters_.add(std::move(param));
     }
 
     for (auto& [key, value] : graph.gradients_.pairs()) {
-      gradients_.set(add_offset(key), add_offset(value));
+      gradients_.set(key.add_offset(inst_offset),
+                     value.add_offset(inst_offset));
     }
 
-    for (auto [id, shape] : graph.shapes_.pairs()) {
-      shapes_.set(add_offset(id), std::move(shape));
+    for (auto [inst_id, shape] : graph.shapes_.pairs()) {
+      shapes_.set(inst_id.add_offset(inst_offset), std::move(shape));
     }
 
-    for (auto [id, constant] : graph.constants_.pairs()) {
-      constants_.set(add_offset(id), std::move(constant));
+    for (auto [inst_id, constant] : graph.constants_.pairs()) {
+      constants_.set(inst_id.add_offset(inst_offset), std::move(constant));
     }
 
-    for (auto [id, data_type] : graph.data_types_.pairs()) {
-      data_types_.set(add_offset(id), data_type);
+    for (auto [inst_id, data_type] : graph.data_types_.pairs()) {
+      data_types_.set(inst_id.add_offset(inst_offset), data_type);
     }
 
-    auto param_size = static_cast<i32>(parameters_.size());
-
-    auto add_offset_to_inst = [add_offset, param_size](auto& op) -> void {
+    auto add_offset_to_inst = [inst_offset, param_offset](auto& op) -> void {
       using InstType = std::decay_t<decltype(op)>;
       if constexpr (llvm::is_one_of<InstType, insts::AccumulateGrad,
                                     insts::AccumulateData>()) {
-        op.sink_id = add_offset(op.sink_id);
-        op.source_id = add_offset(op.source_id);
+        op.sink_id = op.sink_id.add_offset(inst_offset);
+        op.source_id = op.source_id.add_offset(inst_offset);
       } else if constexpr (std::is_same_v<InstType, insts::GetParameter>) {
-        op.param_id = ParamId(param_size + op.param_id.value());
+        op.param_id = op.param_id.add_offset(param_offset);
       } else if constexpr (InstType::traits.num_inputs == 2) {
-        op.lhs_id = add_offset(op.lhs_id);
-        op.rhs_id = add_offset(op.rhs_id);
+        op.lhs_id = op.lhs_id.add_offset(inst_offset);
+        op.rhs_id = op.rhs_id.add_offset(inst_offset);
       } else if constexpr (InstType::traits.num_inputs == 1) {
-        op.input_id = add_offset(op.input_id);
+        op.input_id = op.input_id.add_offset(inst_offset);
       } else if constexpr (InstType::traits.num_inputs == 0) {
       } else {
         static_assert(false, "Unhandled inst");

@@ -161,7 +161,7 @@ export template <>
 struct Hash<insts::AccumulateData> {
   static auto hash(const insts::AccumulateData& op,
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
-    constexpr auto tag = Inst::tag<insts::AccumulateGrad>();
+    constexpr auto tag = Inst::tag<insts::AccumulateData>();
 
     llvm::ArrayRef<i64> sink_shape(shapes.get(op.sink_id)->get());
     llvm::ArrayRef<i64> source_shape(shapes.get(op.source_id)->get());
