@@ -82,13 +82,13 @@ auto ReshapeOp::verify() -> mlir::LogicalResult {
     return elems;
   };
 
-  auto operand = mlir::cast<mlir::RankedTensorType>(getOperand().getType());
-  auto source_elems = compute_num_elems(operand.getShape());
+  auto input = mlir::cast<mlir::RankedTensorType>(getInput().getType());
+  auto source_elems = compute_num_elems(input.getShape());
   auto target_elems = compute_num_elems(getTargetShape());
 
   if (source_elems != target_elems) {
     emitOpError() << std::format("{} -> {} is not a valid reshape",
-                                 operand.getShape(), getTargetShape());
+                                 input.getShape(), getTargetShape());
     return mlir::failure();
   }
 
@@ -100,7 +100,7 @@ auto MatMulOp::verify() -> mlir::LogicalResult {
   auto rhs = mlir::cast<mlir::RankedTensorType>(getRhs().getType());
 
   if (lhs.getRank() != rhs.getRank()) {
-    emitOpError() << "Operands must match ranks";
+    emitOpError() << "inputs must match ranks";
     return mlir::failure();
   }
 

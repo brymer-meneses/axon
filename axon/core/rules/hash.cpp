@@ -23,7 +23,7 @@ concept BinaryInst = requires(InstType t) {
 };
 
 template <typename InstType>
-concept UnaryInst = requires(InstType t) { t.operand_id; };
+concept UnaryInst = requires(InstType t) { t.input_id; };
 
 template <typename T>
 struct Hash;
@@ -47,7 +47,7 @@ struct Hash<T> {
   static auto hash(const T& op, const IdMap<InstId, Shape>& shapes)
       -> llvm::hash_code {
     constexpr auto tag = Inst::tag<T>();
-    llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
+    llvm::ArrayRef<i64> operand_shape(shapes.get(op.input_id)->get());
     return llvm::hash_combine(tag, operand_shape);
   }
 };
@@ -58,7 +58,7 @@ struct Hash<insts::Reshape> {
       -> llvm::hash_code {
     constexpr auto tag = Inst::tag<insts::Reshape>();
 
-    llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
+    llvm::ArrayRef<i64> operand_shape(shapes.get(op.input_id)->get());
     return llvm::hash_combine(tag, operand_shape);
   }
 };
@@ -77,7 +77,7 @@ template <typename InstType>
 static auto handleReduceInst(const InstType& op,
                              const IdMap<InstId, Shape>& shapes) {
   constexpr auto tag = Inst::tag<InstType>();
-  llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
+  llvm::ArrayRef<i64> operand_shape(shapes.get(op.input_id)->get());
   return llvm::hash_combine(tag, operand_shape, op.keep_dims, op.axis);
 }
 
@@ -94,7 +94,7 @@ struct Hash<insts::Softmax> {
   static auto hash(const insts::Softmax& op, const IdMap<InstId, Shape>& shapes)
       -> llvm::hash_code {
     constexpr auto tag = Inst::tag<insts::Softmax>();
-    llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
+    llvm::ArrayRef<i64> operand_shape(shapes.get(op.input_id)->get());
     return llvm::hash_combine(operand_shape, tag, op.axis);
   }
 };
@@ -117,7 +117,7 @@ struct Hash<insts::Unsqueeze> {
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
     constexpr auto tag = Inst::tag<insts::Unsqueeze>();
 
-    llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
+    llvm::ArrayRef<i64> operand_shape(shapes.get(op.input_id)->get());
     return llvm::hash_combine(tag, operand_shape, op.dim);
   }
 };
@@ -128,7 +128,7 @@ struct Hash<insts::Squeeze> {
       -> llvm::hash_code {
     constexpr auto tag = Inst::tag<insts::Squeeze>();
 
-    llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
+    llvm::ArrayRef<i64> operand_shape(shapes.get(op.input_id)->get());
     return llvm::hash_combine(tag, operand_shape, op.dim);
   }
 };
@@ -139,7 +139,7 @@ struct Hash<insts::Transpose> {
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
     constexpr auto tag = Inst::tag<insts::Transpose>();
 
-    llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
+    llvm::ArrayRef<i64> operand_shape(shapes.get(op.input_id)->get());
     return llvm::hash_combine(tag, operand_shape, op.from, op.to);
   }
 };
@@ -184,7 +184,7 @@ struct Hash<insts::ScalarMul> {
   static auto hash(const insts::ScalarMul& op,
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
     constexpr auto tag = Inst::tag<insts::ScalarMul>();
-    llvm::ArrayRef<i64> operand_shape(shapes.get(op.operand_id)->get());
+    llvm::ArrayRef<i64> operand_shape(shapes.get(op.input_id)->get());
 
     return llvm::hash_combine(tag, operand_shape, op.scalar);
   }

@@ -224,7 +224,7 @@ struct ExpandDimsOpLowering : mlir::OpConversionPattern<ExpandDimsOp> {
     auto broadcast_op = mlir::linalg::GenericOp::create(
         rewriter, op.getLoc(),
         /*resultTensorTypes=*/mlir::TypeRange{op.getResult().getType()},
-        /*inputs=*/mlir::ValueRange{adaptor.getOperand()},
+        /*inputs=*/mlir::ValueRange{adaptor.getInput()},
         /*outputs=*/mlir::ValueRange{init_op},
 
         indexing_maps, iterator_types,
@@ -245,7 +245,7 @@ struct SqueezeOpLowering : mlir::OpConversionPattern<SqueezeOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto input_tensor =
-        mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
+        mlir::cast<mlir::RankedTensorType>(op.getInput().getType());
     auto result_tensor =
         mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
 
@@ -259,7 +259,7 @@ struct SqueezeOpLowering : mlir::OpConversionPattern<SqueezeOp> {
     }
 
     auto collapse_op = mlir::tensor::CollapseShapeOp::create(
-        rewriter, op.getLoc(), adaptor.getOperand(), *reassociation_indices);
+        rewriter, op.getLoc(), adaptor.getInput(), *reassociation_indices);
     rewriter.replaceOp(op, collapse_op);
     return mlir::success();
   }
@@ -272,7 +272,7 @@ struct UnqueezeOpLowering : mlir::OpConversionPattern<UnsqueezeOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto input_tensor =
-        mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
+        mlir::cast<mlir::RankedTensorType>(op.getInput().getType());
     auto result_tensor =
         mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
 
@@ -286,7 +286,7 @@ struct UnqueezeOpLowering : mlir::OpConversionPattern<UnsqueezeOp> {
     }
 
     auto expand_op = mlir::tensor::ExpandShapeOp::create(
-        rewriter, op.getLoc(), op.getResult().getType(), adaptor.getOperand(),
+        rewriter, op.getLoc(), op.getResult().getType(), adaptor.getInput(),
         *reassociation_indices);
     rewriter.replaceOp(op, expand_op);
     return mlir::success();
@@ -302,7 +302,7 @@ struct ReshapeOpLowering : mlir::OpConversionPattern<ReshapeOp> {
     auto result_type = op.getResult().getType();
     auto result_tensor = mlir::cast<mlir::RankedTensorType>(result_type);
     auto input_tensor =
-        mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
+        mlir::cast<mlir::RankedTensorType>(op.getInput().getType());
     auto reassociation_indices =
         mlir::getReassociationIndicesForReshape(input_tensor, result_tensor);
     if (!reassociation_indices) {
@@ -314,7 +314,7 @@ struct ReshapeOpLowering : mlir::OpConversionPattern<ReshapeOp> {
 
     if (input_tensor.getRank() < result_tensor.getRank()) {
       auto expand_op = mlir::tensor::ExpandShapeOp::create(
-          rewriter, op.getLoc(), op.getResult().getType(), adaptor.getOperand(),
+          rewriter, op.getLoc(), op.getResult().getType(), adaptor.getInput(),
           *reassociation_indices);
       rewriter.replaceOp(op, expand_op);
       return mlir::success();
@@ -322,7 +322,7 @@ struct ReshapeOpLowering : mlir::OpConversionPattern<ReshapeOp> {
 
     if (input_tensor.getRank() > result_tensor.getRank()) {
       auto expand_op = mlir::tensor::CollapseShapeOp::create(
-          rewriter, op.getLoc(), op.getResult().getType(), adaptor.getOperand(),
+          rewriter, op.getLoc(), op.getResult().getType(), adaptor.getInput(),
           *reassociation_indices);
       rewriter.replaceOp(op, expand_op);
       return mlir::success();
@@ -356,11 +356,11 @@ struct TransposeOpLowering : mlir::OpConversionPattern<TransposeOp> {
                                      mlir::utils::IteratorType::parallel);
     llvm::SmallVector indexing_maps = {input_map, output_map};
 
-    auto init_op = adaptor.getOperand();
+    auto init_op = adaptor.getInput();
 
     auto transpose_op = mlir::linalg::GenericOp::create(
         rewriter, op.getLoc(), mlir::TypeRange{result_type},
-        mlir::ValueRange{adaptor.getOperand()}, mlir::ValueRange{init_op},
+        mlir::ValueRange{adaptor.getInput()}, mlir::ValueRange{init_op},
         indexing_maps, iterator_types,
         [](mlir::OpBuilder& builder, mlir::Location loc,
            mlir::ValueRange args) {
@@ -496,12 +496,12 @@ struct NegOpLowering : mlir::OpConversionPattern<NegOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
-    auto tensor = mlir::cast<mlir::RankedTensorType>(op.getOperand().getType());
+    auto tensor = mlir::cast<mlir::RankedTensorType>(op.getInput().getType());
 
     auto init_op = createZerosLike(rewriter, tensor, loc);
 
     auto neg_op = mlir::linalg::NegFOp::create(
-        rewriter, loc, mlir::ValueRange{adaptor.getOperand()},
+        rewriter, loc, mlir::ValueRange{adaptor.getInput()},
         mlir::ValueRange{init_op});
 
     rewriter.replaceOp(op, neg_op.getResult(0));
@@ -516,7 +516,7 @@ struct ScalarMulOpLowering : mlir::OpConversionPattern<ScalarMulOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
-    auto result_type = op.getOperand().getType();
+    auto result_type = op.getInput().getType();
 
     if (auto float_attr = mlir::dyn_cast<mlir::FloatAttr>(op.getScalar())) {
       auto scalar_constant =
@@ -528,7 +528,7 @@ struct ScalarMulOpLowering : mlir::OpConversionPattern<ScalarMulOp> {
       auto empty_op =
           mlir::tensor::EmptyOp::create(rewriter, loc, result_type, {});
       auto prod = mlir::linalg::MulOp::create(
-          rewriter, loc, mlir::ValueRange{scalar_tensor, adaptor.getOperand()},
+          rewriter, loc, mlir::ValueRange{scalar_tensor, adaptor.getInput()},
           mlir::ValueRange{empty_op});
 
       rewriter.replaceOp(op, prod.getResult(0));
@@ -602,7 +602,7 @@ struct PowOpLowering : mlir::OpConversionPattern<PowOp> {
         rewriter, loc, exponent_constant, result_tensor_type.getShape());
 
     auto pow_op = mlir::math::PowFOp::create(
-        rewriter, loc, adaptor.getOperand(), exponent_tensor);
+        rewriter, loc, adaptor.getInput(), exponent_tensor);
 
     rewriter.replaceOp(op, pow_op);
     return mlir::success();
@@ -687,7 +687,7 @@ struct SoftmaxOpLowering : mlir::OpConversionPattern<SoftmaxOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
-    auto input = adaptor.getOperand();
+    auto input = adaptor.getInput();
     auto element_type = op.getResult().getType().getElementType();
     auto axis = op.getDim();
 
@@ -870,7 +870,7 @@ struct ReluOpLowering : mlir::OpConversionPattern<ReluOp> {
 
     auto generic_op = mlir::linalg::GenericOp::create(
         rewriter, loc, mlir::TypeRange{result_type},
-        mlir::ValueRange{adaptor.getOperand()}, mlir::ValueRange{init_op},
+        mlir::ValueRange{adaptor.getInput()}, mlir::ValueRange{init_op},
         indexing_maps, iterator_types,
         [zero_constant](mlir::OpBuilder& builder, mlir::Location loc,
                         mlir::ValueRange args) {
@@ -902,7 +902,7 @@ struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
         rewriter, loc, rewriter.getZeroAttr(element_type));
 
     auto sum_op =
-        reduce<mlir::arith::AddFOp>(rewriter, loc, adaptor.getOperand(),
+        reduce<mlir::arith::AddFOp>(rewriter, loc, adaptor.getInput(),
                                     op.getKeepDims(), op.getDim(), init_value);
 
     rewriter.replaceOp(op, sum_op);
@@ -917,7 +917,7 @@ struct MeanOpLowering : mlir::OpConversionPattern<MeanOp> {
                        mlir::ConversionPatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
-    auto input_type = op.getOperand().getType();
+    auto input_type = op.getInput().getType();
     auto result_type = op.getResult().getType();
 
     auto element_type = input_type.getElementType();
@@ -927,7 +927,7 @@ struct MeanOpLowering : mlir::OpConversionPattern<MeanOp> {
         rewriter, loc, rewriter.getZeroAttr(element_type));
 
     auto sum_op =
-        reduce<mlir::arith::AddFOp>(rewriter, loc, adaptor.getOperand(),
+        reduce<mlir::arith::AddFOp>(rewriter, loc, adaptor.getInput(),
                                     op.getKeepDims(), op.getDim(), init_value);
     auto num_elements_along_axis =
         static_cast<f32>(input_type.getShape()[op.getDim()]);

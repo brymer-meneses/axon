@@ -105,8 +105,8 @@ static auto codegen(const insts::Constant& op, CompilationContext& ctx,
 template <typename InstType, typename LoweredOpType>
 static auto codegenReduceInst(const InstType& op, CompilationContext& ctx,
                               InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
-  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+  auto input = ctx.values[op.input_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
   auto result_shape = ctx.graph.getShape(inst_id);
   auto result_type =
@@ -114,7 +114,7 @@ static auto codegenReduceInst(const InstType& op, CompilationContext& ctx,
 
   ctx.values[inst_id] =
       LoweredOpType::create(ctx.builder, ctx.builder.getUnknownLoc(),
-                            result_type, operand, op.axis, op.keep_dims);
+                            result_type, input, op.axis, op.keep_dims);
 }
 
 static auto codegen(const insts::Sum& op, CompilationContext& ctx,
@@ -129,21 +129,21 @@ static auto codegen(const insts::Mean& op, CompilationContext& ctx,
 
 static auto codegen(const insts::Softmax& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
-  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+  auto input = ctx.values[op.input_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
   auto result_shape = ctx.graph.getShape(inst_id);
   auto result_type =
       mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
 
   ctx.values[inst_id] = SoftmaxOp::create(
-      ctx.builder, ctx.builder.getUnknownLoc(), result_type, operand, op.axis);
+      ctx.builder, ctx.builder.getUnknownLoc(), result_type, input, op.axis);
 }
 
 static auto codegen(const insts::ExpandDims& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
-  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+  auto input = ctx.values[op.input_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
   llvm::SmallVector<mlir::Attribute> expansions;
   llvm::SmallVector<int64_t> result_shape{tensor_type.getShape()};
@@ -164,7 +164,7 @@ static auto codegen(const insts::ExpandDims& op, CompilationContext& ctx,
 
   ctx.values[inst_id] =
       ExpandDimsOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
-                           result_type, operand, expansions_attr);
+                           result_type, input, expansions_attr);
 }
 
 static auto codegen(const insts::GetParameter& op, CompilationContext& ctx,
@@ -178,7 +178,7 @@ static auto codegen(const insts::GetParameter& op, CompilationContext& ctx,
 
 static auto codegen(const insts::FillLike& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto like = ctx.values[op.operand_id];
+  auto like = ctx.values[op.input_id];
   // Extract the scalar value according to its stored dtype.
   double fill;
   switch (op.fill_value.data_type().kind()) {
@@ -232,59 +232,59 @@ static auto codegen(const insts::MatMul& op, CompilationContext& ctx,
 
 static auto codegen(const insts::Transpose& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
+  auto input = ctx.values[op.input_id];
   auto result_shape = ctx.graph.getShape(inst_id);
   auto data_type =
-      mlir::cast<mlir::RankedTensorType>(operand.getType()).getElementType();
+      mlir::cast<mlir::RankedTensorType>(input.getType()).getElementType();
   auto result_type = mlir::RankedTensorType::get(result_shape, data_type);
 
   ctx.values[inst_id] =
       TransposeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), result_type,
-                          operand, op.from, op.to);
+                          input, op.from, op.to);
 }
 
 static auto codegen(const insts::Squeeze& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
-  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+  auto input = ctx.values[op.input_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
   auto result_shape = ctx.graph.getShape(inst_id);
   auto result_type =
       mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
 
   ctx.values[inst_id] = SqueezeOp::create(
-      ctx.builder, ctx.builder.getUnknownLoc(), result_type, operand, op.dim);
+      ctx.builder, ctx.builder.getUnknownLoc(), result_type, input, op.dim);
 }
 
 static auto codegen(const insts::Unsqueeze& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
-  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+  auto input = ctx.values[op.input_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
   auto result_shape = ctx.graph.getShape(inst_id);
   auto result_type =
       mlir::RankedTensorType::get(result_shape, tensor_type.getElementType());
 
   ctx.values[inst_id] = UnsqueezeOp::create(
-      ctx.builder, ctx.builder.getUnknownLoc(), result_type, operand, op.dim);
+      ctx.builder, ctx.builder.getUnknownLoc(), result_type, input, op.dim);
 }
 
 static auto codegen(const insts::Reshape& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
-  auto tensor_type = mlir::cast<mlir::RankedTensorType>(operand.getType());
+  auto input = ctx.values[op.input_id];
+  auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
   auto result_type = mlir::RankedTensorType::get(op.target_shape,
                                                  tensor_type.getElementType());
 
   ctx.values[inst_id] =
       ReshapeOp::create(ctx.builder, ctx.builder.getUnknownLoc(), result_type,
-                        operand, op.target_shape);
+                        input, op.target_shape);
 }
 
 static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
+  auto input = ctx.values[op.input_id];
   auto data_type = op.scalar.data_type();
 
   mlir::Attribute attr;
@@ -300,28 +300,28 @@ static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx,
   }
 
   ctx.values[inst_id] = ScalarMulOp::create(
-      ctx.builder, ctx.builder.getUnknownLoc(), operand, attr);
+      ctx.builder, ctx.builder.getUnknownLoc(), input, attr);
 };
 
 static auto codegen(const insts::Pow& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
+  auto input = ctx.values[op.input_id];
   auto element_type =
-      mlir::cast<mlir::RankedTensorType>(operand.getType()).getElementType();
+      mlir::cast<mlir::RankedTensorType>(input.getType()).getElementType();
 
   auto exponent_value = op.exponent.as<f32>();
 
   ctx.values[inst_id] =
-      PowOp::create(ctx.builder, ctx.builder.getUnknownLoc(), operand,
+      PowOp::create(ctx.builder, ctx.builder.getUnknownLoc(), input,
                     ctx.builder.getF64FloatAttr(exponent_value));
 }
 
 static auto codegen(const insts::Relu& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
+  auto input = ctx.values[op.input_id];
 
   ctx.values[inst_id] =
-      ReluOp::create(ctx.builder, ctx.builder.getUnknownLoc(), operand);
+      ReluOp::create(ctx.builder, ctx.builder.getUnknownLoc(), input);
 }
 
 static auto codegen(const insts::Compare& op, CompilationContext& ctx,
@@ -364,10 +364,10 @@ static auto codegen(const insts::Sub& op, CompilationContext& ctx,
 
 static auto codegen(const insts::Neg& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto operand = ctx.values[op.operand_id];
+  auto input = ctx.values[op.input_id];
 
   ctx.values[inst_id] =
-      NegOp::create(ctx.builder, ctx.builder.getUnknownLoc(), operand);
+      NegOp::create(ctx.builder, ctx.builder.getUnknownLoc(), input);
 };
 
 static auto getFunctionType(const Graph& graph, mlir::OpBuilder& builder)

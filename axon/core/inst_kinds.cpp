@@ -15,12 +15,12 @@ export namespace axon {
 enum class ShapeInfo {
   Custom,
   None,
-  SameAsOperands,
+  SameAsInputs,
 };
 
 struct InstTraits {
   /// number of tensor operands
-  i8 num_operands = 0;
+  i8 num_inputs = 0;
   /// shape inference rule
   ShapeInfo shape_rule = ShapeInfo::Custom;
   /// whether this inst has a backward function
@@ -31,7 +31,7 @@ namespace insts {
 
 struct ExpandDims {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
+      .num_inputs = 1,
       .shape_rule = ShapeInfo::Custom,
       .differentiable = true,
   };
@@ -43,7 +43,7 @@ struct ExpandDims {
     auto operator==(const Mapping&) const -> bool = default;
   };
 
-  InstId operand_id;
+  InstId input_id;
   llvm::SmallVector<Mapping> mappings;
 
   auto operator==(const ExpandDims& other) const -> bool = default;
@@ -51,12 +51,12 @@ struct ExpandDims {
 
 struct Unsqueeze {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
+      .num_inputs = 1,
       .shape_rule = ShapeInfo::Custom,
       .differentiable = true,
   };
 
-  InstId operand_id;
+  InstId input_id;
   i32 dim;
 
   auto operator==(const Unsqueeze& other) const -> bool = default;
@@ -64,12 +64,12 @@ struct Unsqueeze {
 
 struct Squeeze {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
+      .num_inputs = 1,
       .shape_rule = ShapeInfo::Custom,
       .differentiable = true,
   };
 
-  InstId operand_id;
+  InstId input_id;
   i32 dim;
 
   auto operator==(const Squeeze& other) const -> bool = default;
@@ -77,12 +77,12 @@ struct Squeeze {
 
 struct Transpose {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
+      .num_inputs = 1,
       .shape_rule = ShapeInfo::Custom,
       .differentiable = true,
   };
 
-  InstId operand_id;
+  InstId input_id;
 
   u32 from;
   u32 to;
@@ -92,12 +92,12 @@ struct Transpose {
 
 struct Reshape {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
+      .num_inputs = 1,
       .shape_rule = ShapeInfo::Custom,
       .differentiable = true,
   };
 
-  InstId operand_id;
+  InstId input_id;
   llvm::SmallVector<i64> target_shape;
 
   auto operator==(const Reshape& other) const -> bool = default;
@@ -105,7 +105,7 @@ struct Reshape {
 
 struct MatMul {
   constexpr static auto traits = InstTraits{
-      .num_operands = 2,
+      .num_inputs = 2,
       .shape_rule = ShapeInfo::Custom,
       .differentiable = true,
   };
@@ -118,8 +118,8 @@ struct MatMul {
 
 struct Add {
   constexpr static auto traits = InstTraits{
-      .num_operands = 2,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .num_inputs = 2,
+      .shape_rule = ShapeInfo::SameAsInputs,
       .differentiable = true,
   };
 
@@ -131,8 +131,8 @@ struct Add {
 
 struct Sub {
   constexpr static auto traits = InstTraits{
-      .num_operands = 2,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .num_inputs = 2,
+      .shape_rule = ShapeInfo::SameAsInputs,
       .differentiable = true,
   };
 
@@ -144,8 +144,8 @@ struct Sub {
 
 struct Mul {
   constexpr static auto traits = InstTraits{
-      .num_operands = 2,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .num_inputs = 2,
+      .shape_rule = ShapeInfo::SameAsInputs,
       .differentiable = true,
   };
 
@@ -157,12 +157,12 @@ struct Mul {
 
 struct ScalarMul {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .num_inputs = 1,
+      .shape_rule = ShapeInfo::SameAsInputs,
       .differentiable = true,
   };
 
-  InstId operand_id;
+  InstId input_id;
   Scalar scalar;
 
   auto operator==(const ScalarMul& other) const -> bool = default;
@@ -170,19 +170,19 @@ struct ScalarMul {
 
 struct Neg {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .num_inputs = 1,
+      .shape_rule = ShapeInfo::SameAsInputs,
       .differentiable = true,
   };
 
-  InstId operand_id;
+  InstId input_id;
 
   auto operator==(const Neg& other) const -> bool = default;
 };
 
 struct Constant {
   constexpr static auto traits = InstTraits{
-      .num_operands = 0,
+      .num_inputs = 0,
       .shape_rule = ShapeInfo::None,
       .differentiable = false,
   };
@@ -192,7 +192,7 @@ struct Constant {
 
 struct AccumulateGrad {
   constexpr static auto traits = InstTraits{
-      .num_operands = 2,
+      .num_inputs = 2,
       .shape_rule = ShapeInfo::None,
       .differentiable = false,
   };
@@ -205,7 +205,7 @@ struct AccumulateGrad {
 
 struct AccumulateData {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
+      .num_inputs = 1,
       .shape_rule = ShapeInfo::None,
       .differentiable = false,
   };
@@ -218,7 +218,7 @@ struct AccumulateData {
 
 struct GetParameter {
   constexpr static auto traits = InstTraits{
-      .num_operands = 0,
+      .num_inputs = 0,
       .shape_rule = ShapeInfo::None,
       .differentiable = false,
   };
@@ -230,12 +230,12 @@ struct GetParameter {
 
 struct FillLike {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .num_inputs = 1,
+      .shape_rule = ShapeInfo::SameAsInputs,
       .differentiable = false,
   };
 
-  InstId operand_id;
+  InstId input_id;
   Scalar fill_value;
 
   auto operator==(const FillLike&) const -> bool = default;
@@ -243,27 +243,27 @@ struct FillLike {
 
 struct Pow {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .num_inputs = 1,
+      .shape_rule = ShapeInfo::SameAsInputs,
       .differentiable = true,
   };
 
   auto operator==(const Pow&) const -> bool = default;
 
-  InstId operand_id;
+  InstId input_id;
   Scalar exponent;
 };
 
 struct Sum {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
+      .num_inputs = 1,
       .shape_rule = ShapeInfo::Custom,
       .differentiable = true,
   };
 
   auto operator==(const Sum& other) const -> bool = default;
 
-  InstId operand_id;
+  InstId input_id;
   // axis to sum
   i32 axis;
   bool keep_dims;
@@ -271,47 +271,47 @@ struct Sum {
 
 struct Mean {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
+      .num_inputs = 1,
       .shape_rule = ShapeInfo::Custom,
       .differentiable = true,
   };
 
   auto operator==(const Mean& other) const -> bool = default;
 
-  InstId operand_id;
+  InstId input_id;
   i64 axis;
   bool keep_dims;
 };
 
 struct Softmax {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .num_inputs = 1,
+      .shape_rule = ShapeInfo::SameAsInputs,
       .differentiable = true,
   };
 
   auto operator==(const Softmax&) const -> bool = default;
 
-  InstId operand_id;
+  InstId input_id;
   i32 axis;
 };
 
 struct Relu {
   constexpr static auto traits = InstTraits{
-      .num_operands = 1,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .num_inputs = 1,
+      .shape_rule = ShapeInfo::SameAsInputs,
       .differentiable = true,
   };
 
   auto operator==(const Relu&) const -> bool = default;
 
-  InstId operand_id;
+  InstId input_id;
 };
 
 struct Compare {
   constexpr static auto traits = InstTraits{
-      .num_operands = 2,
-      .shape_rule = ShapeInfo::SameAsOperands,
+      .num_inputs = 2,
+      .shape_rule = ShapeInfo::SameAsInputs,
       .differentiable = false,
   };
 

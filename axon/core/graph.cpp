@@ -85,10 +85,10 @@ export class Graph {
       using InstType = std::decay_t<decltype(op)>;
       if constexpr (!InstType::traits.differentiable) {
         return false;
-      } else if constexpr (InstType::traits.num_operands == 2) {
+      } else if constexpr (InstType::traits.num_inputs == 2) {
         return checkRequiresGrad(op.lhs_id) || checkRequiresGrad(op.rhs_id);
-      } else if constexpr (InstType::traits.num_operands == 1) {
-        return checkRequiresGrad(op.operand_id);
+      } else if constexpr (InstType::traits.num_inputs == 1) {
+        return checkRequiresGrad(op.input_id);
       }
       return false;
     };
@@ -143,12 +143,12 @@ export class Graph {
         op.source_id = add_offset(op.source_id);
       } else if constexpr (std::is_same_v<InstType, insts::GetParameter>) {
         op.param_id = ParamId(param_size + op.param_id.value());
-      } else if constexpr (InstType::traits.num_operands == 2) {
+      } else if constexpr (InstType::traits.num_inputs == 2) {
         op.lhs_id = add_offset(op.lhs_id);
         op.rhs_id = add_offset(op.rhs_id);
-      } else if constexpr (InstType::traits.num_operands == 1) {
-        op.operand_id = add_offset(op.operand_id);
-      } else if constexpr (InstType::traits.num_operands == 0) {
+      } else if constexpr (InstType::traits.num_inputs == 1) {
+        op.input_id = add_offset(op.input_id);
+      } else if constexpr (InstType::traits.num_inputs == 0) {
       } else {
         static_assert(false, "Unhandled inst");
       }
@@ -230,13 +230,13 @@ export class Graph {
     inst.visit([&](const auto& op) {
       using InstType = std::decay_t<decltype(op)>;
 
-      if constexpr (InstType::traits.shape_rule == ShapeInfo::SameAsOperands) {
-        if constexpr (InstType::traits.num_operands == 2) {
+      if constexpr (InstType::traits.shape_rule == ShapeInfo::SameAsInputs) {
+        if constexpr (InstType::traits.num_inputs == 2) {
           auto lhs_id = op.lhs_id;
           Shape shape = *shapes_.get(lhs_id);
           shapes_.set(inst_id, std::move(shape));
-        } else if constexpr (InstType::traits.num_operands == 1) {
-          Shape shape = *shapes_.get(op.operand_id);
+        } else if constexpr (InstType::traits.num_inputs == 1) {
+          Shape shape = *shapes_.get(op.input_id);
           shapes_.set(inst_id, std::move(shape));
         }
       } else if constexpr (InstType::traits.shape_rule == ShapeInfo::Custom) {
@@ -276,8 +276,8 @@ export class Graph {
         AXON_ASSERT(lhs->get() == rhs->get(),
                     "Binary op operands must share the same data type");
         data_types_.set(inst_id, lhs->get());
-      } else if constexpr (requires { op.operand_id; }) {
-        auto operand = data_types_.get(op.operand_id);
+      } else if constexpr (requires { op.input_id; }) {
+        auto operand = data_types_.get(op.input_id);
         AXON_ASSERT(operand, "Operand data type missing");
         data_types_.set(inst_id, operand->get());
       }

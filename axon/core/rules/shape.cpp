@@ -59,10 +59,10 @@ export template <>
 struct InferShapeRule<insts::Transpose> {
   static auto apply(const insts::Transpose& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_ASSERT(shapes.get(op.operand_id),
-                "op.operand_id must have a shape already.");
+    AXON_ASSERT(shapes.get(op.input_id),
+                "op.input_id must have a shape already.");
 
-    Shape shape = shapes.get(op.operand_id)->get();
+    Shape shape = shapes.get(op.input_id)->get();
     AXON_ASSERT(op.from < shape.size(),
                 "op.from must not exceed the rank of the tensor");
     AXON_ASSERT(op.to < shape.size(),
@@ -76,10 +76,10 @@ export template <>
 struct InferShapeRule<insts::Unsqueeze> {
   static auto apply(const insts::Unsqueeze& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_ASSERT(shapes.get(op.operand_id),
-                "op.operand_id must have a shape already.");
+    AXON_ASSERT(shapes.get(op.input_id),
+                "op.input_id must have a shape already.");
 
-    Shape shape = shapes.get(op.operand_id)->get();
+    Shape shape = shapes.get(op.input_id)->get();
     shape.insert(shape.begin() + op.dim, 1);
     return shape;
   }
@@ -89,10 +89,10 @@ export template <>
 struct InferShapeRule<insts::Squeeze> {
   static auto apply(const insts::Squeeze& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_ASSERT(shapes.get(op.operand_id),
-                "op.operand_id must have a shape already.");
+    AXON_ASSERT(shapes.get(op.input_id),
+                "op.input_id must have a shape already.");
 
-    Shape shape = shapes.get(op.operand_id)->get();
+    Shape shape = shapes.get(op.input_id)->get();
     AXON_ASSERT(op.dim < static_cast<i32>(shape.size()),
                 "Dimension must be less than the rank of the operand");
     shape.erase(shape.begin() + op.dim);
@@ -103,10 +103,10 @@ struct InferShapeRule<insts::Squeeze> {
 template <typename T>
   static auto inferShapeOfReduceInst(const T& op, const ShapeMapping& shapes)
       -> Shape {
-  AXON_ASSERT(shapes.get(op.operand_id),
-              "op.operand_id must have a shape already.");
+  AXON_ASSERT(shapes.get(op.input_id),
+              "op.input_id must have a shape already.");
 
-  Shape shape = shapes.get(op.operand_id)->get();
+  Shape shape = shapes.get(op.input_id)->get();
   auto rank = static_cast<i32>(shape.size());
 
   if (op.keep_dims) {
@@ -137,10 +137,10 @@ export template <>
 struct InferShapeRule<insts::ExpandDims> {
   static auto apply(const insts::ExpandDims& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_ASSERT(shapes.get(op.operand_id),
-                "op.operand_id must have a shape already.");
+    AXON_ASSERT(shapes.get(op.input_id),
+                "op.input_id must have a shape already.");
 
-    Shape shape = shapes.get(op.operand_id)->get();
+    Shape shape = shapes.get(op.input_id)->get();
     auto rank = static_cast<i32>(shape.size());
     for (auto expansion : op.mappings) {
       AXON_ASSERT(expansion.dim < rank, "Dim {} exceeded the rank {}",
@@ -155,8 +155,8 @@ export template <>
 struct InferShapeRule<insts::Reshape> {
   static auto apply(const insts::Reshape& op, const ShapeMapping& shapes)
       -> Shape {
-    AXON_ASSERT(shapes.get(op.operand_id),
-                "op.operand_id must have a shape already.");
+    AXON_ASSERT(shapes.get(op.input_id),
+                "op.input_id must have a shape already.");
     return {op.target_shape.begin(), op.target_shape.end()};
   }
 };

@@ -205,10 +205,10 @@ def Axon_ExpandDimsOp : AxonDialect_Op<"expand_dims", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, ArrayAttr:$mappings);
+  let arguments = (ins AnyTensor:$input, ArrayAttr:$mappings);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$input `:` type($input) `->` type($result) attr-dict";
 }
 
 def Axon_NegOp: AxonDialect_Op<"neg", [
@@ -217,10 +217,10 @@ def Axon_NegOp: AxonDialect_Op<"neg", [
   SameOperandsAndResultElementType,
   Involution // f(f(x)) = x
 ]> {
-  let arguments = (ins AnyTensor:$operand);
+  let arguments = (ins AnyTensor:$input);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `->` type($result) attr-dict";
+  let assemblyFormat = "$input `->` type($result) attr-dict";
 
   let hasFolder = 1;
 }
@@ -230,10 +230,10 @@ def Axon_ScalarMulOp: AxonDialect_Op<"scalar_mul", [
   SameOperandsAndResultType,
   SameOperandsAndResultElementType,
 ]> {
-  let arguments = (ins AnyTensor:$operand, AnyAttr:$scalar);
+  let arguments = (ins AnyTensor:$input, AnyAttr:$scalar);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `*` $scalar `->` type($result) attr-dict";
+  let assemblyFormat = "$input `*` $scalar `->` type($result) attr-dict";
 
   let hasFolder = 1;
 }
@@ -242,30 +242,30 @@ def Axon_SqueezeOp : AxonDialect_Op<"squeeze", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, I64Attr:$dim);
+  let arguments = (ins AnyTensor:$input, I64Attr:$dim);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$input `:` type($input) `->` type($result) attr-dict";
 }
 
 def Axon_UnsqueezeOp : AxonDialect_Op<"unsqueeze", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, I64Attr:$dim);
+  let arguments = (ins AnyTensor:$input, I64Attr:$dim);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `:` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$input `:` type($input) `->` type($result) attr-dict";
 }
 
 def Axon_ReshapeOp : AxonDialect_Op<"reshape", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, DenseI64ArrayAttr:$target_shape);
+  let arguments = (ins AnyTensor:$input, DenseI64ArrayAttr:$target_shape);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `,` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$input `,` type($input) `->` type($result) attr-dict";
 
   let hasFolder = 1;
   let hasVerifier = 1;
@@ -275,29 +275,29 @@ def Axon_SumOp : AxonDialect_Op<"sum", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, I64Attr:$dim, BoolAttr:$keep_dims);
+  let arguments = (ins AnyTensor:$input, I64Attr:$dim, BoolAttr:$keep_dims);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$input `,` $dim `:` type($input) `->` type($result) attr-dict";
 }
 
 def Axon_MeanOp : AxonDialect_Op<"mean", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, I64Attr:$dim, BoolAttr:$keep_dims);
+  let arguments = (ins AnyTensor:$input, I64Attr:$dim, BoolAttr:$keep_dims);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$input `,` $dim `:` type($input) `->` type($result) attr-dict";
 }
 
 def Axon_ArgMaxOp : AxonDialect_Op<"argmax", [
   Pure,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, I64Attr:$dim, BoolAttr:$keep_dims);
+  let arguments = (ins AnyTensor:$input, I64Attr:$dim, BoolAttr:$keep_dims);
   let results = (outs AnyTensor:$result);
-  let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$input `,` $dim `:` type($input) `->` type($result) attr-dict";
 }
 
 def Axon_SoftmaxOp : AxonDialect_Op<"softmax", [
@@ -305,21 +305,22 @@ def Axon_SoftmaxOp : AxonDialect_Op<"softmax", [
   SameOperandsAndResultType,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, I64Attr:$dim);
+  let arguments = (ins AnyTensor:$input, I64Attr:$dim);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `,` $dim `:` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$input `,` $dim `:` type($input) `->` type($result) attr-dict";
 }
 
 def Axon_ReluOp : AxonDialect_Op<"relu", [
   Pure,
   SameOperandsAndResultType,
-  SameOperandsAndResultElementType
+  SameOperandsAndResultElementType,
+  Idempotent
 ]> {
-  let arguments = (ins AnyTensor:$operand);
+  let arguments = (ins AnyTensor:$input);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `->` type($result) attr-dict";
+  let assemblyFormat = "$input `->` type($result) attr-dict";
 }
 
 def ComparePredicateAttr : I32EnumAttr<"ComparePredicate", "comparison predicate", [
@@ -349,20 +350,19 @@ def Axon_PowOp : AxonDialect_Op<"pow", [
   SameOperandsAndResultType,
   SameOperandsAndResultElementType
 ]> {
-  let arguments = (ins AnyTensor:$operand, F64Attr:$exponent);
+  let arguments = (ins AnyTensor:$input, F64Attr:$exponent);
   let results = (outs AnyTensor:$result);
 
-  let assemblyFormat = "$operand `->` type($operand) attr-dict";
+  let assemblyFormat = "$input `->` type($input) attr-dict";
 }
 
 def Axon_TransposeOp : AxonDialect_Op<"transpose", [
   Pure,
   SameOperandsAndResultElementType,
 ]> {
-  let arguments = (ins AnyTensor:$operand, I64Attr:$from, I64Attr:$to);
+  let arguments = (ins AnyTensor:$input, I64Attr:$from, I64Attr:$to);
   let results = (outs AnyTensor:$result);
-
-  let assemblyFormat = "$operand `,` `(` $from `,` $to `)` type($operand) `->` type($result) attr-dict";
+  let assemblyFormat = "$input `,` `(` $from `,` $to `)` type($input) `->` type($result) attr-dict";
   let hasCanonicalizer = 1;
 }
 

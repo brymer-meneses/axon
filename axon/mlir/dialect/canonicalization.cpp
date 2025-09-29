@@ -21,13 +21,13 @@ struct EliminateRedundantTransposePattern
 
   auto matchAndRewrite(TransposeOp inner, mlir::PatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
-    auto outer = inner.getOperand().getDefiningOp<TransposeOp>();
+    auto outer = inner.getInput().getDefiningOp<TransposeOp>();
     if (!outer) {
       return mlir::failure();
     }
 
     if (inner.getFrom() == outer.getTo() && inner.getTo() == outer.getFrom()) {
-      rewriter.replaceOp(inner, outer.getOperand());
+      rewriter.replaceOp(inner, outer.getInput());
       return mlir::success();
     }
 
@@ -65,7 +65,7 @@ struct EliminateAdditionOfSelfNegative : mlir::OpRewritePattern<AddOp> {
   auto matchAndRewrite(AddOp op, mlir::PatternRewriter& rewriter) const
       -> mlir::LogicalResult final {
     if (auto lhs_neg = op.getLhs().getDefiningOp<NegOp>()) {
-      if (lhs_neg.getOperand() == op.getRhs()) {
+      if (lhs_neg.getInput() == op.getRhs()) {
         auto fill_type = op.getResult().getType();
         auto element_type =
             mlir::cast<mlir::RankedTensorType>(fill_type).getElementType();
@@ -77,7 +77,7 @@ struct EliminateAdditionOfSelfNegative : mlir::OpRewritePattern<AddOp> {
     }
 
     if (auto rhs_neg = op.getRhs().getDefiningOp<NegOp>()) {
-      if (rhs_neg.getOperand() == op.getLhs()) {
+      if (rhs_neg.getInput() == op.getLhs()) {
         auto fill_type = op.getResult().getType();
         auto element_type =
             mlir::cast<mlir::RankedTensorType>(fill_type).getElementType();
@@ -105,11 +105,11 @@ struct FuseTransposePattern : mlir::OpRewritePattern<MatMulOp> {
 
     if (auto transpose_lhs = op.getLhs().getDefiningOp<TransposeOp>()) {
       should_transpose_left = true;
-      lhs = transpose_lhs.getOperand();
+      lhs = transpose_lhs.getInput();
     }
     if (auto transpose_rhs = op.getRhs().getDefiningOp<TransposeOp>()) {
       should_transpose_right = true;
-      rhs = transpose_rhs.getOperand();
+      rhs = transpose_rhs.getInput();
     }
 
     if (lhs == op.getLhs() && rhs == op.getRhs()) {
@@ -140,7 +140,7 @@ struct FuseExpandedDimsPattern : mlir::OpRewritePattern<MatMulOp> {
           auto dim = mlir::cast<mlir::IntegerAttr>(pair[0]).getInt();
           dims.push_back(dim);
         }
-        op = expand_dims_op.getOperand();
+        op = expand_dims_op.getInput();
       }
       return {op, dims};
     };
@@ -262,12 +262,12 @@ auto ConstantOp::fold(FoldAdaptor) -> mlir::OpFoldResult { return getValue(); }
 auto AddOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
   auto fill_type = getResult().getType();
   if (auto lhs_neg = getLhs().getDefiningOp<NegOp>()) {
-    if (lhs_neg.getOperand() == getRhs()) {
+    if (lhs_neg.getInput() == getRhs()) {
       return mlir::DenseElementsAttr::get(fill_type, 0.0);
     }
   }
   if (auto rhs_neg = getRhs().getDefiningOp<NegOp>()) {
-    if (rhs_neg.getOperand() == getLhs()) {
+    if (rhs_neg.getInput() == getLhs()) {
       return mlir::DenseElementsAttr::get(fill_type, 0.0);
     }
   }
@@ -334,7 +334,7 @@ auto SubOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
 
 auto ScalarMulOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
   auto elements =
-      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getOperand());
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getInput());
   if (!elements) {
     return nullptr;
   }
@@ -358,7 +358,7 @@ auto ScalarMulOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
 
 auto ReshapeOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
   auto elements =
-      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getOperand());
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getInput());
   if (!elements) {
     return nullptr;
   }
@@ -369,13 +369,13 @@ auto ReshapeOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
 
 auto NegOp::fold(FoldAdaptor adaptor) -> mlir::OpFoldResult {
   auto elements =
-      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getOperand());
+      mlir::dyn_cast_if_present<mlir::DenseElementsAttr>(adaptor.getInput());
   if (!elements) {
     return nullptr;
   }
 
   return constFoldUnaryOp<mlir::FloatAttr, mlir::APFloat, PoisonAttr>(
-      adaptor.getOperand(),
+      adaptor.getInput(),
       [](const mlir::APFloat& elem) -> mlir::APFloat { return -elem; });
 };
 

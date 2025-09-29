@@ -167,14 +167,14 @@ template <>
 struct BackwardRule<insts::ExpandDims> {
   static auto apply(const insts::ExpandDims& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
-    if (!ctx.checkRequiresGrad(op.operand_id)) {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
       return {};
     }
     for (auto mapping : op.mappings) {
       grad_id =
           ctx.createOp(insts::Sum(grad_id, mapping.dim, /*keepdims=*/true));
     }
-    return {{op.operand_id, grad_id}};
+    return {{op.input_id, grad_id}};
   }
 };
 
@@ -182,12 +182,12 @@ export template <>
 struct BackwardRule<insts::Unsqueeze> {
   static auto apply(const insts::Unsqueeze& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
-    if (!ctx.checkRequiresGrad(op.operand_id)) {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
       return {};
     }
 
     grad_id = ctx.createOp(insts::Squeeze(grad_id, op.dim));
-    return {{op.operand_id, grad_id}};
+    return {{op.input_id, grad_id}};
   }
 };
 
@@ -195,13 +195,13 @@ export template <>
 struct BackwardRule<insts::Reshape> {
   static auto apply(const insts::Reshape& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
-    if (!ctx.checkRequiresGrad(op.operand_id)) {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
       return {};
     }
 
-    llvm::SmallVector<int64_t> target_shape(ctx.getShape(op.operand_id));
+    llvm::SmallVector<int64_t> target_shape(ctx.getShape(op.input_id));
     grad_id = ctx.createOp(insts::Reshape(grad_id, std::move(target_shape)));
-    return {{op.operand_id, grad_id}};
+    return {{op.input_id, grad_id}};
   }
 };
 
@@ -209,12 +209,12 @@ export template <>
 struct BackwardRule<insts::Neg> {
   static auto apply(const insts::Neg& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
-    if (!ctx.checkRequiresGrad(op.operand_id)) {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
       return {};
     }
 
     grad_id = ctx.createOp(insts::Neg(grad_id));
-    return {{op.operand_id, grad_id}};
+    return {{op.input_id, grad_id}};
   }
 };
 
@@ -222,12 +222,12 @@ export template <>
 struct BackwardRule<insts::ScalarMul> {
   static auto apply(const insts::ScalarMul& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
-    if (!ctx.checkRequiresGrad(op.operand_id)) {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
       return {};
     }
 
     grad_id = ctx.createOp(insts::ScalarMul(grad_id, op.scalar));
-    return {{op.operand_id, grad_id}};
+    return {{op.input_id, grad_id}};
   }
 };
 
@@ -235,7 +235,7 @@ export template <>
 struct BackwardRule<insts::Sum> {
   static auto apply(const insts::Sum& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
-    if (!ctx.checkRequiresGrad(op.operand_id)) {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
       return {};
     }
 
@@ -243,8 +243,8 @@ struct BackwardRule<insts::Sum> {
       grad_id = ctx.createOp(insts::Unsqueeze(grad_id, op.axis));
     }
 
-    grad_id = expandAlongAxisToMatch(ctx, grad_id, op.axis, op.operand_id);
-    return {{op.operand_id, grad_id}};
+    grad_id = expandAlongAxisToMatch(ctx, grad_id, op.axis, op.input_id);
+    return {{op.input_id, grad_id}};
   }
 };
 
@@ -252,7 +252,7 @@ export template <>
 struct BackwardRule<insts::Mean> {
   static auto apply(const insts::Mean& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
-    if (!ctx.checkRequiresGrad(op.operand_id)) {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
       return {};
     }
 
@@ -261,12 +261,12 @@ struct BackwardRule<insts::Mean> {
     }
 
     auto expanded =
-        expandAlongAxisToMatch(ctx, grad_id, op.axis, op.operand_id);
-    auto num_elements_in_axis = ctx.getShape(op.operand_id)[op.axis];
+        expandAlongAxisToMatch(ctx, grad_id, op.axis, op.input_id);
+    auto num_elements_in_axis = ctx.getShape(op.input_id)[op.axis];
     auto scalar = Scalar(1.0f / static_cast<f32>(num_elements_in_axis));
 
     auto scaled = ctx.createOp(insts::ScalarMul(expanded, scalar));
-    return {{op.operand_id, scaled}};
+    return {{op.input_id, scaled}};
   }
 };
 
@@ -274,16 +274,16 @@ export template <>
 struct BackwardRule<insts::Pow> {
   static auto apply(const insts::Pow& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
-    if (!ctx.checkRequiresGrad(op.operand_id)) {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
       return {};
     }
 
     // d/dx (x^a) = a * x^(a-1)
-    auto x_pow = ctx.createOp(insts::Pow(op.operand_id, op.exponent - 1.0f));
+    auto x_pow = ctx.createOp(insts::Pow(op.input_id, op.exponent - 1.0f));
     auto scaled = ctx.createOp(insts::ScalarMul(x_pow, op.exponent));
     auto dx = ctx.createOp(insts::Mul(grad_id, scaled));
 
-    return {{op.operand_id, dx}};
+    return {{op.input_id, dx}};
   }
 };
 
@@ -291,7 +291,7 @@ export template <>
 struct BackwardRule<insts::Softmax> {
   static auto apply(const insts::Softmax& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {
-    if (!ctx.checkRequiresGrad(op.operand_id)) {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
       return {};
     }
 
@@ -309,7 +309,7 @@ struct BackwardRule<insts::Softmax> {
     auto sub = ctx.createOp(insts::Sub(grad_id, sum_gy_expanded));
     auto dx = ctx.createOp(insts::Mul(y_id, sub));
 
-    return {{op.operand_id, dx}};
+    return {{op.input_id, dx}};
   }
 };
 
@@ -317,18 +317,18 @@ export template <>
 struct BackwardRule<insts::Relu> {
   static auto apply(const insts::Relu& op, InstId grad_id, BackwardContext& ctx)
       -> llvm::SmallVector<Dependency> {
-    if (!ctx.checkRequiresGrad(op.operand_id)) {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
       return {};
     }
 
     auto predicate = insts::Compare::Predicate::Greater;
     auto zeros_like =
-        ctx.createOp(insts::FillLike(op.operand_id, Scalar(0.0f)));
+        ctx.createOp(insts::FillLike(op.input_id, Scalar(0.0f)));
     auto mask =
-        ctx.createOp(insts::Compare(op.operand_id, zeros_like, predicate));
+        ctx.createOp(insts::Compare(op.input_id, zeros_like, predicate));
     auto masked = ctx.createOp(insts::Mul(mask, grad_id));
 
-    return {{op.operand_id, masked}};
+    return {{op.input_id, masked}};
   }
 };
 
