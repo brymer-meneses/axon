@@ -30,21 +30,17 @@ export class Runtime {
     return *context;
   }
 
-  auto execute(llvm::ArrayRef<Tensor*> parameters, Tensor* returned,
-               Graph& graph) -> std::unique_ptr<Storage> {
+  auto execute(Graph& graph, llvm::ArrayRef<Tensor*> parameters,
+               Tensor* returned = nullptr) {
     auto hash = graph.hash();
-
     if (graph_registry_.contains(graph)) {
-      std::println("reusing hash {}", hash);
       return graph_registry_[graph]->execute(parameters, returned);
     }
 
-    std::println("creating function with hash {}", hash);
     auto compiled_function =
         std::make_unique<CompiledFunction>(&mlir_context_, graph);
-    auto storage = compiled_function->execute(parameters, returned);
+    compiled_function->execute(parameters, returned);
     graph_registry_[graph] = std::move(compiled_function);
-    return std::move(storage);
   }
 
   auto getTotalNumberOfCompiledFunctions() const -> u64 {

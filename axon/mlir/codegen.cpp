@@ -42,21 +42,32 @@ static auto getElementType(DataType data_type, mlir::OpBuilder& builder)
   AXON_UNREACHABLE("Unsupported data type");
 }
 
-static auto getFloatAttr(mlir::Type element_type, double value)
+static auto getFloatAttr(mlir::Type element_type, f64 value)
     -> mlir::FloatAttr {
   return mlir::FloatAttr::get(element_type, value);
 }
 
 static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto tensor_ref = ctx.tensor_refs[op.inst_id];
+  auto tensor_ref = ctx.tensor_refs[op.sink_id];
   auto tensor_ref_type = mlir::cast<TensorRefType>(tensor_ref.getType());
 
-  auto source = ctx.values[op.value_id];
+  auto source = ctx.values[op.source_id];
 
   auto sink = GetGradOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
                                 tensor_ref_type.getTensorType(), tensor_ref);
 
+  AccumulateOp::create(ctx.builder, ctx.builder.getUnknownLoc(), sink, source);
+}
+
+static auto codegen(const insts::AccumulateData& op, CompilationContext& ctx,
+                    InstId inst_id) -> void {
+  auto tensor_ref = ctx.tensor_refs[op.sink_id];
+  auto tensor_ref_type = mlir::cast<TensorRefType>(tensor_ref.getType());
+
+  auto source = ctx.values[op.source_id];
+  auto sink = GetDataOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
+                                tensor_ref_type.getTensorType(), tensor_ref);
   AccumulateOp::create(ctx.builder, ctx.builder.getUnknownLoc(), sink, source);
 }
 

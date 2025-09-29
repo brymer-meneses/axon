@@ -150,10 +150,23 @@ struct Hash<insts::AccumulateGrad> {
                    const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
     constexpr auto tag = Inst::tag<insts::AccumulateGrad>();
 
-    llvm::ArrayRef<i64> value_shape(shapes.get(op.value_id)->get());
-    llvm::ArrayRef<i64> sink_shape(shapes.get(op.inst_id)->get());
+    llvm::ArrayRef<i64> sink_shape(shapes.get(op.sink_id)->get());
+    llvm::ArrayRef<i64> source_shape(shapes.get(op.source_id)->get());
 
-    return llvm::hash_combine(tag, value_shape, sink_shape);
+    return llvm::hash_combine(tag, sink_shape, source_shape);
+  }
+};
+
+export template <>
+struct Hash<insts::AccumulateData> {
+  static auto hash(const insts::AccumulateData& op,
+                   const IdMap<InstId, Shape>& shapes) -> llvm::hash_code {
+    constexpr auto tag = Inst::tag<insts::AccumulateGrad>();
+
+    llvm::ArrayRef<i64> sink_shape(shapes.get(op.sink_id)->get());
+    llvm::ArrayRef<i64> source_shape(shapes.get(op.source_id)->get());
+
+    return llvm::hash_combine(tag, sink_shape, source_shape);
   }
 };
 

@@ -214,6 +214,8 @@ NB_MODULE(_core, m) {
 
       .def("relu", &performRelu)
 
+      .def("accumulate", &performAccumulate, nb::arg("value"))
+
       .def("sum", &performReduceInst<insts::Sum>, nb::arg("dim") = std::nullopt,
            nb::arg("keepdims") = false)
 

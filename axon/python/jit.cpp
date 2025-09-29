@@ -54,8 +54,8 @@ class CompiledFunction {
     abi::MemRefDescriptor::destroy(returned_descriptor);
   }
 
-  auto execute(llvm::ArrayRef<Tensor*> parameters, Tensor* returned)
-      -> std::unique_ptr<Storage> {
+  auto execute(llvm::ArrayRef<Tensor*> parameters, Tensor* returned = nullptr)
+      -> void {
     // context contains a graph that is isomorphic to the one that was used to
     // construct this CompiledFunction.
     configureDescriptors(parameters, returned);
@@ -65,12 +65,17 @@ class CompiledFunction {
       throw std::runtime_error("JIT invocation failed");
     }
 
-    auto rank = returned->rank();
-    auto return_descriptor =
-        reinterpret_cast<abi::MemRefDescriptor*>(descriptors_.back());
+    if (returned) {
+      auto rank = returned->rank();
+      auto return_descriptor =
+          reinterpret_cast<abi::MemRefDescriptor*>(descriptors_.back());
 
-    return std::make_unique<Storage>(abi::MemRefDescriptor::createStorage(
-        return_descriptor, returned->data_type(), rank));
+      auto storage =
+          std::make_unique<Storage>(abi::MemRefDescriptor::createStorage(
+              return_descriptor, returned->data_type(), rank));
+
+      returned->setStorage(std::move(storage));
+    }
   }
 
  private:
@@ -105,32 +110,36 @@ class CompiledFunction {
     engine_ = std::move(maybe_engine.get());
   }
 
-  auto configureDescriptors(llvm::ArrayRef<Tensor*> parameters,
-                            Tensor* returned_value) -> void {
-    // If this is the first time we're configuring the descriptors then we need
-    // to create them first.
-    if (descriptors_.empty()) {
-      AXON_DCHECK(parameters.size() > 0);
+  auto initializeDescriptors(llvm::ArrayRef<Tensor*> parameters,
+                             Tensor* returned_value) -> void {
+    AXON_DCHECK(parameters.size() > 0);
 
-      for (auto tensor : parameters) {
-        AXON_DCHECK(tensor != nullptr);
+    for (auto tensor : parameters) {
+      AXON_DCHECK(tensor != nullptr);
 
-        if (tensor->requiresGrad() && tensor->grad() == nullptr) {
-          tensor->zeroGrad();
-        }
-
-        auto ptr =
-            reinterpret_cast<void*>(abi::TensorDescriptor::create(*tensor));
-        descriptors_.emplace_back(ptr);
+      if (tensor->requiresGrad() && tensor->grad() == nullptr) {
+        tensor->zeroGrad();
       }
 
-      AXON_DCHECK(returned_value != nullptr);
+      auto ptr =
+          reinterpret_cast<void*>(abi::TensorDescriptor::create(*tensor));
+      descriptors_.emplace_back(ptr);
+    }
 
+    if (returned_value) {
       auto returned_descriptor = abi::MemRefDescriptor::create(
           nullptr, nullptr, 0, returned_value->shape(),
           computeStrides(returned_value->shape(), Layout::RowMajor));
 
       descriptors_.emplace_back(reinterpret_cast<void*>(returned_descriptor));
+      has_returned_ = true;
+    }
+  }
+
+  auto configureDescriptors(llvm::ArrayRef<Tensor*> parameters,
+                            Tensor* returned_value) -> void {
+    if (descriptors_.empty()) {
+      initializeDescriptors(parameters, returned_value);
       return;
     }
 
@@ -149,17 +158,24 @@ class CompiledFunction {
       abi::TensorDescriptor::setStorage(descriptor, *tensor);
     }
 
-    auto returned_descriptor =
-        reinterpret_cast<abi::MemRefDescriptor*>(descriptors_.back());
+    if (returned_value) {
+      AXON_DCHECK(
+          has_returned_,
+          "This function has been configured to have no returned value but "
+          "passed returned != nullptr");
 
-    auto shape = returned_value->shape();
-    auto strides = computeStrides(shape, Layout::RowMajor);
+      auto returned_descriptor =
+          reinterpret_cast<abi::MemRefDescriptor*>(descriptors_.back());
 
-    abi::MemRefDescriptor::createInPlace(
-        reinterpret_cast<std::byte*>(returned_descriptor),
-        /*allocated_ptr=*/nullptr,
-        /*aligned_ptr=*/nullptr,
-        /*offset=*/0, shape, strides);
+      auto shape = returned_value->shape();
+      auto strides = computeStrides(shape, Layout::RowMajor);
+
+      abi::MemRefDescriptor::createInPlace(
+          reinterpret_cast<std::byte*>(returned_descriptor),
+          /*allocated_ptr=*/nullptr,
+          /*aligned_ptr=*/nullptr,
+          /*offset=*/0, shape, strides);
+    }
   }
 
  private:
@@ -167,6 +183,8 @@ class CompiledFunction {
   llvm::SmallVector<void*> descriptors_;
   mlir::MLIRContext* context_;
   mlir::ModuleOp module_;
+
+  bool has_returned_ = false;
 };
 
 }  // namespace axon

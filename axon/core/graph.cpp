@@ -137,9 +137,10 @@ export class Graph {
 
     auto add_offset_to_inst = [add_offset, param_size](auto& op) -> void {
       using InstType = std::decay_t<decltype(op)>;
-      if constexpr (std::is_same_v<InstType, insts::AccumulateGrad>) {
-        op.inst_id = add_offset(op.inst_id);
-        op.value_id = add_offset(op.value_id);
+      if constexpr (llvm::is_one_of<InstType, insts::AccumulateGrad,
+                                    insts::AccumulateData>()) {
+        op.sink_id = add_offset(op.sink_id);
+        op.source_id = add_offset(op.source_id);
       } else if constexpr (std::is_same_v<InstType, insts::GetParameter>) {
         op.param_id = ParamId(param_size + op.param_id.value());
       } else if constexpr (InstType::traits.num_operands == 2) {
@@ -261,7 +262,7 @@ export class Graph {
       } else if constexpr (std::is_same_v<InstType, insts::Constant>) {
         // Constant data type is set at creation time.
       } else if constexpr (std::is_same_v<InstType, insts::AccumulateGrad>) {
-        auto value = data_types_.get(op.value_id);
+        auto value = data_types_.get(op.source_id);
         AXON_DCHECK(value, "Value data type missing");
         data_types_.set(inst_id, value->get());
       } else if constexpr (requires {

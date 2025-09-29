@@ -375,4 +375,17 @@ export auto performRelu(std::shared_ptr<Tensor> input)
   return session->createTensor<insts::Relu>(input);
 }
 
+export auto performAccumulate(std::shared_ptr<Tensor> sink,
+                              std::shared_ptr<Tensor> source) -> void {
+  auto should_emit_grad = Runtime::get().shouldEmitGrad();
+  if (should_emit_grad) {
+    throw nb::value_error(
+        "tensor.accumulate should be performed on a no gradient context.");
+  }
+
+  auto session = getTraceSession(*sink, *source);
+  session->createInst<insts::AccumulateData>(sink, source);
+  session->evaluate();
+}
+
 }  // namespace axon

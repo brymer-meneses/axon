@@ -197,10 +197,23 @@ struct AccumulateGrad {
       .differentiable = false,
   };
 
-  InstId inst_id;
-  InstId value_id;
+  InstId sink_id;
+  InstId source_id;
 
   auto operator==(const AccumulateGrad&) const -> bool = default;
+};
+
+struct AccumulateData {
+  constexpr static auto traits = InstTraits{
+      .num_operands = 1,
+      .shape_rule = ShapeInfo::None,
+      .differentiable = false,
+  };
+
+  auto operator==(const AccumulateData&) const -> bool = default;
+
+  InstId sink_id;
+  InstId source_id;
 };
 
 struct GetParameter {
@@ -340,6 +353,7 @@ using InstInternalType =
       insts::Squeeze,
       insts::Transpose,
       insts::AccumulateGrad, 
+      insts::AccumulateData, 
       insts::Constant,
       insts::GetParameter, 
       insts::FillLike,

@@ -103,16 +103,16 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
     graph_.merge(other.graph_);
   }
 
-  auto evaluate(Tensor* tensor) -> void {
-    AXON_DCHECK(insts_.contains(tensor));
-    auto tensor_inst_id = insts_[tensor];
+  auto evaluate(Tensor* returned) -> void {
+    AXON_DCHECK(insts_.contains(returned));
+    auto returned_id = insts_[returned];
 
-    graph_.setReturned(tensor_inst_id);
-    auto storage = Runtime::get().execute(parameters_, tensor, graph_);
+    graph_.setReturned(returned_id);
+    Runtime::get().execute(graph_, parameters_, returned);
     graph_.setReturned(InstId::None);
-
-    tensor->setStorage(std::move(storage));
   }
+
+  auto evaluate() -> void { Runtime::get().execute(graph_, parameters_); }
 
   auto reset() -> void {
     auto keep_alive = shared_from_this();
