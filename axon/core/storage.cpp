@@ -109,6 +109,15 @@ export class Storage {
     return {data_type, type_erased_ptr, shape, strides, is_owned};
   }
 
+  static auto createUninit(llvm::ArrayRef<i64> shape, DataType data_type,
+                           Layout layout = Layout::RowMajor) -> Storage {
+    auto strides = computeStrides(shape, layout);
+    auto num_elems = computeNumElems(shape);
+    auto size = num_elems * data_type.getSizeInBytes();
+    auto* data = new std::byte[size];
+    return {data_type, data, shape, strides, /*is_owned=*/true};
+  }
+
   static auto createFilled(llvm::ArrayRef<i64> shape, auto value,
                            DataType data_type, llvm::ArrayRef<i64> strides)
       -> Storage {

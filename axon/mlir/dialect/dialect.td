@@ -14,7 +14,6 @@ include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.td"
 def AxonDialect : Dialect {
   let name = "axon";
   let cppNamespace = "axon";
-  let useDefaultTypePrinterParser = 1;
 
   let hasConstantMaterializer = 1;
 }
@@ -28,55 +27,9 @@ def ArrayRefInt64 : TypeParameter<"::llvm::ArrayRef<int64_t>", "Array of int"> {
   let allocator = "$_dst = $_allocator.copyInto($_self);";
 }
 
-def Axon_TensorRefType : AxonDialect_Type<"TensorRef", "tensor_ref"> {
-  let parameters = (ins "mlir::Type":$elementType, ArrayRefInt64:$shape, "bool":$requires_grad);
-  let hasCustomAssemblyFormat = 1;
-
-  let extraClassDeclaration = [{
-    auto getTensorType() const -> mlir::Type { 
-      return mlir::RankedTensorType::get(getShape(), getElementType());
-    }
-    auto getMemRefType() const -> mlir::Type { 
-      return mlir::MemRefType::get(getShape(), getElementType());
-    }
-  }];
-
-  let genMnemonicAlias = 1;
-}
 
 class AxonDialect_Op<string mnemonic, list<Trait> traits = []> : Op<AxonDialect, mnemonic, traits>;
 
-def Axon_GetDataOp : AxonDialect_Op<"get_data", [Pure]> {
-  let summary = "Extract the data tensor from a tensor";
-
-  let arguments = (ins Axon_TensorRefType:$input);
-  let results = (outs AnyTensor:$result);
-
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$input), [{
-      auto tensor_ref_type = mlir::cast<axon::TensorRefType>(input.getType());
-      auto shape = tensor_ref_type.getShape();
-      auto element_type = tensor_ref_type.getElementType();
-      auto result_type = mlir::RankedTensorType::get(shape, element_type);
-      build($_builder, $_state, result_type, input);
-    }]>,
-  ];
-
-  let assemblyFormat = [{
-    $input attr-dict `:` qualified(type($input)) `->` type($result)
-  }];
-}
-
-def Axon_GetGradOp : AxonDialect_Op<"get_grad", [Pure]> {
-  let summary = "Extract the gradient tensor from a tensor";
-
-  let arguments = (ins Axon_TensorRefType:$input);
-  let results = (outs AnyTensor:$result);
-
-  let assemblyFormat = [{
-    $input attr-dict `:` qualified(type($input)) `->` type($result)
-  }];
-}
 
 def Axon_ConstantOp : AxonDialect_Op<"constant", [Pure, ConstantLike]> {
   let arguments = (ins ElementsAttr:$value);
@@ -117,24 +70,6 @@ def Axon_FillOp : AxonDialect_Op<"fill_like", [Pure]> {
 
   let assemblyFormat = "$fill_value `->` type($result) attr-dict";
   let hasFolder = 1;
-}
-
-def Axon_TupleAccessOp : AxonDialect_Op<"tuple_access", [
-  Pure, 
-  MemoryEffectsOpInterface, 
-]> {
-  let arguments = (ins AnyTuple:$input, I64Attr:$index);
-  let results = (outs AnyType:$output);
-
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$tuple, "int32_t":$index), [{
-      auto tuple_casted = llvm::cast<mlir::TupleType>(tuple.getType());
-      auto result_type = tuple_casted.getTypes()[index];
-      build($_builder, $_state, result_type, tuple, index);
-    }]>
-  ];
-
-  let hasCustomAssemblyFormat = 1;
 }
 
 def Axon_AddOp : AxonDialect_Op<"add", [

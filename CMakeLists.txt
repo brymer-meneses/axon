@@ -66,7 +66,6 @@ target_sources(axon
   PRIVATE
     axon/mlir/dialect/canonicalization.cpp
     axon/mlir/dialect/dialect.cpp
-    axon/mlir/dialect/types.cpp
     axon/mlir/dialect/ops.cpp
 )
 

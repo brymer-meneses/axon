@@ -100,54 +100,7 @@ export class MemRefDescriptor {
   i64 offset_;
 };
 
-export struct TensorDescriptor {
-  static auto destroy(TensorDescriptor* ptr) -> void {
-    auto buffer = reinterpret_cast<std::byte*>(ptr);
-    delete[] buffer;
-  }
-
-  static auto create(const Tensor& tensor) -> TensorDescriptor* {
-    AXON_DCHECK(tensor.isEvaluated());
-
-    auto total_size = MemRefDescriptor::getAllocSize(tensor.rank());
-    if (tensor.requiresGrad()) {
-      total_size *= 2;
-    }
-
-    auto* buffer = new std::byte[total_size];
-    auto descriptor = reinterpret_cast<TensorDescriptor*>(buffer);
-
-    setStorage(descriptor, tensor);
-
-    return descriptor;
-  }
-
-  static auto setStorage(TensorDescriptor* descriptor, const Tensor& tensor)
-      -> void {
-    auto buffer = reinterpret_cast<std::byte*>(descriptor);
-
-    AXON_DCHECK(tensor.storage() != nullptr);
-
-    auto data_ptr = tensor.storage()->data_ptr();
-
-    AXON_DCHECK(data_ptr != nullptr);
-
-    MemRefDescriptor::createInPlace(buffer, data_ptr, data_ptr, 0,
-                                    tensor.storage()->shape(),
-                                    tensor.storage()->strides());
-
-    if (tensor.requiresGrad()) {
-      auto grad = tensor.grad();
-      AXON_DCHECK(grad != nullptr);
-
-      auto grad_data_ptr = grad->storage()->data_ptr();
-
-      auto* ptr = buffer + MemRefDescriptor::getAllocSize(tensor.rank());
-      MemRefDescriptor::createInPlace(ptr, grad_data_ptr, grad_data_ptr, 0,
-                                      grad->shape(),
-                                      grad->storage()->strides());
-    }
-  }
-};
+// Deprecated TensorDescriptor removed. Parameters are passed as individual
+// MemRefDescriptor objects for data and optional grad.
 
 }  // namespace axon::abi

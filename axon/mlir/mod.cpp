@@ -122,6 +122,8 @@ auto buildLlvmLoweringPipeline(mlir::PassManager& manager, LoweringLevel level)
     manager.addNestedPass<mlir::func::FuncOp>(
         mlir::bufferization::createPromoteBuffersToStackPass());
 
+    manager.addPass(mlir::bufferization::createBufferResultsToOutParamsPass());
+
     manager.addPass(mlir::createCanonicalizerPass());
     manager.addPass(mlir::createCSEPass());
 

@@ -3,6 +3,7 @@ module;
 #include "axon/base/macros.h"
 #include "dialect/dialect.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringRef.h"
 #include "mlir/IR/OpDefinition.h"
 
@@ -25,9 +26,15 @@ struct CompilationContext {
   const Graph& graph;
   mlir::OpBuilder& builder;
   mlir::func::FuncOp& func_op;
-
-  llvm::DenseMap<InstId, mlir::Value> tensor_refs{};
   llvm::DenseMap<InstId, mlir::Value> values{};
+
+  // Mapping from ParamId to function argument memrefs
+  llvm::DenseMap<ParamId, mlir::Value> data_memrefs{};
+  llvm::DenseMap<ParamId, mlir::Value> grad_memrefs{};
+
+  // Map GetParameter inst -> ParamId for later AccumulateGrad/AccumulateData
+  // sinks
+  llvm::DenseMap<InstId, ParamId> inst_to_param{};
 };
 
 static auto getElementType(DataType data_type, mlir::OpBuilder& builder)
@@ -49,25 +56,25 @@ static auto getFloatAttr(mlir::Type element_type, f64 value)
 
 static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto tensor_ref = ctx.tensor_refs[op.sink_id];
-  auto tensor_ref_type = mlir::cast<TensorRefType>(tensor_ref.getType());
-
   auto source = ctx.values[op.source_id];
-
-  auto sink = GetGradOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
-                                tensor_ref_type.getTensorType(), tensor_ref);
-
+  auto param_id = ctx.inst_to_param[op.sink_id];
+  auto grad_memref = ctx.grad_memrefs[param_id];
+  auto sink_tensor_type = mlir::cast<mlir::RankedTensorType>(source.getType());
+  auto sink = mlir::bufferization::ToTensorOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), sink_tensor_type, grad_memref,
+      /*restrict=*/true, /*writable=*/true);
   AccumulateOp::create(ctx.builder, ctx.builder.getUnknownLoc(), sink, source);
 }
 
 static auto codegen(const insts::AccumulateData& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto tensor_ref = ctx.tensor_refs[op.sink_id];
-  auto tensor_ref_type = mlir::cast<TensorRefType>(tensor_ref.getType());
-
   auto source = ctx.values[op.source_id];
-  auto sink = GetDataOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
-                                tensor_ref_type.getTensorType(), tensor_ref);
+  auto param_id = ctx.inst_to_param[op.sink_id];
+  auto data_memref = ctx.data_memrefs[param_id];
+  auto sink_tensor_type = mlir::cast<mlir::RankedTensorType>(source.getType());
+  auto sink = mlir::bufferization::ToTensorOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), sink_tensor_type, data_memref,
+      /*restrict=*/true, /*writable=*/false);
   AccumulateOp::create(ctx.builder, ctx.builder.getUnknownLoc(), sink, source);
 }
 
@@ -169,11 +176,15 @@ static auto codegen(const insts::ExpandDims& op, CompilationContext& ctx,
 
 static auto codegen(const insts::GetParameter& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
-  auto tensor_ref = ctx.func_op.getArgument(op.param_id.value());
-
-  ctx.tensor_refs[inst_id] = tensor_ref;
-  ctx.values[inst_id] =
-      GetDataOp::create(ctx.builder, ctx.builder.getUnknownLoc(), tensor_ref);
+  auto data_memref = ctx.data_memrefs[op.param_id];
+  ctx.inst_to_param[inst_id] = op.param_id;
+  auto shape = ctx.graph.getShape(inst_id);
+  auto element_type =
+      getElementType(ctx.graph.getDataType(inst_id), ctx.builder);
+  auto tensor_type = mlir::RankedTensorType::get(shape, element_type);
+  ctx.values[inst_id] = mlir::bufferization::ToTensorOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), tensor_type, data_memref,
+      /*restrict=*/true, /*writable=*/false);
 }
 
 static auto codegen(const insts::FillLike& op, CompilationContext& ctx,
@@ -376,14 +387,14 @@ static auto getFunctionType(const Graph& graph, mlir::OpBuilder& builder)
   auto context = builder.getContext();
   AXON_ASSERT(context != nullptr);
 
-  for (auto& param : graph.parameters().values()) {
-    auto requires_grad = param.requires_grad;
+  for (auto [pid, param] : graph.parameters().keysAndValues()) {
     auto shape = graph.getShape(param.inst_id);
     auto element_type = getElementType(param.data_type, builder);
-
-    auto type = TensorRefType::get(builder.getContext(), element_type, shape,
-                                   requires_grad);
-    arg_types.emplace_back(type);
+    auto memref_type = mlir::MemRefType::get(shape, element_type);
+    arg_types.emplace_back(memref_type);
+    if (param.requires_grad) {
+      arg_types.emplace_back(memref_type);
+    }
   }
 
   auto returned_id = graph.getReturnedId();
@@ -411,6 +422,17 @@ export auto codegenGraph(const Graph& graph, mlir::OpBuilder& builder)
 
   builder.setInsertionPointToStart(func_op.addEntryBlock());
   CompilationContext ctx(graph, builder, func_op);
+
+  // Prepare ParamId -> (data, grad?) memref mapping from function args
+  int arg_index = 0;
+  for (auto [pid, p] : graph.parameters().keysAndValues()) {
+    auto data_arg = func_op.getArgument(arg_index++);
+    ctx.data_memrefs[pid] = data_arg;
+    if (p.requires_grad) {
+      auto grad_arg = func_op.getArgument(arg_index++);
+      ctx.grad_memrefs[pid] = grad_arg;
+    }
+  }
 
   for (auto inst_id : graph.insts().keys()) {
     const auto& inst = graph.insts().get(inst_id);

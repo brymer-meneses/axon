@@ -53,23 +53,7 @@ struct AxonToLlvmTypeConverter : mlir::LLVMTypeConverter {
   }
 };
 
-struct TupleAccessOpLowering : mlir::OpConversionPattern<TupleAccessOp> {
-  using mlir::OpConversionPattern<TupleAccessOp>::OpConversionPattern;
-
-  auto matchAndRewrite(TupleAccessOp op, OpAdaptor adaptor,
-                       mlir::ConversionPatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto loc = op.getLoc();
-
-    auto input = adaptor.getInput();
-    auto index = adaptor.getIndex();
-
-    auto new_op =
-        mlir::LLVM::ExtractValueOp::create(rewriter, loc, input, index);
-    rewriter.replaceOp(op, new_op);
-    return mlir::success();
-  }
-};
+// TupleAccessOp removed; no lowering required.
 
 struct AxonToLlvmLoweringPass
     : mlir::PassWrapper<AxonToLlvmLoweringPass,
@@ -96,14 +80,10 @@ struct AxonToLlvmLoweringPass
 
     mlir::LowerToLLVMOptions options{&context};
 
-    // All shapes are known at compile time so memrefs should be lowered to a
-    // pointer.
-    options.useBarePtrCallConv = false;
+    options.useBarePtrCallConv = true;
 
     mlir::RewritePatternSet patterns{&context};
     AxonToLlvmTypeConverter type_converter{&context, options};
-
-    patterns.add<TupleAccessOpLowering>(type_converter, &context);
 
     mlir::populateAffineToStdConversionPatterns(patterns);
     mlir::arith::populateArithToLLVMConversionPatterns(type_converter,

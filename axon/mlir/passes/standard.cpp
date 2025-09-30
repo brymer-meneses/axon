@@ -372,47 +372,7 @@ struct TransposeOpLowering : mlir::OpConversionPattern<TransposeOp> {
   }
 };
 
-struct GetDataOpLowering : mlir::OpConversionPattern<GetDataOp> {
-  using mlir::OpConversionPattern<GetDataOp>::OpConversionPattern;
-
-  auto matchAndRewrite(GetDataOp op, OpAdaptor adaptor,
-                       mlir::ConversionPatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto loc = op.getLoc();
-    auto tensor_ref = mlir::cast<TensorRefType>(op.getInput().getType());
-
-    auto memref =
-        TupleAccessOp::create(rewriter, loc, adaptor.getInput(), 0).getResult();
-    auto new_op = mlir::bufferization::ToTensorOp::create(
-        rewriter, loc, tensor_ref.getTensorType(), memref,
-        /*restrict=*/true,
-        /*writable=*/false);
-
-    rewriter.replaceOp(op, new_op);
-    return mlir::success();
-  }
-};
-
-struct GetGradOpLowering : mlir::OpConversionPattern<GetGradOp> {
-  using mlir::OpConversionPattern<GetGradOp>::OpConversionPattern;
-
-  auto matchAndRewrite(GetGradOp op, OpAdaptor adaptor,
-                       mlir::ConversionPatternRewriter& rewriter) const
-      -> mlir::LogicalResult final {
-    auto loc = op.getLoc();
-    auto tensor_ref = mlir::cast<TensorRefType>(op.getInput().getType());
-    auto memref =
-        TupleAccessOp::create(rewriter, loc, adaptor.getInput(), 1).getResult();
-
-    auto new_op = mlir::bufferization::ToTensorOp::create(
-        rewriter, loc, tensor_ref.getTensorType(), memref,
-        /*restrict=*/true,
-        /*writable=*/true);
-
-    rewriter.replaceOp(op, new_op);
-    return mlir::success();
-  }
-};
+// Removed GetDataOp/GetGradOp; codegen emits bufferization.to_tensor directly.
 
 struct AccumulateOpLowering : mlir::OpConversionPattern<AccumulateOp> {
   using mlir::OpConversionPattern<AccumulateOp>::OpConversionPattern;
@@ -601,8 +561,8 @@ struct PowOpLowering : mlir::OpConversionPattern<PowOp> {
     auto exponent_tensor = mlir::tensor::SplatOp::create(
         rewriter, loc, exponent_constant, result_tensor_type.getShape());
 
-    auto pow_op = mlir::math::PowFOp::create(
-        rewriter, loc, adaptor.getInput(), exponent_tensor);
+    auto pow_op = mlir::math::PowFOp::create(rewriter, loc, adaptor.getInput(),
+                                             exponent_tensor);
 
     rewriter.replaceOp(op, pow_op);
     return mlir::success();
@@ -945,16 +905,6 @@ struct MeanOpLowering : mlir::OpConversionPattern<MeanOp> {
 struct AxonToStandardTypeConverter : mlir::TypeConverter {
   AxonToStandardTypeConverter(mlir::MLIRContext* ctx) {
     addConversion([](mlir::Type type) -> mlir::Type { return type; });
-    addConversion([ctx](TensorRefType tensor_ref) -> mlir::Type {
-      auto element_type = tensor_ref.getElementType();
-      auto shape = tensor_ref.getShape();
-      auto memref_type = mlir::MemRefType::get(shape, element_type);
-      if (tensor_ref.getRequiresGrad()) {
-        return mlir::TupleType::get(ctx,
-                                    mlir::TypeRange{memref_type, memref_type});
-      }
-      return mlir::TupleType::get(ctx, {memref_type});
-    });
   }
 };
 
@@ -987,7 +937,6 @@ struct AxonToStandardLoweringPass
         mlir::bufferization::BufferizationDialect, mlir::BuiltinDialect,
         mlir::tensor::TensorDialect, mlir::math::MathDialect>();
 
-    target.addLegalOp<TupleAccessOp>();
     target.addIllegalDialect<AxonDialect>();
 
     AxonToStandardTypeConverter type_converter{&context};
@@ -996,8 +945,6 @@ struct AxonToStandardLoweringPass
 
     // clang-format off
     patterns.add<
-      GetDataOpLowering, 
-      GetGradOpLowering,
       AccumulateOpLowering, 
       ReluOpLowering,
       CompareOpLowering,
