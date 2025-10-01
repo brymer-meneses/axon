@@ -260,8 +260,7 @@ struct BackwardRule<insts::Mean> {
       grad_id = ctx.createOp(insts::Unsqueeze(grad_id, op.axis));
     }
 
-    auto expanded =
-        expandAlongAxisToMatch(ctx, grad_id, op.axis, op.input_id);
+    auto expanded = expandAlongAxisToMatch(ctx, grad_id, op.axis, op.input_id);
     auto num_elements_in_axis = ctx.getShape(op.input_id)[op.axis];
     auto scalar = Scalar(1.0f / static_cast<f32>(num_elements_in_axis));
 
@@ -322,8 +321,7 @@ struct BackwardRule<insts::Relu> {
     }
 
     auto predicate = insts::Compare::Predicate::Greater;
-    auto zeros_like =
-        ctx.createOp(insts::FillLike(op.input_id, Scalar(0.0f)));
+    auto zeros_like = ctx.createOp(insts::FillLike(op.input_id, Scalar(0.0f)));
     auto mask =
         ctx.createOp(insts::Compare(op.input_id, zeros_like, predicate));
     auto masked = ctx.createOp(insts::Mul(mask, grad_id));

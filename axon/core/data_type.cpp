@@ -64,7 +64,8 @@ export class DataType {
       }
     }
 
-    AXON_UNREACHABLE("Unsupported data type");
+    AXON_UNREACHABLE("Unsupported dtype bits={} and code={}", dtype.bits,
+                     dtype.code);
   }
 
  private:

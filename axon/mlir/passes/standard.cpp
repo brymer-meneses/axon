@@ -372,8 +372,6 @@ struct TransposeOpLowering : mlir::OpConversionPattern<TransposeOp> {
   }
 };
 
-// Removed GetDataOp/GetGradOp; codegen emits bufferization.to_tensor directly.
-
 struct AccumulateOpLowering : mlir::OpConversionPattern<AccumulateOp> {
   using mlir::OpConversionPattern<AccumulateOp>::OpConversionPattern;
 

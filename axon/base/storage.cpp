@@ -82,7 +82,7 @@ class RelationalStore {
   auto createRelation(KeyType lhs, ValueType rhs) -> void {
     AXON_ASSERT(not containsKey(lhs),
                 "Passed source has already an existing relation.");
-    AXON_ASSERT(not containsKey(rhs),
+    AXON_ASSERT(not containsValue(rhs),
                 "Passed target has already an existing relation.");
     relations_.push_back({lhs, rhs});
   }
@@ -131,12 +131,14 @@ class RelationalStore {
   auto relations() -> auto& { return relations_; }
 
   auto keys() const -> auto {
-    return relations_ |
-           std::views::transform([](const auto& relation) { return relation.first; });
+    return relations_ | std::views::transform([](const auto& relation) {
+             return relation.first;
+           });
   }
   auto values() const -> auto {
-    return relations_ |
-           std::views::transform([](const auto& relation) { return relation.second; });
+    return relations_ | std::views::transform([](const auto& relation) {
+             return relation.second;
+           });
   }
 
  private:
@@ -200,14 +202,12 @@ class IdStore {
   auto pairs() const -> const auto& { return pairs_; }
 
   auto keys() const -> auto {
-    return pairs_ | std::views::transform([](const KeyValuePair& pair) {
-             return pair.key;
-           });
+    return pairs_ | std::views::transform(
+                        [](const KeyValuePair& pair) { return pair.key; });
   }
   auto values() const -> auto {
-    return pairs_ | std::views::transform([](const KeyValuePair& pair) {
-             return pair.value;
-           });
+    return pairs_ | std::views::transform(
+                        [](const KeyValuePair& pair) { return pair.value; });
   }
 
  private:

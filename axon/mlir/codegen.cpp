@@ -32,9 +32,7 @@ struct CompilationContext {
   llvm::DenseMap<ParamId, mlir::Value> data_memrefs{};
   llvm::DenseMap<ParamId, mlir::Value> grad_memrefs{};
 
-  // Map GetParameter inst -> ParamId for later AccumulateGrad/AccumulateData
-  // sinks
-  llvm::DenseMap<InstId, ParamId> inst_to_param{};
+  RelationalStore<InstId, ParamId> inst_to_param;
 };
 
 static auto getElementType(DataType data_type, mlir::OpBuilder& builder)
@@ -57,7 +55,8 @@ static auto getFloatAttr(mlir::Type element_type, f64 value)
 static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto source = ctx.values[op.source_id];
-  auto param_id = ctx.inst_to_param[op.sink_id];
+  auto param_id = ctx.inst_to_param.getValueOf(op.sink_id);
+
   auto grad_memref = ctx.grad_memrefs[param_id];
   auto sink_tensor_type = mlir::cast<mlir::RankedTensorType>(source.getType());
   auto sink = mlir::bufferization::ToTensorOp::create(
@@ -69,12 +68,13 @@ static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx,
 static auto codegen(const insts::AccumulateData& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto source = ctx.values[op.source_id];
-  auto param_id = ctx.inst_to_param[op.sink_id];
+  auto param_id = ctx.inst_to_param.getValueOf(op.sink_id);
+
   auto data_memref = ctx.data_memrefs[param_id];
   auto sink_tensor_type = mlir::cast<mlir::RankedTensorType>(source.getType());
   auto sink = mlir::bufferization::ToTensorOp::create(
       ctx.builder, ctx.builder.getUnknownLoc(), sink_tensor_type, data_memref,
-      /*restrict=*/true, /*writable=*/false);
+      /*restrict=*/true, /*writable=*/true);
   AccumulateOp::create(ctx.builder, ctx.builder.getUnknownLoc(), sink, source);
 }
 
@@ -177,7 +177,8 @@ static auto codegen(const insts::ExpandDims& op, CompilationContext& ctx,
 static auto codegen(const insts::GetParameter& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto data_memref = ctx.data_memrefs[op.param_id];
-  ctx.inst_to_param[inst_id] = op.param_id;
+  ctx.inst_to_param.createRelation(inst_id, op.param_id);
+
   auto shape = ctx.graph.getShape(inst_id);
   auto element_type =
       getElementType(ctx.graph.getDataType(inst_id), ctx.builder);
@@ -317,8 +318,6 @@ static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx,
 static auto codegen(const insts::Pow& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto input = ctx.values[op.input_id];
-  auto element_type =
-      mlir::cast<mlir::RankedTensorType>(input.getType()).getElementType();
 
   auto exponent_value = op.exponent.as<f32>();
 
@@ -387,7 +386,7 @@ static auto getFunctionType(const Graph& graph, mlir::OpBuilder& builder)
   auto context = builder.getContext();
   AXON_ASSERT(context != nullptr);
 
-  for (auto [pid, param] : graph.parameters().keysAndValues()) {
+  for (auto [param_id, param] : graph.parameters().keysAndValues()) {
     auto shape = graph.getShape(param.inst_id);
     auto element_type = getElementType(param.data_type, builder);
     auto memref_type = mlir::MemRefType::get(shape, element_type);
@@ -423,20 +422,22 @@ export auto codegenGraph(const Graph& graph, mlir::OpBuilder& builder)
   builder.setInsertionPointToStart(func_op.addEntryBlock());
   CompilationContext ctx(graph, builder, func_op);
 
-  // Prepare ParamId -> (data, grad?) memref mapping from function args
-  int arg_index = 0;
-  for (auto [pid, p] : graph.parameters().keysAndValues()) {
-    auto data_arg = func_op.getArgument(arg_index++);
-    ctx.data_memrefs[pid] = data_arg;
-    if (p.requires_grad) {
-      auto grad_arg = func_op.getArgument(arg_index++);
-      ctx.grad_memrefs[pid] = grad_arg;
+  auto arg_index = 0;
+  for (auto [param_id, param] : graph.parameters().keysAndValues()) {
+    auto data_arg = func_op.getArgument(arg_index);
+    ctx.data_memrefs[param_id] = data_arg;
+    arg_index += 1;
+
+    if (param.requires_grad) {
+      auto grad_arg = func_op.getArgument(arg_index);
+      ctx.grad_memrefs[param_id] = grad_arg;
+      arg_index += 1;
     }
   }
 
   for (auto inst_id : graph.insts().keys()) {
     const auto& inst = graph.insts().get(inst_id);
-    inst.visit([&](const auto& inst) { codegen(inst, ctx, inst_id); });
+    inst.visit([&](const auto& op) { codegen(op, ctx, inst_id); });
   }
 
   if (auto returned_id = graph.getReturnedId()) {

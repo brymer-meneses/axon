@@ -97,6 +97,30 @@ static auto ensureHasSameShape(Tensor& lhs, Tensor& rhs) -> void {
   }
 }
 
+// Helper for the symmetric case where one tensor is a fresh root input and
+// the other is a non-root (lazy) tensor tied to some existing trace session.
+//
+// Behavior:
+// - Materialize the non-root if it is still lazy so it can be reintroduced as
+//   a parameter to a new trace.
+// - Always create a fresh TraceSession and declare the non-root first (to
+//   preserve parameter ordering stability) followed by the root input.
+// - Never reset or mutate the original session in place to avoid invalidating
+//   existing lazy tensors that still reference it.
+static auto getSessionForRootAndNonRoot(std::shared_ptr<Tensor>& root,
+                                        std::shared_ptr<Tensor>& non_root)
+    -> std::shared_ptr<TraceSession> {
+  auto original = non_root->session();
+  if (!non_root->isEvaluated()) {
+    original->evaluate(non_root.get());
+  }
+
+  auto session = std::make_shared<TraceSession>();
+  session->declareParam(non_root);
+  session->declareParam(root);
+  return session;
+}
+
 static auto getTraceSession(std::shared_ptr<Tensor>& lhs,
                             std::shared_ptr<Tensor>& rhs)
     -> std::shared_ptr<TraceSession> {
@@ -108,30 +132,44 @@ static auto getTraceSession(std::shared_ptr<Tensor>& lhs,
   }
 
   if (lhs->isRoot() && !rhs->isRoot()) {
-    auto session = rhs->session();
-    session->ensureReadyForNewTrace();
-    session->declareParam(lhs);
-    return session;
+    return getSessionForRootAndNonRoot(lhs, rhs);
   }
 
   if (!lhs->isRoot() && rhs->isRoot()) {
-    auto session = lhs->session();
-    session->ensureReadyForNewTrace();
-    session->declareParam(rhs);
-    return session;
+    return getSessionForRootAndNonRoot(rhs, lhs);
   }
 
   if (!lhs->isRoot() && !rhs->isRoot()) {
-    if (lhs->session() != rhs->session()) {
-      auto session = lhs->session();
-      // merge with the trace session from the rhs;
-      session->merge(*rhs->session());
-      // set the session for rhs
+    auto lhs_session = lhs->session();
+    auto rhs_session = rhs->session();
+
+    // If both tensors share a session and it hasn't been finalized, reuse it.
+    if (lhs_session == rhs_session && !lhs_session->shouldReset()) {
+      return lhs_session;
+    }
+
+    // If sessions differ and neither has been finalized, merge as before.
+    if (lhs_session != rhs_session && !lhs_session->shouldReset() &&
+        !rhs_session->shouldReset()) {
+      auto session = lhs_session;
+      session->merge(*rhs_session);
       rhs->session() = session;
       return session;
     }
 
-    return lhs->session();
+    // Otherwise, at least one session was finalized by a prior evaluate/backward,
+    // or both tensors come from a finalized session; materialize and start a new trace.
+    if (!lhs->isEvaluated()) {
+      lhs_session->evaluate(lhs.get());
+    }
+    if (!rhs->isEvaluated()) {
+      rhs_session->evaluate(rhs.get());
+    }
+
+    auto session = std::make_shared<TraceSession>();
+    session->declareParam(lhs);
+    session->declareParam(rhs);
+    return session;
   }
   AXON_UNREACHABLE("This should be an unreachable point");
 }

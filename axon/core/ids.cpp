@@ -14,7 +14,10 @@ struct InstId : IndexBase<InstId> {
   static const InstId Pending;
 
   constexpr auto add_offset(i32 offset) const -> InstId {
-    return InstId(value() + offset);
+    if (isValid()) {
+      return InstId(value() + offset);
+    }
+    return *this;
   }
 };
 
@@ -24,7 +27,10 @@ struct ParamId : IndexBase<ParamId> {
   using IndexBase::IndexBase;
 
   constexpr auto add_offset(i32 offset) const -> ParamId {
-    return ParamId(value() + offset);
+    if (isValid()) {
+      return ParamId(value() + offset);
+    }
+    return *this;
   }
 };
 

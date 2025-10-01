@@ -39,9 +39,7 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
 
   template <typename InstType, typename... Args>
   auto createTensor(Args&&... args) -> std::shared_ptr<Tensor> {
-    auto emit_grad = Runtime::get().shouldEmitGrad();
-
-    auto inst_id = graph_.createOp(InstType(forward(args)...), emit_grad);
+    auto inst_id = createInst<InstType>(std::forward<Args>(args)...);
     auto session = shared_from_this();
     return std::make_shared<Tensor>(session, inst_id);
   }
@@ -96,53 +94,37 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
     }
 
     for (auto tensor : other.parameters_) {
-      parameters_.push_back(tensor);
+      parameters_.push_back(std::move(tensor));
     }
 
     graph_.merge(other.graph_);
   }
 
   auto evaluate(Tensor* returned) -> void {
+    AXON_ASSERT(returned != nullptr);
     AXON_ASSERT(insts_.contains(returned));
-    auto returned_id = insts_[returned];
 
+    ensureParameterGradsAreZerod();
+
+    auto returned_id = insts_[returned];
     graph_.setReturned(returned_id);
-    // Ensure gradient buffers are available for parameters that require them.
-    for (auto& p : parameters_) {
-      if (p && p->requiresGrad() && p->grad() == nullptr) {
-        p->zeroGrad();
-      }
-    }
     Runtime::get().execute(graph_, parameters_, returned);
     graph_.setReturned(InstId::None);
   }
 
   auto evaluate() -> void {
-    for (auto& p : parameters_) {
-      if (p && p->requiresGrad() && p->grad() == nullptr) {
-        p->zeroGrad();
-      }
-    }
+    ensureParameterGradsAreZerod();
+
+    AXON_DCHECK(parameters_.size() > 0);
     Runtime::get().execute(graph_, parameters_);
   }
 
   // Mark this session to be reset the next time a new trace starts.
   auto markForReset() -> void { should_reset_ = true; }
 
-  // Reset internal mappings if previously marked. Call when starting a new trace.
-  auto ensureReadyForNewTrace() -> void {
-    if (!should_reset_) return;
-
-    auto keep_alive = shared_from_this();
-    for (auto& [tensor, _] : insts_) {
-      if (tensor->session() != nullptr) {
-        tensor->session() = nullptr;
-      }
-    }
-    insts_.clear();
-    parameters_.clear();
-    should_reset_ = false;
-  }
+  // Query whether this session has been finalized by a previous
+  // evaluate/backward and should not be reused for starting a new trace.
+  auto shouldReset() const -> bool { return should_reset_; }
 
   auto graph() const -> const Graph& { return graph_; }
 
@@ -151,7 +133,10 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
     return insts_;
   }
 
-  auto parameters() -> llvm::SmallVector<std::shared_ptr<Tensor>>& { return parameters_; }
+  auto parameters() -> llvm::SmallVector<std::shared_ptr<Tensor>>& {
+    return parameters_;
+  }
+
   auto parameters() const -> const llvm::SmallVector<std::shared_ptr<Tensor>>& {
     return parameters_;
   }
@@ -167,6 +152,16 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
     }
   };
 
+  // ensure that the gradients of the parameters exists and are zero'd
+  auto ensureParameterGradsAreZerod() -> void {
+    for (auto& p : parameters_) {
+      AXON_ASSERT(p != nullptr);
+      if (p->requiresGrad() && p->grad() == nullptr) {
+        p->zeroGrad();
+      }
+    }
+  }
+
  private:
   Graph graph_;
   llvm::DenseMap<Tensor*, InstId> insts_;
@@ -178,9 +173,8 @@ Tensor::~Tensor() {
   if (session_) {
     session_->insts().erase(this);
     auto& params = session_->parameters();
-    params.erase(std::remove_if(params.begin(), params.end(), [&](auto& p) {
-                    return p.get() == this;
-                  }),
+    params.erase(std::remove_if(params.begin(), params.end(),
+                                [&](auto& p) { return p.get() == this; }),
                  params.end());
   }
 }
@@ -224,18 +218,6 @@ auto Tensor::zeroGrad() -> void {
 }
 
 auto Tensor::evaluate() -> void {
-  if (!session_) {
-    throw nb::value_error("Tried to evaluate an already materialized tensor.");
-  }
-
-  if (!session_) {
-    throw nb::value_error("Tried to evaluate an already materialized tensor.");
-  }
-
-  if (!session_) {
-    throw nb::value_error("Tried to evaluate an already materialized tensor.");
-  }
-
   if (!session_) {
     throw nb::value_error("Tried to evaluate an already materialized tensor.");
   }
