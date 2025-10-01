@@ -224,6 +224,22 @@ auto Tensor::zeroGrad() -> void {
 }
 
 auto Tensor::evaluate() -> void {
+  if (!session_) {
+    throw nb::value_error("Tried to evaluate an already materialized tensor.");
+  }
+
+  if (!session_) {
+    throw nb::value_error("Tried to evaluate an already materialized tensor.");
+  }
+
+  if (!session_) {
+    throw nb::value_error("Tried to evaluate an already materialized tensor.");
+  }
+
+  if (!session_) {
+    throw nb::value_error("Tried to evaluate an already materialized tensor.");
+  }
+
   session_->evaluate(this);
 
   // If this tensor doesn't require gradients, then we can prune this graph.

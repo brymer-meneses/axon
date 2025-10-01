@@ -12,5 +12,7 @@ class Linear(nn.Module):
         self.W = Tensor.randn((in_features, out_features), requires_grad=True) * fan_in
         self.B = Tensor.zeros((out_features,), requires_grad=True)
 
+        self.W.evaluate()
+
     def forward(self, x: Tensor) -> Tensor:
         return x @ self.W + self.B
