@@ -84,16 +84,22 @@ static auto performBroadcasting(TraceSession& session, InstId source_id,
       source_id, broadcast_info->expand_dim_mappings);
 }
 
-static auto ensureHasSameDataType(Tensor& lhs, Tensor& rhs) -> void {
+static auto ensureHasSameDataType(const Tensor& lhs, const Tensor& rhs)
+    -> void {
   if (lhs.data_type() != rhs.data_type()) {
-    throw nb::value_error(
-        "Cannot operate on two tensors with different data types");
+    throw std::runtime_error(std::format(
+        "Cannot operate on two tensors with different data types got {} and {}",
+        lhs.data_type(), rhs.data_type()));
   }
 }
 
-static auto ensureHasSameShape(Tensor& lhs, Tensor& rhs) -> void {
+static auto ensureHasSameShape(const Tensor& lhs, const Tensor& rhs) -> void {
   if (lhs.shape() != rhs.shape()) {
-    throw nb::value_error("Expected the two tensors to have the same shape.");
+    throw nb::value_error(
+        std::format(
+            "Expected the two tensors to have the same shape, got {} and {}",
+            lhs.shape(), rhs.shape())
+            .c_str());
   }
 }
 

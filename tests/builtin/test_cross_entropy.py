@@ -17,14 +17,11 @@ def test_cross_entropy_forward_and_backward():
     logits = Tensor(base, requires_grad=True)
     targets = Tensor(one_hot)
 
-    # Compute losses
     loss_axon = axon.builtin.cross_entropy(logits * 0.5, targets)
     loss_torch = F.cross_entropy(logits_t * 0.5, targets_idx)
 
-    # Backward
     loss_torch.backward()
     loss_axon.backward()
 
-    # Compare values and gradients
     axon.testing.assert_are_close(loss_axon, loss_torch, 1e-4)
     axon.testing.assert_are_close(logits.grad, logits_t.grad, 5e-3)

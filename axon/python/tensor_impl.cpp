@@ -243,8 +243,10 @@ auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
   }
 
   if (grad->data_type() != data_type()) {
-    throw nb::value_error(
-        "Received gradient has different dtype with this tensor");
+    throw std::runtime_error(
+        std::format("Received gradient has different dtype with this tensor, "
+                    "expected {} got {}",
+                    data_type(), grad->data_type()));
   }
 
   if (!session_->insts().contains(grad.get())) {

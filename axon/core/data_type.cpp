@@ -36,6 +36,15 @@ export class DataType {
     }
   }
 
+  auto asString() const -> std::string_view {
+    switch (type_) {
+      case DataType::Float32:
+        return "float32";
+      case DataType::Float64:
+        return "float64";
+    }
+  }
+
   auto kind() const -> InternalType { return type_; }
 
   template <Numeric T>
@@ -77,3 +86,13 @@ export auto hash_value(const DataType& data_type) -> llvm::hash_code {
 }
 
 }  // namespace axon
+
+export template <>
+struct std::formatter<axon::DataType> {
+  constexpr auto parse(std::format_parse_context& ctx) { return ctx.begin(); }
+
+  auto format(const axon::DataType& data_type, std::format_context& ctx) const {
+    auto out = ctx.out();
+    return std::format_to(out, "{}", data_type.asString());
+  }
+};

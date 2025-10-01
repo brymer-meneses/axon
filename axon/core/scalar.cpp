@@ -33,6 +33,25 @@ export class Scalar {
     return *reinterpret_cast<const T*>(storage_.data());
   }
 
+  template <Numeric T>
+  auto getAs() const -> const T {
+    switch (data_type_.kind()) {
+      case DataType::Float32:
+        return static_cast<T>(as<f32>());
+      case DataType::Float64:
+        return static_cast<T>(as<f64>());
+    }
+  }
+
+  auto cast(DataType data_type) const -> Scalar {
+    switch (data_type.kind()) {
+      case DataType::Float32:
+        return Scalar(getAs<f32>());
+      case DataType::Float64:
+        return Scalar(getAs<f64>());
+    }
+  }
+
   friend auto operator+(const Scalar& lhs, const Scalar& rhs) -> Scalar {
     AXON_ASSERT(lhs.data_type() == rhs.data_type());
     switch (lhs.data_type().kind()) {

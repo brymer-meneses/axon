@@ -101,6 +101,12 @@ static auto checkIsWithinTolerance(T* lhs, llvm::ArrayRef<i64> lhs_strides,
   }
 }
 
+static auto createFillLike(Scalar fill_value, llvm::ArrayRef<i64> shape,
+                           bool requires_grad) -> std::shared_ptr<Tensor> {
+  auto storage = Storage::createFilled(fill_value, shape);
+  return std::make_shared<Tensor>(std::move(storage), requires_grad);
+}
+
 NB_MODULE(_core, m) {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
@@ -225,13 +231,47 @@ NB_MODULE(_core, m) {
       .def("mean", &performReduceInst<insts::Mean>,
            nb::arg("dim") = std::nullopt, nb::arg("keepdims") = false)
 
+      .def("item",
+           [](std::shared_ptr<Tensor> self) -> f32 {
+             if (self->rank() != 0) {
+               throw nb::value_error(
+                   std::format("Cannot perform item on a tensor with a "
+                               "non-scalar shape of "
+                               "{}.",
+                               self->shape())
+                       .c_str());
+             }
+             if (!self->isEvaluated()) {
+               self->evaluate();
+             }
+             return *self->storage()->as<f32>();
+           })
+
+      .def_static(
+          "fill_like",
+          [](nb::object value, nb::tuple shape_tuple, bool requires_grad,
+             DataType::InternalType data_type) {
+            auto shape = convertTupleToVector(shape_tuple);
+
+            if (!nb::isinstance<f64>(value) && !nb::isinstance<f32>(value)) {
+              throw nb::value_error("value must be a float");
+            }
+
+            auto val = nb::cast<f64>(value);
+            Scalar scalar(val);
+            scalar = scalar.cast(data_type);
+            return createFillLike(scalar, shape, requires_grad);
+          },
+          nb::arg("value"), nb::arg("shape"), nb::arg("requires_grad") = false,
+          nb::arg("dtype") = DataType::Float32)
+
       .def_static(
           "ones",
           [](nb::tuple shape_tuple, bool requires_grad,
              DataType::InternalType data_type) {
             auto shape = convertTupleToVector(shape_tuple);
-            auto storage = Storage::createFilled(shape, 1.0, data_type);
-            return std::make_shared<Tensor>(std::move(storage), requires_grad);
+            return createFillLike(Scalar(1.0).cast(data_type), shape,
+                                  requires_grad);
           },
           nb::arg("shape"), nb::arg("requires_grad") = false,
           nb::arg("dtype") = DataType::Float32)
@@ -241,8 +281,8 @@ NB_MODULE(_core, m) {
           [](nb::tuple shape_tuple, bool requires_grad,
              DataType::InternalType data_type) {
             auto shape = convertTupleToVector(shape_tuple);
-            auto storage = Storage::createFilled(shape, 0.0, data_type);
-            return std::make_shared<Tensor>(std::move(storage), requires_grad);
+            return createFillLike(Scalar(0.0).cast(data_type), shape,
+                                  requires_grad);
           },
           nb::arg("shape"), nb::arg("requires_grad") = false,
           nb::arg("dtype") = DataType::Float32)

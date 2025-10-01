@@ -19,6 +19,7 @@ export module axon.core:storage;
 import axon.base;
 
 import :data_type;
+import :scalar;
 
 namespace nb = nanobind;
 
@@ -118,27 +119,26 @@ export class Storage {
     return {data_type, data, shape, strides, /*is_owned=*/true};
   }
 
-  static auto createFilled(llvm::ArrayRef<i64> shape, auto value,
-                           DataType data_type, llvm::ArrayRef<i64> strides)
-      -> Storage {
+  static auto createFilled(Scalar scalar, llvm::ArrayRef<i64> shape,
+                           llvm::ArrayRef<i64> strides) -> Storage {
     auto num_elems = computeNumElems(shape);
-    auto size = num_elems * data_type.getSizeInBytes();
+    auto size = num_elems * scalar.data_type().getSizeInBytes();
     auto* data = new std::byte[size];
 
-    switch (data_type.kind()) {
+    switch (scalar.data_type().kind()) {
       case DataType::Float32: {
         auto* data_ptr = reinterpret_cast<f32*>(data);
-        std::fill_n(data_ptr, num_elems, value);
+        std::fill_n(data_ptr, num_elems, scalar.as<f32>());
         break;
       }
       case DataType::Float64: {
         auto* data_ptr = reinterpret_cast<f64*>(data);
-        std::fill_n(data_ptr, num_elems, value);
+        std::fill_n(data_ptr, num_elems, scalar.as<f64>());
         break;
       }
     }
 
-    return {data_type, data, shape, strides, /*is_owned=*/true};
+    return {scalar.data_type(), data, shape, strides, /*is_owned=*/true};
   }
 
   static auto fromDlPack(nb::ndarray<nb::c_contig, nb::ro>& array,
@@ -166,11 +166,10 @@ export class Storage {
     }
   }
 
-  static auto createFilled(llvm::ArrayRef<i64> shape, auto value,
-                           DataType data_type, Layout layout = Layout::RowMajor)
-      -> Storage {
+  static auto createFilled(Scalar value, llvm::ArrayRef<i64> shape,
+                           Layout layout = Layout::RowMajor) -> Storage {
     auto strides = computeStrides(shape, layout);
-    return createFilled(shape, value, data_type, strides);
+    return createFilled(value, shape, strides);
   }
 
   static auto createDistributed(llvm::ArrayRef<i64> shape, float mean,
@@ -205,8 +204,8 @@ export class Storage {
   }
 
   static auto createZerosLike(const Storage& storage) -> Storage {
-    return createFilled(storage.shape(), 0, storage.data_type(),
-                        storage.strides());
+    auto scalar = Scalar(0.0).cast(storage.data_type());
+    return createFilled(scalar, storage.shape(), storage.strides());
   }
 
   ~Storage() {
