@@ -191,6 +191,8 @@ NB_MODULE(_core, m) {
 
       .def("__repr__", &Tensor::asString)
 
+      .def("__neg__", &performUnaryInst<insts::Neg>)
+
       .def("__eq__", &performComparison<insts::Compare::Predicate::Equal>)
       .def("__ne__", &performComparison<insts::Compare::Predicate::NotEqual>)
       .def("__le__", &performComparison<insts::Compare::Predicate::LessEq>)
@@ -212,7 +214,7 @@ NB_MODULE(_core, m) {
 
       .def("softmax", &performSoftmax, nb::arg("dim"))
 
-      .def("relu", &performRelu)
+      .def("relu", &performUnaryInst<insts::Relu>)
 
       .def("accumulate", &performAccumulate, nb::arg("value"))
 

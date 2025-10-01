@@ -79,12 +79,12 @@ class RelationalStore {
  public:
   auto operator==(const RelationalStore& rhs) const -> bool = default;
 
-  auto createRelation(KeyType lhs, ValueType rhs) -> void {
-    AXON_ASSERT(not containsKey(lhs),
-                "Passed source has already an existing relation.");
-    AXON_ASSERT(not containsValue(rhs),
-                "Passed target has already an existing relation.");
-    relations_.push_back({lhs, rhs});
+  auto createRelation(KeyType key, ValueType value) -> void {
+    AXON_ASSERT(not containsKey(key),
+                "Passed key has already an existing relation.");
+    AXON_ASSERT(not containsValue(value),
+                "Passed value has already an existing relation.");
+    relations_.push_back({key, value});
   }
 
   auto containsKey(KeyType lhs) const -> bool {

@@ -411,10 +411,11 @@ auto performComparison(std::shared_ptr<Tensor> lhs, std::shared_ptr<Tensor> rhs)
   return session->createTensor<insts::Compare>(lhs, rhs, predicate);
 }
 
-export auto performRelu(std::shared_ptr<Tensor> input)
+export template <typename InstType>
+auto performUnaryInst(std::shared_ptr<Tensor> input)
     -> std::shared_ptr<Tensor> {
   auto session = getTraceSession(input);
-  return session->createTensor<insts::Relu>(input);
+  return session->createTensor<InstType>(input);
 }
 
 export auto performAccumulate(std::shared_ptr<Tensor> sink,
@@ -424,6 +425,17 @@ export auto performAccumulate(std::shared_ptr<Tensor> sink,
     throw nb::value_error(
         "tensor.accumulate should be performed on a no gradient context.");
   }
+
+  // Harden API: the sink must be a materialized tensor (root/parameter-like)
+  // so that codegen can always map it to a function argument memref.
+  if (!sink->isEvaluated()) {
+    throw nb::value_error(
+        "tensor.accumulate requires a materialized sink tensor (root).");
+  }
+
+  // Early validation to surface issues before JIT/codegen.
+  ensureHasSameDataType(*sink, *source);
+  ensureHasSameShape(*sink, *source);
 
   auto session = getTraceSession(sink, source);
   session->createInst<insts::AccumulateData>(sink, source);

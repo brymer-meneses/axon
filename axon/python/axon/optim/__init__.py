@@ -30,4 +30,4 @@ class SGD(Optim):
     def step(self) -> None:
         with axon.no_grad():
             for param in self.parameters():
-                param.accumulate(param.grad * self._lr)
+                param.accumulate(-param.grad * self._lr)
