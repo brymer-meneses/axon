@@ -215,6 +215,7 @@ NB_MODULE(_core, m) {
       .def("softmax", &performSoftmax, nb::arg("dim"))
 
       .def("relu", &performUnaryInst<insts::Relu>)
+      .def("log", &performUnaryInst<insts::Log>)
 
       .def("accumulate", &performAccumulate, nb::arg("value"))
 

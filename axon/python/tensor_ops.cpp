@@ -111,10 +111,19 @@ static auto getSessionForRootAndNonRoot(std::shared_ptr<Tensor>& root,
                                         std::shared_ptr<Tensor>& non_root)
     -> std::shared_ptr<TraceSession> {
   auto original = non_root->session();
+  // Prefer reusing the existing session for the non-root operand to preserve
+  // gradient connectivity back to its producers, as long as it hasn't been
+  // finalized by a prior evaluate/backward.
+  if (original && !original->shouldReset()) {
+    original->declareParam(root);
+    return original;
+  }
+
+  // Fallback: materialize and start a fresh session when the original session
+  // was finalized.
   if (!non_root->isEvaluated()) {
     original->evaluate(non_root.get());
   }
-
   auto session = std::make_shared<TraceSession>();
   session->declareParam(non_root);
   session->declareParam(root);
@@ -157,8 +166,9 @@ static auto getTraceSession(std::shared_ptr<Tensor>& lhs,
       return session;
     }
 
-    // Otherwise, at least one session was finalized by a prior evaluate/backward,
-    // or both tensors come from a finalized session; materialize and start a new trace.
+    // Otherwise, at least one session was finalized by a prior
+    // evaluate/backward, or both tensors come from a finalized session;
+    // materialize and start a new trace.
     if (!lhs->isEvaluated()) {
       lhs_session->evaluate(lhs.get());
     }
@@ -437,7 +447,18 @@ export auto performAccumulate(std::shared_ptr<Tensor> sink,
   ensureHasSameDataType(*sink, *source);
   ensureHasSameShape(*sink, *source);
 
-  auto session = getTraceSession(sink, source);
+  // Specialize session handling for accumulate:
+  // Always create a fresh session and declare the sink as a parameter so it
+  // has a valid ParamId → memref mapping during codegen. Bring the source in
+  // as a parameter as well (materialize first if it is still lazy).
+  auto session = std::make_shared<TraceSession>();
+  session->declareParam(sink);
+
+  if (!source->isEvaluated()) {
+    source->evaluate();
+  }
+  session->declareParam(source);
+
   session->createInst<insts::AccumulateData>(sink, source);
   session->evaluate();
 }

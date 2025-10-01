@@ -219,6 +219,21 @@ struct BackwardRule<insts::Neg> {
 };
 
 export template <>
+struct BackwardRule<insts::Log> {
+  static auto apply(const insts::Log& op, InstId grad_id, BackwardContext& ctx)
+      -> llvm::SmallVector<Dependency> {
+    if (!ctx.checkRequiresGrad(op.input_id)) {
+      return {};
+    }
+
+    // d/dx log(x) = 1 / x
+    auto inv = ctx.createOp(insts::Pow(op.input_id, Scalar(-1.0f)));
+    auto dx = ctx.createOp(insts::Mul(grad_id, inv));
+    return {{op.input_id, dx}};
+  }
+};
+
+export template <>
 struct BackwardRule<insts::ScalarMul> {
   static auto apply(const insts::ScalarMul& op, InstId grad_id,
                     BackwardContext& ctx) -> llvm::SmallVector<Dependency> {

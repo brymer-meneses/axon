@@ -12,7 +12,7 @@ uv venv
 # build and install the library
 make install
 # run the example!
-uv run examples/simple_autograd.py
+uv run examples/mnist.py
 ```
 
 ## Example

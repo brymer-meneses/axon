@@ -13,6 +13,7 @@ module;
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/IR/Builders.h"
 
 export module axon.mlir:codegen;
@@ -56,6 +57,7 @@ static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto source = ctx.values[op.source_id];
   auto param_id = ctx.inst_to_param.getValueOf(op.sink_id);
+  AXON_ASSERT(param_id.isValid());
 
   auto grad_memref = ctx.grad_memrefs[param_id];
   auto sink_tensor_type = mlir::cast<mlir::RankedTensorType>(source.getType());
@@ -69,6 +71,7 @@ static auto codegen(const insts::AccumulateData& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto source = ctx.values[op.source_id];
   auto param_id = ctx.inst_to_param.getValueOf(op.sink_id);
+  AXON_ASSERT(param_id.isValid());
 
   auto data_memref = ctx.data_memrefs[param_id];
   auto sink_tensor_type = mlir::cast<mlir::RankedTensorType>(source.getType());
@@ -153,7 +156,7 @@ static auto codegen(const insts::ExpandDims& op, CompilationContext& ctx,
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
   llvm::SmallVector<mlir::Attribute> expansions;
-  llvm::SmallVector<int64_t> result_shape{tensor_type.getShape()};
+  llvm::SmallVector<i64> result_shape{tensor_type.getShape()};
 
   // Create an array attribute for each (dim, scale) pair
   for (auto mapping : op.mappings) {
@@ -192,14 +195,14 @@ static auto codegen(const insts::FillLike& op, CompilationContext& ctx,
                     InstId inst_id) -> void {
   auto like = ctx.values[op.input_id];
   // Extract the scalar value according to its stored dtype.
-  double fill;
+  f64 fill;
   switch (op.fill_value.data_type().kind()) {
     case DataType::Float32: {
-      fill = static_cast<double>(op.fill_value.as<f32>());
+      fill = static_cast<f64>(op.fill_value.as<f32>());
       break;
     }
     case DataType::Float64: {
-      fill = static_cast<double>(op.fill_value.as<f64>());
+      fill = static_cast<f64>(op.fill_value.as<f64>());
       break;
     }
   }
@@ -378,6 +381,15 @@ static auto codegen(const insts::Neg& op, CompilationContext& ctx,
 
   ctx.values[inst_id] =
       NegOp::create(ctx.builder, ctx.builder.getUnknownLoc(), input);
+};
+
+static auto codegen(const insts::Log& op, CompilationContext& ctx,
+                    InstId inst_id) -> void {
+  auto input = ctx.values[op.input_id];
+  auto result_type = input.getType();
+  auto new_op = mlir::math::LogOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
+                                          result_type, input);
+  ctx.values[inst_id] = new_op.getResult();
 };
 
 static auto getFunctionType(const Graph& graph, mlir::OpBuilder& builder)

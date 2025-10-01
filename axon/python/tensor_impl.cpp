@@ -274,6 +274,12 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream, const T* ptr,
     }
   };
 
+  // Handle scalar (rank-0) tensors.
+  if (shape.empty()) {
+    dump_formatted(stream, *ptr);
+    return;
+  }
+
   if (dim == shape.size() - 1) {
     // Base case: 1-D row
     stream << "[";

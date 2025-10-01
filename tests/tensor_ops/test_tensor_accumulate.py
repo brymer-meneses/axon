@@ -1,5 +1,6 @@
 import torch
 import axon
+import numpy as np
 import pytest
 
 from axon import Tensor
@@ -19,8 +20,6 @@ def test_tensor_accumulate():
 
 
 def test_tensor_accumulate_with_nonroot_source():
-    import numpy as np
-
     sink_arr = np.random.randn(6, 6).astype(np.float32)
     base_arr = np.random.randn(6, 6).astype(np.float32)
 
@@ -36,12 +35,22 @@ def test_tensor_accumulate_with_nonroot_source():
 
 
 def test_tensor_accumulate_raises_on_lazy_sink():
-    # Create a lazy sink (non-root) by applying an op to a root tensor.
     base = Tensor.randn((4, 4), requires_grad=True)
-    lazy_sink = base * 1.0  # not materialized, tied to a trace session
+    lazy_sink = base * 1.0
 
     source = Tensor.randn((4, 4))
 
     with axon.no_grad():
         with pytest.raises(Exception):
             lazy_sink.accumulate(source)
+
+
+def test_accumulate_non_parameter_sink_triggers_codegen_assert():
+    a = Tensor.randn((3, 3), requires_grad=True)
+    sink = a * 1.0
+    sink.evaluate()
+
+    source = sink * 2.0
+
+    with axon.no_grad():
+        sink.accumulate(source)

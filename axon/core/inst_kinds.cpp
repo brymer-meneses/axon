@@ -180,6 +180,18 @@ struct Neg {
   auto operator==(const Neg& other) const -> bool = default;
 };
 
+struct Log {
+  constexpr static auto traits = InstTraits{
+      .num_inputs = 1,
+      .shape_rule = ShapeInfo::SameAsInputs,
+      .differentiable = true,
+  };
+
+  InstId input_id;
+
+  auto operator==(const Log& other) const -> bool = default;
+};
+
 struct Constant {
   constexpr static auto traits = InstTraits{
       .num_inputs = 0,
@@ -342,6 +354,7 @@ using InstInternalType =
       insts::Softmax,
       insts::Relu,
       insts::Compare,
+      insts::Log,
       insts::Sub,
       insts::Neg,
       insts::ScalarMul,
