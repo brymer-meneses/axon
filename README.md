@@ -1,11 +1,12 @@
 # Axon 
 
-Axon is a tiny Deep Learning Library that uses MLIR to optimize tensor operations by
-using just-in-time compilation to execute functions that involve tensors.
+ Axon is a lightweight deep learning library that lowers tensor graphs to MLIR
+ and JIT‑compiles them for fast execution. 
 
 ## Building
 
-You need to have `uv`, `cmake` `make` and a compiler that supports C++23. 
+You need to have `uv`, `cmake`, `make` and a compiler that supports C++23. 
+
 ```bash
 # create a virtual environment
 uv venv
@@ -26,20 +27,21 @@ class Model(nn.Module):
         super().__init__()
 
         self.W = Tensor.randn((in_features, out_features), requires_grad=True)
-        self.B = Tensor.randn((out_features, 1), requires_grad=True)
+        self.B = Tensor.randn((out_features, ), requires_grad=True)
 
     def forward(self, x):
         return x @ self.W + self.B
 
 
+model = Model(100, 100)
 optim = optim.SGD(model.parameters(), lr=0.01)
-model = Model()
 
-for (x, y) in dataset:
-    y_hat = model(x)
-    l = builtin.mse_loss(y, y_hat)
+for (inputs, targets) in dataset:
+    optim.zero_grad()
+
+    preds = model(inputs)
+    l = builtin.mse_loss(targets, preds)
     l.backward()
 
-    optim.zero_grad()
     optim.step()
 ```
