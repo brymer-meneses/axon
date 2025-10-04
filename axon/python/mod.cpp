@@ -6,3 +6,4 @@ export import :tensor;
 export import :tensor_ops;
 export import :jit;
 export import :runtime;
+export import :storage;

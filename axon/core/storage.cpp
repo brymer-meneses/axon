@@ -1,10 +1,11 @@
 module;
 
 #include <algorithm>
+#include <concepts>
 #include <cstdint>
 #include <exception>
+#include <memory>
 #include <print>
-#include <random>
 #include <ranges>
 #include <type_traits>
 #include <utility>
@@ -12,7 +13,6 @@ module;
 #include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
-#include "nanobind/ndarray.h"
 
 export module axon.core:storage;
 
@@ -20,8 +20,6 @@ import axon.base;
 
 import :data_type;
 import :scalar;
-
-namespace nb = nanobind;
 
 namespace axon {
 
@@ -67,256 +65,146 @@ static auto computeTotalSizeInBytes(llvm::ArrayRef<i64> shape,
   return computeNumElems(shape) * data_type.getSizeInBytes();
 }
 
-static auto computeShape(const nb::list& list) -> llvm::SmallVector<i64> {
-  llvm::SmallVector<i64> shape;
-  auto current = list;
-  while (nb::isinstance<nb::list>(current) && current.size() > 0) {
-    shape.push_back(static_cast<i64>(current.size()));
+// Python-oriented constructors and helpers live in axon.python
+export class StorageBase {
+ public:
+  explicit StorageBase(DataType dtype, llvm::ArrayRef<i64> shape,
+                       llvm::ArrayRef<i64> strides)
+      : shape_(shape.begin(), shape.end()),
+        strides_(strides.begin(), strides.end()),
+        dtype_(dtype) {}
 
-    if (nb::isinstance<nb::list>(current[0])) {
-      current = nb::cast<nb::list>(current[0]);
-    } else {
-      break;
-    }
+  virtual ~StorageBase() = default;
+
+  virtual auto data() -> std::byte* = 0;
+  virtual auto isWritable() const -> bool = 0;
+  virtual auto fillWithZeros() -> void = 0;
+
+  auto shape() const -> llvm::ArrayRef<i64> { return shape_; }
+  auto strides() const -> llvm::ArrayRef<i64> { return strides_; }
+  auto data_type() const -> DataType { return dtype_; }
+  auto size() const -> size_t {
+    return static_cast<size_t>(computeNumElems(shape_));
   }
 
-  return shape;
-}
+ protected:
+  llvm::SmallVector<i64> shape_;
+  llvm::SmallVector<i64> strides_;
+  DataType dtype_{};
+};
 
-template <Numeric T>
-static auto fillBuffer(const nb::list& list, T*& buffer) -> void {
-  for (const auto& item : list) {
-    if (nb::isinstance<nb::list>(item)) {
-      fillBuffer<T>(nb::cast<nb::list>(item), buffer);
-    } else {
-      *buffer = nb::cast<T>(item);
-      ++buffer;
-    }
-  }
-}
-
+// Concrete storage implementations live in axon.python; this module only holds
+// the type-erased interface and helpers used by factories implemented
+// elsewhere.
 export class Storage {
  public:
-  static auto create(std::byte* type_erased_ptr, llvm::ArrayRef<i64> shape,
-                     DataType data_type, bool is_owned,
-                     Layout layout = Layout::RowMajor) -> Storage {
-    auto strides = computeStrides(shape, layout);
-    return {data_type, type_erased_ptr, shape, strides, is_owned};
-  }
+  template <typename T>
+    requires std::derived_from<std::decay_t<T>, StorageBase>
+  explicit Storage(T&& impl)
+      : impl_(std::make_unique<std::decay_t<T>>(std::forward<T>(impl))) {}
 
-  static auto create(std::byte* type_erased_ptr, llvm::ArrayRef<i64> shape,
-                     DataType data_type, bool is_owned,
-                     llvm::ArrayRef<i64> strides) -> Storage {
-    return {data_type, type_erased_ptr, shape, strides, is_owned};
-  }
+  explicit Storage(std::unique_ptr<StorageBase> impl)
+      : impl_(std::move(impl)) {}
 
-  static auto createUninit(llvm::ArrayRef<i64> shape, DataType data_type,
-                           Layout layout = Layout::RowMajor) -> Storage {
-    auto strides = computeStrides(shape, layout);
-    auto num_elems = computeNumElems(shape);
-    auto size = num_elems * data_type.getSizeInBytes();
-    auto* data = new std::byte[size];
-    return {data_type, data, shape, strides, /*is_owned=*/true};
-  }
-
-  static auto createFilled(Scalar scalar, llvm::ArrayRef<i64> shape,
-                           llvm::ArrayRef<i64> strides) -> Storage {
-    auto num_elems = computeNumElems(shape);
-    auto size = num_elems * scalar.data_type().getSizeInBytes();
-    auto* data = new std::byte[size];
-
-    switch (scalar.data_type().kind()) {
-      case DataType::Float32: {
-        auto* data_ptr = reinterpret_cast<f32*>(data);
-        std::fill_n(data_ptr, num_elems, scalar.as<f32>());
-        break;
-      }
-      case DataType::Float64: {
-        auto* data_ptr = reinterpret_cast<f64*>(data);
-        std::fill_n(data_ptr, num_elems, scalar.as<f64>());
-        break;
-      }
-    }
-
-    return {scalar.data_type(), data, shape, strides, /*is_owned=*/true};
-  }
-
-  static auto fromDlPack(nb::ndarray<nb::c_contig, nb::ro>& array,
-                         DataType data_type) -> Storage {
-    // TODO: Explore ways to avoid copying the memory.
-    auto buffer_size = array.size() * data_type.getSizeInBytes();
-    auto* data_ptr = new std::byte[buffer_size];
-    std::memcpy(data_ptr, array.data(), buffer_size);
-
-    auto shape = llvm::ArrayRef<i64>(array.shape_ptr(), array.ndim());
-    auto stride = llvm::ArrayRef<i64>(array.stride_ptr(), array.ndim());
-
-    return Storage::create(data_ptr, shape, data_type, /*is_owned=*/true,
-                           stride);
-  }
-
-  static auto fromPython(const nb::list& list, DataType data_type) -> Storage {
-    switch (data_type.kind()) {
-      case DataType::Float32: {
-        return fromPythonImpl<f32>(list);
-      }
-      case DataType::Float64: {
-        return fromPythonImpl<f64>(list);
-      }
-    }
-  }
-
-  static auto createFilled(Scalar value, llvm::ArrayRef<i64> shape,
-                           Layout layout = Layout::RowMajor) -> Storage {
-    auto strides = computeStrides(shape, layout);
-    return createFilled(value, shape, strides);
-  }
-
-  static auto createDistributed(llvm::ArrayRef<i64> shape, float mean,
-                                float standard_deviation, DataType data_type,
-                                Layout layout = Layout::RowMajor) -> Storage {
-    static thread_local std::mt19937 generator;
-
-    auto num_elems = computeNumElems(shape);
-    auto size_in_bytes = computeTotalSizeInBytes(shape, data_type);
-    auto type_erased_ptr = new std::byte[size_in_bytes];
-    auto strides = computeStrides(shape, layout);
-
-    switch (data_type.kind()) {
-      case DataType::Float32: {
-        std::normal_distribution<f32> distribution(mean, standard_deviation);
-        auto data_ptr = reinterpret_cast<f32*>(type_erased_ptr);
-        for (int i = 0; i < num_elems; ++i) {
-          data_ptr[i] = distribution(generator);
-        }
-        return create(type_erased_ptr, shape, data_type, /*is_owned=*/true);
-      }
-      case DataType::Float64: {
-        std::normal_distribution<f64> distribution(mean, standard_deviation);
-        auto data_ptr = reinterpret_cast<f64*>(type_erased_ptr);
-        for (int i = 0; i < num_elems; ++i) {
-          data_ptr[i] = distribution(generator);
-        }
-        return create(type_erased_ptr, shape, data_type, /*is_owned=*/true);
-      }
-    }
-    AXON_UNREACHABLE("Unhandled data type");
-  }
-
-  static auto createZerosLike(const Storage& storage) -> Storage {
-    auto scalar = Scalar(0.0).cast(storage.data_type());
-    return createFilled(scalar, storage.shape(), storage.strides());
-  }
-
-  ~Storage() {
-    if (is_owned_) {
-      delete[] data_;
-    }
-  }
+  ~Storage() = default;
 
   Storage() = default;
 
   Storage(const Storage&) = delete;
   auto operator=(const Storage&) -> Storage& = delete;
 
-  Storage(Storage&& other) {
-    data_ = std::exchange(other.data_, nullptr);
-    strides_ = std::move(other.strides_);
-    shape_ = std::move(other.shape_);
-    data_type_ = other.data_type_;
-    is_owned_ = other.is_owned_;
-  }
+  Storage(Storage&&) = default;
+  auto operator=(Storage&&) -> Storage& = default;
 
-  auto operator=(Storage&& other) -> Storage& {
-    if (this == &other) {
-      return *this;
-    }
+  auto size() const -> size_t { return impl_ ? impl_->size() : 0; }
 
-    if (is_owned_ && data_ != nullptr) {
-      delete[] data_;
-    }
-
-    data_ = std::exchange(other.data_, nullptr);
-    strides_ = std::move(other.strides_);
-    shape_ = std::move(other.shape_);
-    data_type_ = other.data_type_;
-    is_owned_ = other.is_owned_;
-
-    return *this;
-  }
-
-  auto size() const -> size_t { return computeNumElems(shape_); }
+  auto hasValue() const -> bool { return impl_ != nullptr; }
 
   auto fillWithZeros() -> void {
-    if (data_type_ == DataType::Float32) {
-      auto* data_ptr = reinterpret_cast<f32*>(data_);
-      std::fill_n(data_ptr, size(), 0.0);
-    } else if (data_type_ == DataType::Float64) {
-      auto* data_ptr = reinterpret_cast<f64*>(data_);
-      std::fill_n(data_ptr, size(), 0.0);
-    }
+    AXON_ASSERT(impl_, "Storage has no implementation");
+    impl_->fillWithZeros();
   }
 
   auto getSizeInBytes() const -> size_t {
-    return size() * data_type_.getSizeInBytes();
+    return size() * data_type().getSizeInBytes();
   }
 
-  auto data_ptr() const -> std::byte* { return data_; }
+  auto isWritable() const -> bool { return impl_->isWritable(); }
+
+  auto data_ptr() const -> std::byte* {
+    AXON_ASSERT(impl_, "Storage has no implementation");
+    return impl_->data();
+  }
 
   template <Numeric T>
   auto as() const -> const T* {
-    AXON_ASSERT(data_type_.isSameAs<T>());
-    return reinterpret_cast<T*>(data_);
+    AXON_ASSERT(data_type().isSameAs<T>());
+    return reinterpret_cast<T*>(data_ptr());
   }
 
   template <Numeric T>
   auto as() -> T* {
-    AXON_ASSERT(data_type_.isSameAs<T>());
-    return reinterpret_cast<T*>(data_);
+    AXON_ASSERT(data_type().isSameAs<T>());
+    return reinterpret_cast<T*>(data_ptr());
   }
 
-  auto shape() const -> llvm::ArrayRef<i64> { return shape_; }
-  auto strides() const -> llvm::ArrayRef<i64> { return strides_; }
-  auto data_type() const -> DataType { return data_type_; }
+  auto shape() const -> llvm::ArrayRef<i64> {
+    AXON_ASSERT(impl_, "Storage has no implementation");
+    return impl_->shape();
+  }
+  auto strides() const -> llvm::ArrayRef<i64> {
+    AXON_ASSERT(impl_, "Storage has no implementation");
+    return impl_->strides();
+  }
+  auto data_type() const -> DataType {
+    AXON_ASSERT(impl_, "Storage has no implementation");
+    return impl_->data_type();
+  }
+
+  // Access element at given multidimensional index and return as Scalar
+  auto getElementAt(llvm::ArrayRef<i64> coord) const -> Scalar {
+    AXON_ASSERT(impl_, "Storage has no implementation");
+    auto shp = impl_->shape();
+    AXON_ASSERT(coord.size() == shp.size());
+
+    i64 off = 0;
+    auto strides = impl_->strides();
+    for (size_t d = 0; d < coord.size(); ++d) {
+      AXON_ASSERT(coord[d] >= 0 && coord[d] < shp[d]);
+      off += coord[d] * strides[d];
+    }
+
+    switch (impl_->data_type().kind()) {
+      case DataType::Float32: {
+        auto base = reinterpret_cast<const f32*>(impl_->data());
+        return Scalar(base[off]);
+      }
+      case DataType::Float64: {
+        auto base = reinterpret_cast<const f64*>(impl_->data());
+        return Scalar(base[off]);
+      }
+    }
+  }
+
+  template <Numeric T>
+  auto getElementAt(llvm::ArrayRef<i64> coord) const -> T {
+    AXON_ASSERT(impl_, "Storage has no implementation");
+    AXON_ASSERT(data_type() == DataType::fromType<T>());
+    auto shp = impl_->shape();
+    AXON_ASSERT(coord.size() == shp.size());
+
+    i64 off = 0;
+    auto strides = impl_->strides();
+    for (size_t d = 0; d < coord.size(); ++d) {
+      AXON_ASSERT(coord[d] >= 0 && coord[d] < shp[d]);
+      off += coord[d] * strides[d];
+    }
+    auto base = reinterpret_cast<const T*>(impl_->data());
+    return base[off];
+  }
 
  private:
-  Storage(DataType data_type, std::byte* data, llvm::ArrayRef<i64> shape,
-          llvm::ArrayRef<i64> strides, bool is_owned)
-      : data_(data),
-        shape_(shape),
-        strides_(strides),
-        data_type_(data_type),
-        is_owned_(is_owned) {}
-
-  Storage(DataType data_type, std::byte* data, llvm::SmallVector<i64> shape,
-          llvm::SmallVector<i64> strides, bool is_owned)
-      : data_(data),
-        shape_(std::move(shape)),
-        strides_(std::move(strides)),
-        data_type_(data_type),
-        is_owned_(is_owned) {}
-
-  template <typename T>
-  static auto fromPythonImpl(const nb::list& list) -> Storage {
-    auto shape = computeShape(list);
-    auto total_count = computeNumElems(shape);
-
-    auto byte_size = total_count * sizeof(T);
-    auto bytes = new std::byte[byte_size];
-    T* buffer = reinterpret_cast<T*>(bytes);
-    T* fill_ptr = buffer;
-
-    fillBuffer<T>(list, fill_ptr);
-
-    return Storage::create(bytes, shape, DataType::fromType<T>(),
-                           /*is_owned=*/true);
-  };
-
-  std::byte* data_ = nullptr;
-  llvm::SmallVector<i64> shape_;
-  llvm::SmallVector<i64> strides_;
-  DataType data_type_{};
-  bool is_owned_ = false;
+  std::unique_ptr<StorageBase> impl_;
 };
 
 }  // namespace axon

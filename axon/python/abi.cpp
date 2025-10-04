@@ -11,6 +11,7 @@ import axon.base;
 import axon.core;
 
 import :tensor;
+import :storage;
 
 namespace axon::abi {
 
@@ -41,11 +42,10 @@ export class MemRefDescriptor {
 
     AXON_DCHECK(descriptor->offset_ == 0);
 
-    return Storage::create(
-        reinterpret_cast<std::byte*>(descriptor->aligned_ptr_), shape,
-        data_type,
-        // TODO: Storage should take a function ptr to delete the data
+    auto cpu = CpuStorage::create(
+        reinterpret_cast<std::byte*>(descriptor->aligned_ptr_), shape, data_type,
         /*is_owned=*/false, strides);
+    return Storage(std::move(cpu));
   }
 
   static auto create(void* allocated_ptr, void* aligned_ptr, i64 offset,

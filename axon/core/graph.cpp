@@ -22,10 +22,6 @@ import :hash_rules;
 namespace axon {
 
 struct Parameter {
-  Parameter() = default;
-  Parameter(bool requires_grad, DataType data_type)
-      : requires_grad(requires_grad), data_type(data_type) {}
-
   auto operator==(const Parameter& rhs) const -> bool = default;
 
   bool requires_grad = false;

@@ -26,6 +26,7 @@ import axon.core;
 import axon.mlir;
 
 import :tensor;
+import :storage;
 import :abi;
 
 namespace axon {
@@ -35,6 +36,10 @@ class CompiledFunction {
   CompiledFunction(mlir::MLIRContext* context, Graph& graph)
       : context_(context) {
     compileModuleAndPrepareEngine(graph);
+
+    auto max_size = 2 * (graph.parameters().size() + 1);
+    argv_.reserve(max_size);
+    arg_slots_.reserve(max_size);
   }
 
   auto execute(llvm::ArrayRef<std::shared_ptr<Tensor>> parameters,
@@ -58,8 +63,9 @@ class CompiledFunction {
 
     std::unique_ptr<Storage> storage = nullptr;
     if (returned) {
-      storage = std::make_unique<Storage>(
-          Storage::createUninit(returned->shape(), returned->data_type()));
+      auto cpu =
+          CpuStorage::createUninit(returned->shape(), returned->data_type());
+      storage = std::make_unique<Storage>(Storage(std::move(cpu)));
 
       arg_slots_.push_back(storage->data_ptr());
       argv_.push_back(reinterpret_cast<void*>(&arg_slots_.back()));
@@ -73,6 +79,7 @@ class CompiledFunction {
     if (returned) {
       returned->setStorage(std::move(storage));
     }
+
   }
 
  private:

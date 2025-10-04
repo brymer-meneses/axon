@@ -52,25 +52,31 @@ static auto convertVectorToTuple(llvm::ArrayRef<i64> shape) -> nb::tuple {
   return nb::tuple(list);
 }
 
-template <Numeric T>
-static auto checkIsWithinTolerance(T* lhs, llvm::ArrayRef<i64> lhs_strides,
-                                   T* rhs, llvm::ArrayRef<i64> rhs_strides,
-                                   llvm::ArrayRef<i64> shape, f64 tolerance)
-    -> void {
+static auto checkIsWithinTolerance(const Storage* lhs, const Storage* rhs,
+                                   f64 tolerance) -> void {
+  auto shape = lhs->shape();
+  if (rhs->shape() != shape) {
+    throw nb::value_error("Do not have the same shape");
+  }
+  if (lhs->data_type() != rhs->data_type()) {
+    throw nb::value_error("Do not have the same data type");
+  }
+
   auto rank = static_cast<i64>(shape.size());
   if (rank == 0) {
-    if (std::fabs(*lhs - *rhs) > tolerance) {
+    auto a = lhs->getElementAt({}).getAs<f64>();
+    auto b = rhs->getElementAt({}).getAs<f64>();
+    if (std::fabs(a - b) > tolerance) {
       throw nb::value_error(
-          std::format("Mismatch expected {} got {}", *rhs, *lhs).c_str());
+          std::format("Mismatch expected {} got {}", b, a).c_str());
     }
     return;
   }
 
-  llvm::SmallVector<i64> idx(rank, 0);
+  llvm::SmallVector<i64, 8> idx(rank, 0);
   auto advance = [&]() -> bool {
     for (i64 d = rank - 1; d >= 0; --d) {
       idx[d] += 1;
-
       if (idx[d] < shape[d]) {
         return true;
       }
@@ -80,21 +86,13 @@ static auto checkIsWithinTolerance(T* lhs, llvm::ArrayRef<i64> lhs_strides,
   };
 
   while (true) {
-    auto lhs_off = 0;
-    auto rhs_off = 0;
-
-    for (i64 d = 0; d < rank; ++d) {
-      lhs_off += idx[d] * lhs_strides[d];
-      rhs_off += idx[d] * rhs_strides[d];
-    }
-    auto a = lhs[lhs_off];
-    auto b = rhs[rhs_off];
+    auto a = lhs->getElementAt(idx).getAs<f64>();
+    auto b = rhs->getElementAt(idx).getAs<f64>();
     if (std::fabs(a - b) > tolerance) {
       throw nb::value_error(std::format("Mismatch at {}: lhs={} rhs={} tol={}",
                                         idx, a, b, tolerance)
                                 .c_str());
     }
-
     if (!advance()) {
       break;
     }
@@ -103,8 +101,8 @@ static auto checkIsWithinTolerance(T* lhs, llvm::ArrayRef<i64> lhs_strides,
 
 static auto createFillLike(Scalar fill_value, llvm::ArrayRef<i64> shape,
                            bool requires_grad) -> std::shared_ptr<Tensor> {
-  auto storage = Storage::createFilled(fill_value, shape);
-  return std::make_shared<Tensor>(std::move(storage), requires_grad);
+  auto cpu = CpuStorage::createFilled(fill_value, shape);
+  return std::make_shared<Tensor>(Storage(std::move(cpu)), requires_grad);
 }
 
 NB_MODULE(_core, m) {
@@ -157,25 +155,26 @@ NB_MODULE(_core, m) {
   nb::class_<Tensor>(m, "Tensor")
       .def(nb::new_([](nb::object object, bool requires_grad,
                        DataType::InternalType data_type) {
-             if (nb::isinstance<nb::ndarray<nb::c_contig, nb::ro>>(object)) {
-               auto ndarray =
-                   nb::cast<nb::ndarray<nb::c_contig, nb::ro>>(object);
+             if (nb::isinstance<nb::ndarray<nb::c_contig>>(object)) {
+               auto ndarray = nb::cast<nb::ndarray<nb::c_contig>>(object);
                auto ndarray_data_type = DataType::fromDlPack(ndarray.dtype());
                if (ndarray_data_type != data_type) {
                  throw nb::value_error("Does not match the received data type");
                }
 
-               auto storage = Storage::fromDlPack(ndarray, data_type);
-               return std::make_shared<Tensor>(std::move(storage),
+               auto storage = WritableDlPackStorage(ndarray);
+               return std::make_shared<Tensor>(Storage(std::move(storage)),
                                                requires_grad);
              }
 
              if (nb::isinstance<nb::list>(object)) {
-               auto storage =
-                   Storage::fromPython(nb::cast<nb::list>(object), data_type);
-               return std::make_shared<Tensor>(std::move(storage),
+               auto cpu = CpuStorage::fromPythonList(nb::cast<nb::list>(object),
+                                                     data_type);
+               return std::make_shared<Tensor>(Storage(std::move(cpu)),
                                                requires_grad);
              }
+
+             AXON_UNREACHABLE("unreachable");
            }),
            nb::arg("data"), nb::arg("requires_grad") = false,
            nb::arg("dtype") = DataType::Float32)
@@ -292,9 +291,10 @@ NB_MODULE(_core, m) {
           [](nb::tuple shape_tuple, bool requires_grad,
              DataType::InternalType data_type) {
             auto shape = convertTupleToVector(shape_tuple);
-            auto storage =
-                Storage::createDistributed(shape, 0.0, 1.0, data_type);
-            return std::make_shared<Tensor>(std::move(storage), requires_grad);
+            auto cpu =
+                CpuStorage::createDistributed(shape, 0.0, 1.0, data_type);
+            return std::make_shared<Tensor>(Storage(std::move(cpu)),
+                                            requires_grad);
           },
           nb::arg("shape"), nb::arg("requires_grad") = false,
           nb::arg("dtype") = DataType::Float32);
@@ -302,43 +302,13 @@ NB_MODULE(_core, m) {
   m.def(
       "assert_are_close",
       [](std::shared_ptr<Tensor> tensor,
-         nb::ndarray<nb::ro, nb::c_contig>& array, f64 tolerance) {
-        auto array_strides =
-            llvm::ArrayRef<i64>(array.stride_ptr(), array.ndim());
-        auto array_shape = llvm::ArrayRef<i64>(array.shape_ptr(), array.ndim());
-
+         nb::ndarray<nb::c_contig, nb::ro>& array, f64 tolerance) {
         if (!tensor->isEvaluated()) {
           tensor->evaluate();
         }
+        auto rhs = Storage(ReadOnlyDlPackStorage(array));
 
-        if (tensor->shape() != array_shape) {
-          throw nb::value_error("Do not have the same shape");
-        }
-
-        auto data_type = DataType::fromDlPack(array.dtype());
-        if (data_type != tensor->data_type()) {
-          throw nb::value_error("Do not have the same data type");
-        }
-
-        auto shape = tensor->shape();
-        auto lhs_strides = tensor->storage()->strides();
-        auto rhs_strides = array_strides;
-        switch (tensor->data_type().kind()) {
-          case DataType::Float32: {
-            auto tensor_ptr = tensor->storage()->as<f32>();
-            auto data_ptr = reinterpret_cast<const f32*>(array.data());
-            checkIsWithinTolerance<const f32>(tensor_ptr, lhs_strides, data_ptr,
-                                              rhs_strides, shape, tolerance);
-            break;
-          }
-          case DataType::Float64: {
-            auto tensor_ptr = tensor->storage()->as<f64>();
-            auto data_ptr = reinterpret_cast<const f64*>(array.data());
-            checkIsWithinTolerance<const f64>(tensor_ptr, lhs_strides, data_ptr,
-                                              rhs_strides, shape, tolerance);
-            break;
-          }
-        }
+        checkIsWithinTolerance(tensor->storage(), &rhs, tolerance);
       },
       nb::arg("tensor"), nb::arg("ndarray"), nb::arg("tolerance") = 1e-5);
 

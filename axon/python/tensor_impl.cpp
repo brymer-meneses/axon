@@ -18,6 +18,7 @@ import axon.core;
 import :tensor;
 import :runtime;
 import :jit;
+import :storage;
 
 namespace axon {
 
@@ -212,7 +213,8 @@ auto Tensor::zeroGrad() -> void {
   if (grad_ != nullptr) {
     grad_->storage()->fillWithZeros();
   } else {
-    grad_ = std::make_shared<Tensor>(Storage::createZerosLike(*storage_),
+    auto cpu = CpuStorage::createZerosLike(*storage_);
+    grad_ = std::make_shared<Tensor>(Storage(std::move(cpu)),
                                      /*requires_grad=*/false);
   }
 }
@@ -263,10 +265,11 @@ auto Tensor::isRoot() const -> bool {
 }
 
 template <Numeric T>
-static auto dumpRecursive(llvm::raw_string_ostream& stream, const T* ptr,
-                          size_t dim, llvm::ArrayRef<i64> shape,
-                          llvm::ArrayRef<i64> strides, int indent_width,
+static auto dumpRecursive(llvm::raw_string_ostream& stream,
+                          const Storage* storage, size_t dim,
+                          llvm::SmallVector<i64>& idx, int indent_width,
                           int depth = 0) -> void {
+  auto shape = storage->shape();
   static constexpr auto dump_formatted = [](llvm::raw_string_ostream& stream,
                                             T elem) {
     if constexpr (std::is_floating_point_v<T>) {
@@ -278,7 +281,7 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream, const T* ptr,
 
   // Handle scalar (rank-0) tensors.
   if (shape.empty()) {
-    dump_formatted(stream, *ptr);
+    dump_formatted(stream, storage->getElementAt<T>({}));
     return;
   }
 
@@ -286,7 +289,8 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream, const T* ptr,
     // Base case: 1-D row
     stream << "[";
     for (i64 i = 0; i < shape[dim]; ++i) {
-      dump_formatted(stream, ptr[i * strides[dim]]);
+      idx[dim] = i;
+      dump_formatted(stream, storage->getElementAt<T>(idx));
 
       if (i + 1 < shape[dim]) {
         stream << ", ";
@@ -303,8 +307,8 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream, const T* ptr,
           stream << ' ';
         }
       }
-      dumpRecursive(stream, ptr + i * strides[dim], dim + 1, shape, strides,
-                    indent_width, depth + 1);
+      idx[dim] = i;
+      dumpRecursive<T>(stream, storage, dim + 1, idx, indent_width, depth + 1);
     }
     stream << "]";
   }
@@ -321,18 +325,18 @@ auto Tensor::asString() -> std::string {
   llvm::raw_string_ostream stream{repr};
 
   auto shape = storage_->shape();
-  auto strides = storage_->strides();
+  llvm::SmallVector<i64> idx(shape.size(), 0);
 
   stream << "tensor(";
   switch (storage_->data_type().kind()) {
     case DataType::Float64: {
-      auto base = reinterpret_cast<const f64*>(storage_->data_ptr());
-      dumpRecursive<f64>(stream, base, 0, shape, strides, /*indent_width=*/8);
+      dumpRecursive<f64>(stream, storage_.get(), 0, idx,
+                         /*indent_width=*/8);
       break;
     }
     case DataType::Float32: {
-      auto base = reinterpret_cast<const f32*>(storage_->data_ptr());
-      dumpRecursive<f32>(stream, base, 0, shape, strides, /*indent_width=*/8);
+      dumpRecursive<f32>(stream, storage_.get(), 0, idx,
+                         /*indent_width=*/8);
       break;
     }
   }

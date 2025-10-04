@@ -130,6 +130,7 @@ add_library(_core MODULE)
 target_sources(_core
   PUBLIC FILE_SET CXX_MODULES FILES
     axon/python/mod.cpp
+    axon/python/storage.cpp
     axon/python/tensor.cpp
     axon/python/jit.cpp
     axon/python/runtime.cpp

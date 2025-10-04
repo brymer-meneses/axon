@@ -10,21 +10,24 @@ def test_tensor_accumulate():
     sink_ = torch.randn(10, 10)
     source_ = torch.randn(10, 10)
 
-    sink = Tensor(sink_)
+    sink = Tensor(sink_.clone())
     source = Tensor(source_)
+
+    expected = sink_ + source_
 
     with axon.no_grad():
         sink.accumulate(source)
 
-    axon.testing.assert_are_close(sink, sink_ + source_)
+    axon.testing.assert_are_close(sink, expected)
 
 
 def test_tensor_accumulate_with_nonroot_source():
-    sink_arr = np.random.randn(6, 6).astype(np.float32)
-    base_arr = np.random.randn(6, 6).astype(np.float32)
+    sink_arr = torch.randn(6, 6)
+    base_arr = torch.randn(6, 6)
 
-    sink = Tensor(sink_arr, requires_grad=True)
-    base = Tensor(base_arr)
+    sink = Tensor(sink_arr.clone(), requires_grad=True)
+    base = Tensor(base_arr.clone())
+
     source = base * 2.0
 
     with axon.no_grad():
