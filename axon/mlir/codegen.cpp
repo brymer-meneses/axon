@@ -8,11 +8,8 @@ module;
 #include "mlir/IR/OpDefinition.h"
 
 // MLIR Imports
-#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/Linalg/IR/Linalg.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/IR/Builders.h"
 
@@ -34,6 +31,8 @@ struct CompilationContext {
   llvm::DenseMap<ParamId, mlir::Value> grad_memrefs{};
 
   RelationalStore<InstId, ParamId> inst_to_param;
+
+  InstId current_id;
 };
 
 static auto getElementType(DataType data_type, mlir::OpBuilder& builder)
@@ -53,8 +52,8 @@ static auto getFloatAttr(mlir::Type element_type, f64 value)
   return mlir::FloatAttr::get(element_type, value);
 }
 
-static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx)
+    -> void {
   auto source = ctx.values[op.source_id];
   auto param_id = ctx.inst_to_param.getValueOf(op.sink_id);
   AXON_ASSERT(param_id.isValid());
@@ -67,8 +66,8 @@ static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx,
   AccumulateOp::create(ctx.builder, ctx.builder.getUnknownLoc(), sink, source);
 }
 
-static auto codegen(const insts::AccumulateData& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::AccumulateData& op, CompilationContext& ctx)
+    -> void {
   auto source = ctx.values[op.source_id];
   auto param_id = ctx.inst_to_param.getValueOf(op.sink_id);
   AXON_ASSERT(param_id.isValid());
@@ -81,8 +80,10 @@ static auto codegen(const insts::AccumulateData& op, CompilationContext& ctx,
   AccumulateOp::create(ctx.builder, ctx.builder.getUnknownLoc(), sink, source);
 }
 
-static auto codegen(const insts::Constant& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::Constant& op, CompilationContext& ctx)
+    -> void {
+  auto inst_id = ctx.current_id;
+
   Storage* constant = ctx.graph.constants().get(inst_id)->get();
   AXON_ASSERT(constant != nullptr);
 
@@ -113,8 +114,9 @@ static auto codegen(const insts::Constant& op, CompilationContext& ctx,
 /// Utility function to handle lowering of reduce like inst which all have the
 /// same fields.
 template <typename InstType, typename LoweredOpType>
-static auto codegenReduceInst(const InstType& op, CompilationContext& ctx,
-                              InstId inst_id) -> void {
+static auto codegenReduceInst(const InstType& op, CompilationContext& ctx)
+    -> void {
+  auto inst_id = ctx.current_id;
   auto input = ctx.values[op.input_id];
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
@@ -127,18 +129,38 @@ static auto codegenReduceInst(const InstType& op, CompilationContext& ctx,
                             result_type, input, op.axis, op.keep_dims);
 }
 
-static auto codegen(const insts::Sum& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
-  codegenReduceInst<insts::Sum, SumOp>(op, ctx, inst_id);
+static auto codegen(const insts::Sum& op, CompilationContext& ctx) -> void {
+  codegenReduceInst<insts::Sum, SumOp>(op, ctx);
 }
 
-static auto codegen(const insts::Mean& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
-  codegenReduceInst<insts::Mean, MeanOp>(op, ctx, inst_id);
+static auto codegen(const insts::Mean& op, CompilationContext& ctx) -> void {
+  codegenReduceInst<insts::Mean, MeanOp>(op, ctx);
 }
 
-static auto codegen(const insts::Softmax& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+template <typename InstType, typename LoweredOp>
+static auto codegenElementWiseBinaryInst(const InstType& op,
+                                         CompilationContext& ctx) -> void {
+  auto inst_id = ctx.current_id;
+  auto lhs = ctx.values[op.lhs_id];
+  auto rhs = ctx.values[op.rhs_id];
+  ctx.values[inst_id] =
+      LoweredOp::create(ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs);
+}
+
+static auto codegen(const insts::Add& op, CompilationContext& ctx) -> void {
+  codegenElementWiseBinaryInst<insts::Add, AddOp>(op, ctx);
+}
+
+static auto codegen(const insts::Sub& op, CompilationContext& ctx) -> void {
+  codegenElementWiseBinaryInst<insts::Sub, SubOp>(op, ctx);
+};
+
+static auto codegen(const insts::Mul& op, CompilationContext& ctx) -> void {
+  codegenElementWiseBinaryInst<insts::Mul, MulOp>(op, ctx);
+}
+
+static auto codegen(const insts::Softmax& op, CompilationContext& ctx) -> void {
+  auto inst_id = ctx.current_id;
   auto input = ctx.values[op.input_id];
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
@@ -150,8 +172,9 @@ static auto codegen(const insts::Softmax& op, CompilationContext& ctx,
       ctx.builder, ctx.builder.getUnknownLoc(), result_type, input, op.axis);
 }
 
-static auto codegen(const insts::ExpandDims& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::ExpandDims& op, CompilationContext& ctx)
+    -> void {
+  auto inst_id = ctx.current_id;
   auto input = ctx.values[op.input_id];
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
@@ -177,8 +200,9 @@ static auto codegen(const insts::ExpandDims& op, CompilationContext& ctx,
                            result_type, input, expansions_attr);
 }
 
-static auto codegen(const insts::GetParameter& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::GetParameter& op, CompilationContext& ctx)
+    -> void {
+  auto inst_id = ctx.current_id;
   auto data_memref = ctx.data_memrefs[op.param_id];
   ctx.inst_to_param.createRelation(inst_id, op.param_id);
 
@@ -191,8 +215,8 @@ static auto codegen(const insts::GetParameter& op, CompilationContext& ctx,
       /*restrict=*/true, /*writable=*/false);
 }
 
-static auto codegen(const insts::FillLike& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::FillLike& op, CompilationContext& ctx)
+    -> void {
   auto like = ctx.values[op.input_id];
   // Extract the scalar value according to its stored dtype.
   f64 fill;
@@ -209,30 +233,14 @@ static auto codegen(const insts::FillLike& op, CompilationContext& ctx,
   auto like_type = mlir::cast<mlir::RankedTensorType>(like.getType());
   auto element_type = like_type.getElementType();
 
+  auto inst_id = ctx.current_id;
   ctx.values[inst_id] =
       FillOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like.getType(),
                      getFloatAttr(element_type, fill));
 }
 
-static auto codegen(const insts::Add& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
-  auto lhs = ctx.values[op.lhs_id];
-  auto rhs = ctx.values[op.rhs_id];
-  ctx.values[inst_id] =
-      AddOp::create(ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs);
-}
-
-static auto codegen(const insts::Mul& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
-  auto lhs = ctx.values[op.lhs_id];
-  auto rhs = ctx.values[op.rhs_id];
-
-  ctx.values[inst_id] =
-      MulOp::create(ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs);
-}
-
-static auto codegen(const insts::MatMul& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::MatMul& op, CompilationContext& ctx) -> void {
+  auto inst_id = ctx.current_id;
   auto lhs = ctx.values[op.lhs_id];
   auto rhs = ctx.values[op.rhs_id];
 
@@ -245,8 +253,9 @@ static auto codegen(const insts::MatMul& op, CompilationContext& ctx,
       ctx.builder, ctx.builder.getUnknownLoc(), result_type, lhs, rhs);
 }
 
-static auto codegen(const insts::Transpose& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::Transpose& op, CompilationContext& ctx)
+    -> void {
+  auto inst_id = ctx.current_id;
   auto input = ctx.values[op.input_id];
   auto result_shape = ctx.graph.getShape(inst_id);
   auto data_type =
@@ -258,8 +267,8 @@ static auto codegen(const insts::Transpose& op, CompilationContext& ctx,
                           input, op.from, op.to);
 }
 
-static auto codegen(const insts::Squeeze& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::Squeeze& op, CompilationContext& ctx) -> void {
+  auto inst_id = ctx.current_id;
   auto input = ctx.values[op.input_id];
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
@@ -271,8 +280,9 @@ static auto codegen(const insts::Squeeze& op, CompilationContext& ctx,
       ctx.builder, ctx.builder.getUnknownLoc(), result_type, input, op.dim);
 }
 
-static auto codegen(const insts::Unsqueeze& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::Unsqueeze& op, CompilationContext& ctx)
+    -> void {
+  auto inst_id = ctx.current_id;
   auto input = ctx.values[op.input_id];
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
@@ -284,8 +294,8 @@ static auto codegen(const insts::Unsqueeze& op, CompilationContext& ctx,
       ctx.builder, ctx.builder.getUnknownLoc(), result_type, input, op.dim);
 }
 
-static auto codegen(const insts::Reshape& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::Reshape& op, CompilationContext& ctx) -> void {
+  auto inst_id = ctx.current_id;
   auto input = ctx.values[op.input_id];
   auto tensor_type = mlir::cast<mlir::RankedTensorType>(input.getType());
 
@@ -297,8 +307,8 @@ static auto codegen(const insts::Reshape& op, CompilationContext& ctx,
                         input, op.target_shape);
 }
 
-static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx)
+    -> void {
   auto input = ctx.values[op.input_id];
   auto data_type = op.scalar.data_type();
 
@@ -314,13 +324,14 @@ static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx,
     }
   }
 
+  auto inst_id = ctx.current_id;
   ctx.values[inst_id] = ScalarMulOp::create(
       ctx.builder, ctx.builder.getUnknownLoc(), input, attr);
 };
 
-static auto codegen(const insts::Pow& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::Pow& op, CompilationContext& ctx) -> void {
   auto input = ctx.values[op.input_id];
+  auto inst_id = ctx.current_id;
 
   auto exponent_value = op.exponent.as<f32>();
 
@@ -329,67 +340,56 @@ static auto codegen(const insts::Pow& op, CompilationContext& ctx,
                     ctx.builder.getF64FloatAttr(exponent_value));
 }
 
-static auto codegen(const insts::Relu& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::Relu& op, CompilationContext& ctx) -> void {
+  auto inst_id = ctx.current_id;
   auto input = ctx.values[op.input_id];
 
   ctx.values[inst_id] =
       ReluOp::create(ctx.builder, ctx.builder.getUnknownLoc(), input);
 }
 
-static auto codegen(const insts::Compare& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
-  static constexpr auto comparison_predicate =
-      [](mlir::MLIRContext* context, insts::Compare::Predicate predicate) {
-        switch (predicate) {
-          case insts::Compare::Predicate::Equal:
-            return ComparePredicateAttr::get(context, ComparePredicate::eq);
-          case insts::Compare::Predicate::Less:
-            return ComparePredicateAttr::get(context, ComparePredicate::lt);
-          case insts::Compare::Predicate::LessEq:
-            return ComparePredicateAttr::get(context, ComparePredicate::le);
-          case insts::Compare::Predicate::Greater:
-            return ComparePredicateAttr::get(context, ComparePredicate::gt);
-          case insts::Compare::Predicate::GreaterEq:
-            return ComparePredicateAttr::get(context, ComparePredicate::ge);
-          case insts::Compare::Predicate::NotEqual:
-            return ComparePredicateAttr::get(context, ComparePredicate::ne);
-        }
-      };
+static auto getComparisonPredicate(mlir::MLIRContext* context,
+                                   insts::Compare::Predicate predicate) {
+  switch (predicate) {
+    case insts::Compare::Predicate::Equal:
+      return ComparePredicateAttr::get(context, ComparePredicate::eq);
+    case insts::Compare::Predicate::Less:
+      return ComparePredicateAttr::get(context, ComparePredicate::lt);
+    case insts::Compare::Predicate::LessEq:
+      return ComparePredicateAttr::get(context, ComparePredicate::le);
+    case insts::Compare::Predicate::Greater:
+      return ComparePredicateAttr::get(context, ComparePredicate::gt);
+    case insts::Compare::Predicate::GreaterEq:
+      return ComparePredicateAttr::get(context, ComparePredicate::ge);
+    case insts::Compare::Predicate::NotEqual:
+      return ComparePredicateAttr::get(context, ComparePredicate::ne);
+  }
+}
 
+static auto codegen(const insts::Compare& op, CompilationContext& ctx) -> void {
   auto lhs = ctx.values[op.lhs_id];
   auto rhs = ctx.values[op.rhs_id];
+  auto inst_id = ctx.current_id;
+
   auto context = ctx.builder.getContext();
-  auto predicate = comparison_predicate(context, op.predicate);
+  auto predicate = getComparisonPredicate(context, op.predicate);
 
   ctx.values[inst_id] = CompareOp::create(
       ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs, predicate);
 }
 
-static auto codegen(const insts::Sub& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
-  auto lhs = ctx.values[op.lhs_id];
-  auto rhs = ctx.values[op.rhs_id];
-
-  ctx.values[inst_id] =
-      SubOp::create(ctx.builder, ctx.builder.getUnknownLoc(), lhs, rhs);
-};
-
-static auto codegen(const insts::Neg& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::Neg& op, CompilationContext& ctx) -> void {
   auto input = ctx.values[op.input_id];
-
+  auto inst_id = ctx.current_id;
   ctx.values[inst_id] =
       NegOp::create(ctx.builder, ctx.builder.getUnknownLoc(), input);
 };
 
-static auto codegen(const insts::Log& op, CompilationContext& ctx,
-                    InstId inst_id) -> void {
+static auto codegen(const insts::Log& op, CompilationContext& ctx) -> void {
+  auto inst_id = ctx.current_id;
   auto input = ctx.values[op.input_id];
-  auto result_type = input.getType();
-  auto new_op = mlir::math::LogOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
-                                          result_type, input);
-  ctx.values[inst_id] = new_op.getResult();
+  ctx.values[inst_id] = mlir::math::LogOp::create(
+      ctx.builder, ctx.builder.getUnknownLoc(), input);
 };
 
 static auto getFunctionType(const Graph& graph, mlir::OpBuilder& builder)
@@ -448,8 +448,9 @@ export auto codegenGraph(const Graph& graph, mlir::OpBuilder& builder)
   }
 
   for (auto inst_id : graph.insts().keys()) {
+    ctx.current_id = inst_id;
     const auto& inst = graph.insts().get(inst_id);
-    inst.visit([&](const auto& op) { codegen(op, ctx, inst_id); });
+    inst.visit([&](const auto& op) { codegen(op, ctx); });
   }
 
   if (auto returned_id = graph.getReturnedId()) {
