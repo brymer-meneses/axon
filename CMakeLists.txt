@@ -46,10 +46,10 @@ target_sources(axon
 
     axon/core/mod.cpp
     axon/core/inst.cpp
-    axon/core/autodiff.cpp
     axon/core/inst_kinds.cpp
     axon/core/ids.cpp
     axon/core/graph.cpp
+    axon/core/graph_impl.cpp
     axon/core/storage.cpp
     axon/core/scalar.cpp
     axon/core/data_type.cpp

@@ -4,7 +4,6 @@ export import :ids;
 export import :inst;
 export import :inst_kinds;
 export import :graph;
-export import :autodiff;
 export import :storage;
 
 export import :data_type;

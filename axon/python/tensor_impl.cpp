@@ -71,7 +71,7 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
       grad_id = getInstId(grad);
     }
 
-    axon::backward(graph_, tensor_id, grad_id);
+    graph_.performBackward(tensor_id, grad_id);
     evaluate(tensor);
     markForReset();
   }
