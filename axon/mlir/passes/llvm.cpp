@@ -53,8 +53,6 @@ struct AxonToLlvmTypeConverter : mlir::LLVMTypeConverter {
   }
 };
 
-// TupleAccessOp removed; no lowering required.
-
 struct AxonToLlvmLoweringPass
     : mlir::PassWrapper<AxonToLlvmLoweringPass,
                         mlir::OperationPass<mlir::ModuleOp>> {

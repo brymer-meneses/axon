@@ -844,7 +844,82 @@ struct ReluOpLowering : mlir::OpConversionPattern<ReluOp> {
     rewriter.replaceOp(op, generic_op.getResult(0));
     return mlir::success();
   }
-};  // namespace axon
+};
+
+struct ArgMaxOpLowering : mlir::OpConversionPattern<ArgMaxOp> {
+  using mlir::OpConversionPattern<ArgMaxOp>::OpConversionPattern;
+
+  auto matchAndRewrite(ArgMaxOp op, OpAdaptor adaptor,
+                       mlir::ConversionPatternRewriter& rewriter) const
+      -> mlir::LogicalResult final {
+    auto loc = op.getLoc();
+
+    auto result_type = op.getResult().getType();
+    auto input_type = op.getInput().getType();
+
+    auto element_type = input_type.getElementType();
+
+    if (!element_type.isIntOrFloat()) {
+      return rewriter.notifyMatchFailure(
+          op, "Expected element_type to be either int or float");
+    }
+
+    auto rank = input_type.getRank();
+    auto context = op.getContext();
+    auto axis = static_cast<i64>(op.getDim());
+
+    auto init_value = mlir::arith::ConstantOp::create(
+        rewriter, loc, rewriter.getFloatAttr(element_type, -1e30));
+
+    auto maximum_values =
+        reduce<mlir::arith::MaxNumFOp>(rewriter, loc, adaptor.getInput(),
+                                       /*keep_dims=*/false, axis, init_value);
+
+    llvm::SmallVector indexing_maps = {
+        mlir::AffineMap::getMultiDimIdentityMap(rank, context),
+        getIdentityMapWithout(rank, {axis}, context),
+        getIdentityMapWithout(rank, {axis}, context),
+    };
+
+    llvm::SmallVector iterator_types(rank, mlir::utils::IteratorType::parallel);
+    iterator_types[axis] = mlir::utils::IteratorType::reduction;
+
+    auto init_op = createZerosLike(rewriter, result_type, loc);
+
+    auto argmax_op = mlir::linalg::GenericOp::create(
+        rewriter, loc, mlir::TypeRange{result_type},
+        mlir::ValueRange{adaptor.getInput(), maximum_values},
+        mlir::ValueRange{init_op}, indexing_maps, iterator_types,
+        [element_type, axis](mlir::OpBuilder& builder, mlir::Location loc,
+                             mlir::ValueRange args) {
+          auto in = args[0];
+          auto max = args[1];
+
+          auto this_index = mlir::linalg::IndexOp::create(
+              builder, loc, builder.getI64IntegerAttr(axis));
+          auto this_index_value = mlir::arith::IndexCastOp::create(
+              builder, loc, element_type, this_index);
+
+          mlir::Value is_max;
+          if (element_type.isFloat()) {
+            is_max = mlir::arith::CmpFOp::create(
+                builder, loc, mlir::arith::CmpFPredicate::OEQ, in, max);
+          } else {
+            is_max = mlir::arith::CmpIOp::create(
+                builder, loc, mlir::arith::CmpIPredicate::eq, in, max);
+          }
+
+          auto stored_index = args[2];
+          auto value = mlir::arith::SelectOp::create(
+              builder, loc, is_max, this_index_value, stored_index);
+
+          mlir::linalg::YieldOp::create(builder, loc, value.getResult());
+        });
+
+    rewriter.replaceOp(op, argmax_op.getResult(0));
+    return mlir::success();
+  }
+};
 
 struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
   using mlir::OpConversionPattern<SumOp>::OpConversionPattern;
