@@ -20,6 +20,9 @@ export class DataType {
   enum InternalType : u8 {
     Float32,
     Float64,
+    Int1,
+    Int32,
+    Int64,
   };
 
   constexpr DataType(InternalType type) : type_(type) {}
@@ -33,6 +36,12 @@ export class DataType {
         return 4;
       case DataType::Float64:
         return 8;
+      case DataType::Int1:
+        return 1;
+      case DataType::Int32:
+        return 4;
+      case DataType::Int64:
+        return 8;
     }
   }
 
@@ -42,10 +51,32 @@ export class DataType {
         return "float32";
       case DataType::Float64:
         return "float64";
+      case DataType::Int1:
+        return "bool";
+      case DataType::Int32:
+        return "int32";
+      case DataType::Int64:
+        return "int64";
     }
   }
 
   auto kind() const -> InternalType { return type_; }
+
+  auto isFloatingPoint() const -> bool {
+    return type_ == Float32 || type_ == Float64;
+  }
+
+  auto isInteger() const -> bool {
+    switch (type_) {
+      case Float32:
+      case Float64:
+        return false;
+      case Int1:
+      case Int32:
+      case Int64:
+        return true;
+    }
+  }
 
   template <Numeric T>
   auto isSameAs() const -> bool {
@@ -58,6 +89,16 @@ export class DataType {
       return DataType::Float32;
     } else if constexpr (std::is_same_v<T, f64>) {
       return DataType::Float64;
+    } else if constexpr (std::is_same_v<T, bool>) {
+      return DataType::Int1;
+    } else if constexpr (std::is_same_v<T, i32>) {
+      return DataType::Int32;
+    } else if constexpr (std::is_same_v<T, i64>) {
+      return DataType::Int64;
+    } else if constexpr (std::is_same_v<T, std::int32_t>) {
+      return DataType::Int32;
+    } else if constexpr (std::is_same_v<T, std::int64_t>) {
+      return DataType::Int64;
     } else {
       static_assert(false,
                     "Passed template parameter has no corresponding DataType");
@@ -71,6 +112,29 @@ export class DataType {
       } else if (dtype.bits == 64) {
         return DataType::Float64;
       }
+    } else if (dtype.code ==
+               static_cast<u8>(nanobind::dlpack::dtype_code::Int)) {
+      if (dtype.bits == 1) {
+        return DataType::Int1;
+      } else if (dtype.bits == 32) {
+        return DataType::Int32;
+      } else if (dtype.bits == 64) {
+        return DataType::Int64;
+      }
+    } else if (dtype.code ==
+               static_cast<u8>(nanobind::dlpack::dtype_code::UInt)) {
+      if (dtype.bits == 1) {
+        return DataType::Int1;
+      }
+      if (dtype.bits == 32) {
+        return DataType::Int32;
+      }
+      if (dtype.bits == 64) {
+        return DataType::Int64;
+      }
+    } else if (dtype.code ==
+               static_cast<u8>(nanobind::dlpack::dtype_code::Bool)) {
+      return DataType::Int1;
     }
 
     AXON_UNREACHABLE("Unsupported dtype bits={} and code={}", dtype.bits,

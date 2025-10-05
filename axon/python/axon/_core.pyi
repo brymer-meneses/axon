@@ -9,9 +9,21 @@ class dtype(enum.Enum):
 
     float64 = 1
 
+    bool = 2
+
+    int32 = 3
+
+    int64 = 4
+
 float32: dtype = dtype.float32
 
 float64: dtype = dtype.float64
+
+bool: dtype = dtype.bool
+
+int32: dtype = dtype.int32
+
+int64: dtype = dtype.int64
 
 class LoweringLevel(enum.Enum):
     Axon = 0
@@ -81,12 +93,39 @@ class Tensor:
     @overload
     def __mul__(self, arg: float, /) -> Tensor: ...
 
+    @overload
+    def __mul__(self, arg: float, /) -> Tensor: ...
+
+    @overload
+    def __mul__(self, arg: int, /) -> Tensor: ...
+
+    @overload
+    def __mul__(self, arg: int, /) -> Tensor: ...
+
     def __sub__(self, arg: Tensor, /) -> Tensor: ...
 
+    @overload
     def __rmul__(self, arg: float, /) -> Tensor: ...
 
+    @overload
+    def __rmul__(self, arg: float, /) -> Tensor: ...
+
+    @overload
+    def __rmul__(self, arg: int, /) -> Tensor: ...
+
+    @overload
+    def __rmul__(self, arg: int, /) -> Tensor: ...
+
+    @overload
     def pow(self, exponent: float) -> Tensor: ...
 
+    @overload
+    def pow(self, exponent: float) -> Tensor: ...
+
+    @overload
+    def __pow__(self, arg: float, /) -> Tensor: ...
+
+    @overload
     def __pow__(self, arg: float, /) -> Tensor: ...
 
     def __matmul__(self, arg: Tensor, /) -> Tensor: ...
@@ -103,7 +142,7 @@ class Tensor:
 
     def mean(self, dim: int | None = None, keepdims: bool = False) -> Tensor: ...
 
-    def item(self) -> float: ...
+    def item(self) -> object: ...
 
     @staticmethod
     def fill_like(value: object, shape: tuple, requires_grad: bool = False, dtype: dtype = dtype.float32) -> Tensor: ...

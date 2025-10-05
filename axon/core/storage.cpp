@@ -60,11 +60,6 @@ export auto computeNumElems(llvm::ArrayRef<i64> shape) -> i64 {
   return num_elems;
 }
 
-static auto computeTotalSizeInBytes(llvm::ArrayRef<i64> shape,
-                                    DataType data_type) -> size_t {
-  return computeNumElems(shape) * data_type.getSizeInBytes();
-}
-
 // Python-oriented constructors and helpers live in axon.python
 export class StorageBase {
  public:
@@ -183,7 +178,20 @@ export class Storage {
         auto base = reinterpret_cast<const f64*>(impl_->data());
         return Scalar(base[off]);
       }
+      case DataType::Int1: {
+        auto base = reinterpret_cast<const bool*>(impl_->data());
+        return Scalar(base[off]);
+      }
+      case DataType::Int32: {
+        auto base = reinterpret_cast<const i32*>(impl_->data());
+        return Scalar(base[off]);
+      }
+      case DataType::Int64: {
+        auto base = reinterpret_cast<const i64*>(impl_->data());
+        return Scalar(base[off]);
+      }
     }
+    AXON_UNREACHABLE("Unsupported storage element type");
   }
 
   template <Numeric T>

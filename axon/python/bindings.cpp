@@ -1,5 +1,6 @@
 #include <cmath>
 #include <format>
+#include <limits>
 #include <memory>
 #include <ranges>
 #include <span>
@@ -105,6 +106,36 @@ static auto createFillLike(Scalar fill_value, llvm::ArrayRef<i64> shape,
   return std::make_shared<Tensor>(Storage(std::move(cpu)), requires_grad);
 }
 
+static auto createScalarFromPythonObject(nb::handle value,
+                                         DataType::InternalType data_type)
+    -> Scalar {
+  try {
+    switch (data_type) {
+      case DataType::Float32:
+        return Scalar(static_cast<f32>(nb::cast<double>(value)));
+      case DataType::Float64:
+        return Scalar(nb::cast<double>(value));
+      case DataType::Int1:
+        return Scalar(static_cast<bool>(nb::cast<bool>(value)));
+      case DataType::Int32: {
+        auto casted = nb::cast<i64>(value);
+        if (casted < std::numeric_limits<i32>::min() ||
+            casted > std::numeric_limits<i32>::max()) {
+          throw nb::value_error(
+              "value does not fit within the requested dtype");
+        }
+        return Scalar(static_cast<i32>(casted));
+      }
+      case DataType::Int64:
+        return Scalar(nb::cast<i64>(value));
+    }
+  } catch (const nb::cast_error&) {
+    throw nb::value_error(
+        "value has incompatible type for the requested dtype");
+  }
+  AXON_UNREACHABLE("Unhandled dtype when creating scalar");
+}
+
 NB_MODULE(_core, m) {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
@@ -112,6 +143,9 @@ NB_MODULE(_core, m) {
   nb::enum_<DataType::InternalType>(m, "dtype")
       .value("float32", DataType::Float32)
       .value("float64", DataType::Float64)
+      .value("bool", DataType::Int1)
+      .value("int32", DataType::Int32)
+      .value("int64", DataType::Int64)
       .export_values();
 
   nb::enum_<LoweringLevel>(m, "LoweringLevel")
@@ -157,11 +191,6 @@ NB_MODULE(_core, m) {
                        DataType::InternalType data_type) {
              if (nb::isinstance<nb::ndarray<nb::c_contig>>(object)) {
                auto ndarray = nb::cast<nb::ndarray<nb::c_contig>>(object);
-               auto ndarray_data_type = DataType::fromDlPack(ndarray.dtype());
-               if (ndarray_data_type != data_type) {
-                 throw nb::value_error("Does not match the received data type");
-               }
-
                auto storage = WritableDlPackStorage(ndarray);
                return std::make_shared<Tensor>(Storage(std::move(storage)),
                                                requires_grad);
@@ -210,10 +239,18 @@ NB_MODULE(_core, m) {
       .def("__sub__", &performBinaryElementWiseOperation<insts::Sub>)
 
       .def("__mul__", &performScalarMul<f32>)
+      .def("__mul__", &performScalarMul<f64>)
+      .def("__mul__", &performScalarMul<i32>)
+      .def("__mul__", &performScalarMul<i64>)
       .def("__rmul__", &performScalarMul<f32>)
+      .def("__rmul__", &performScalarMul<f64>)
+      .def("__rmul__", &performScalarMul<i32>)
+      .def("__rmul__", &performScalarMul<i64>)
 
       .def("pow", &performPow<f32>, nb::arg("exponent"))
+      .def("pow", &performPow<f64>, nb::arg("exponent"))
       .def("__pow__", &performPow<f32>)
+      .def("__pow__", &performPow<f64>)
 
       .def("__matmul__", &performMatMul)
 
@@ -231,7 +268,7 @@ NB_MODULE(_core, m) {
            nb::arg("dim") = std::nullopt, nb::arg("keepdims") = false)
 
       .def("item",
-           [](std::shared_ptr<Tensor> self) -> f32 {
+           [](std::shared_ptr<Tensor> self) -> nb::object {
              if (self->rank() != 0) {
                throw nb::value_error(
                    std::format("Cannot perform item on a tensor with a "
@@ -243,7 +280,20 @@ NB_MODULE(_core, m) {
              if (!self->isEvaluated()) {
                self->evaluate();
              }
-             return *self->storage()->as<f32>();
+             auto dtype = self->data_type();
+             switch (dtype.kind()) {
+               case DataType::Float32:
+                 return nb::cast(*self->storage()->as<f32>());
+               case DataType::Float64:
+                 return nb::cast(*self->storage()->as<f64>());
+               case DataType::Int1:
+                 return nb::cast(*self->storage()->as<bool>());
+               case DataType::Int32:
+                 return nb::cast(*self->storage()->as<i32>());
+               case DataType::Int64:
+                 return nb::cast(*self->storage()->as<i64>());
+             }
+             AXON_UNREACHABLE("Unsupported dtype for item()");
            })
 
       .def_static(
@@ -251,14 +301,7 @@ NB_MODULE(_core, m) {
           [](nb::object value, nb::tuple shape_tuple, bool requires_grad,
              DataType::InternalType data_type) {
             auto shape = convertTupleToVector(shape_tuple);
-
-            if (!nb::isinstance<f64>(value) && !nb::isinstance<f32>(value)) {
-              throw nb::value_error("value must be a float");
-            }
-
-            auto val = nb::cast<f64>(value);
-            Scalar scalar(val);
-            scalar = scalar.cast(data_type);
+            auto scalar = createScalarFromPythonObject(value, data_type);
             return createFillLike(scalar, shape, requires_grad);
           },
           nb::arg("value"), nb::arg("shape"), nb::arg("requires_grad") = false,
@@ -291,6 +334,11 @@ NB_MODULE(_core, m) {
           [](nb::tuple shape_tuple, bool requires_grad,
              DataType::InternalType data_type) {
             auto shape = convertTupleToVector(shape_tuple);
+            if (data_type != DataType::Float32 &&
+                data_type != DataType::Float64) {
+              throw nb::value_error(
+                  "randn is only supported for floating point dtypes");
+            }
             auto cpu =
                 CpuStorage::createDistributed(shape, 0.0, 1.0, data_type);
             return std::make_shared<Tensor>(Storage(std::move(cpu)),

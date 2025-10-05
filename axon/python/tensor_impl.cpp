@@ -3,6 +3,7 @@ module;
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <type_traits>
 
 #include "axon/base/macros.h"
 #include "llvm/ADT/DenseMap.h"
@@ -272,7 +273,9 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream,
   auto shape = storage->shape();
   static constexpr auto dump_formatted = [](llvm::raw_string_ostream& stream,
                                             T elem) {
-    if constexpr (std::is_floating_point_v<T>) {
+    if constexpr (std::is_same_v<T, bool>) {
+      stream << (elem ? "True" : "False");
+    } else if constexpr (std::is_floating_point_v<T>) {
       stream << llvm::formatv("{0:F4}", elem);
     } else if constexpr (std::is_integral_v<T>) {
       stream << elem;
@@ -336,6 +339,21 @@ auto Tensor::asString() -> std::string {
     }
     case DataType::Float32: {
       dumpRecursive<f32>(stream, storage_.get(), 0, idx,
+                         /*indent_width=*/8);
+      break;
+    }
+    case DataType::Int1: {
+      dumpRecursive<bool>(stream, storage_.get(), 0, idx,
+                          /*indent_width=*/8);
+      break;
+    }
+    case DataType::Int32: {
+      dumpRecursive<i32>(stream, storage_.get(), 0, idx,
+                         /*indent_width=*/8);
+      break;
+    }
+    case DataType::Int64: {
+      dumpRecursive<i64>(stream, storage_.get(), 0, idx,
                          /*indent_width=*/8);
       break;
     }

@@ -476,9 +476,9 @@ struct ScalarMulOpLowering : mlir::OpConversionPattern<ScalarMulOp> {
     auto loc = op.getLoc();
     auto result_type = op.getInput().getType();
 
-    if (auto float_attr = mlir::dyn_cast<mlir::FloatAttr>(op.getScalar())) {
+    auto build_mul = [&](mlir::TypedAttr scalar_attr) {
       auto scalar_constant =
-          mlir::arith::ConstantOp::create(rewriter, loc, float_attr)
+          mlir::arith::ConstantOp::create(rewriter, loc, scalar_attr)
               .getResult();
       auto scalar_tensor = mlir::tensor::SplatOp::create(
           rewriter, loc, scalar_constant, result_type);
@@ -491,6 +491,14 @@ struct ScalarMulOpLowering : mlir::OpConversionPattern<ScalarMulOp> {
 
       rewriter.replaceOp(op, prod.getResult(0));
       return mlir::success();
+    };
+
+    if (auto float_attr = mlir::dyn_cast<mlir::FloatAttr>(op.getScalar())) {
+      return build_mul(float_attr);
+    }
+
+    if (auto int_attr = mlir::dyn_cast<mlir::IntegerAttr>(op.getScalar())) {
+      return build_mul(int_attr);
     }
 
     return mlir::failure();
@@ -538,7 +546,7 @@ struct ConstantOpLowering : mlir::OpConversionPattern<ConstantOp> {
       return mlir::success();
     }
 
-    return mlir::failure();
+    return rewriter.notifyMatchFailure(op, "Unsupported element type");
   }
 };
 
@@ -745,58 +753,83 @@ struct CompareOpLowering : mlir::OpConversionPattern<CompareOp> {
     auto result_type = op.getResult().getType();
     auto element_type = result_type.getElementType();
 
-    AXON_DCHECK(element_type.isFloat(), "Other types TODO");
+    auto mask_type = mlir::RankedTensorType::get(result_type.getShape(),
+                                                 rewriter.getI1Type());
 
-    auto arith_cmp_attr = getArithCmpAttr(element_type, op.getPredicate());
-    auto arith_cmp_result_type = mlir::RankedTensorType::get(
-        result_type.getShape(), rewriter.getI1Type());
+    if (element_type.isFloat()) {
+      auto predicate =
+          getFloatPredicate(static_cast<ComparePredicate>(op.getPredicate()));
+      auto comparison_op =
+          mlir::arith::CmpFOp::create(rewriter, loc, mask_type, predicate,
+                                      adaptor.getLhs(), adaptor.getRhs());
 
-    auto comparison_op = mlir::arith::CmpFOp::create(
-        rewriter, loc, arith_cmp_result_type, arith_cmp_attr, adaptor.getLhs(),
-        adaptor.getRhs());
-
-    auto cast_op = mlir::arith::UIToFPOp::create(rewriter, loc, result_type,
-                                                 comparison_op);
-
-    rewriter.replaceOp(op, cast_op);
-    return mlir::success();
-  }
-
-  static auto getArithCmpAttr(mlir::Type type, ComparePredicate predicate)
-      -> mlir::arith::CmpFPredicate {
-    if (type.isFloat()) {
-      switch (predicate) {
-        case ComparePredicate::le:
-          return mlir::arith::CmpFPredicate::ULE;
-        case ComparePredicate::lt:
-          return mlir::arith::CmpFPredicate::ULT;
-        case ComparePredicate::ge:
-          return mlir::arith::CmpFPredicate::UGE;
-        case ComparePredicate::gt:
-          return mlir::arith::CmpFPredicate::UGT;
-        case ComparePredicate::eq:
-          return mlir::arith::CmpFPredicate::UEQ;
-        case ComparePredicate::ne:
-          return mlir::arith::CmpFPredicate::UNE;
-      }
-    } else if (type.isInteger()) {
-      switch (predicate) {
-        case ComparePredicate::le:
-          return mlir::arith::CmpFPredicate::OLE;
-        case ComparePredicate::lt:
-          return mlir::arith::CmpFPredicate::OLT;
-        case ComparePredicate::ge:
-          return mlir::arith::CmpFPredicate::OGE;
-        case ComparePredicate::gt:
-          return mlir::arith::CmpFPredicate::OGT;
-        case ComparePredicate::eq:
-          return mlir::arith::CmpFPredicate::OEQ;
-        case ComparePredicate::ne:
-          return mlir::arith::CmpFPredicate::ONE;
-      }
+      auto cast_op = mlir::arith::UIToFPOp::create(rewriter, loc, result_type,
+                                                   comparison_op);
+      rewriter.replaceOp(op, cast_op);
+      return mlir::success();
     }
 
-    AXON_UNREACHABLE("Unsupported type");
+    if (element_type.isInteger()) {
+      auto predicate =
+          getIntPredicate(static_cast<ComparePredicate>(op.getPredicate()));
+      auto comparison_op =
+          mlir::arith::CmpIOp::create(rewriter, loc, mask_type, predicate,
+                                      adaptor.getLhs(), adaptor.getRhs());
+
+      // For i1 element types, the comparison result already matches the
+      // expected tensor type. Otherwise, zero-extend to the target integer
+      // width so we encode the mask as 0/1 values in the original dtype.
+      if (element_type.getIntOrFloatBitWidth() == 1) {
+        rewriter.replaceOp(op, comparison_op);
+      } else {
+        auto extended = mlir::arith::ExtUIOp::create(rewriter, loc, result_type,
+                                                     comparison_op);
+        rewriter.replaceOp(op, extended);
+      }
+      return mlir::success();
+    }
+
+    return rewriter.notifyMatchFailure(op, "Unsupported element type");
+  }
+
+  static auto getFloatPredicate(ComparePredicate predicate)
+      -> mlir::arith::CmpFPredicate {
+    switch (predicate) {
+      case ComparePredicate::le:
+        return mlir::arith::CmpFPredicate::ULE;
+      case ComparePredicate::lt:
+        return mlir::arith::CmpFPredicate::ULT;
+      case ComparePredicate::ge:
+        return mlir::arith::CmpFPredicate::UGE;
+      case ComparePredicate::gt:
+        return mlir::arith::CmpFPredicate::UGT;
+      case ComparePredicate::eq:
+        return mlir::arith::CmpFPredicate::UEQ;
+      case ComparePredicate::ne:
+        return mlir::arith::CmpFPredicate::UNE;
+    }
+
+    AXON_UNREACHABLE("Unsupported float compare predicate");
+  }
+
+  static auto getIntPredicate(ComparePredicate predicate)
+      -> mlir::arith::CmpIPredicate {
+    switch (predicate) {
+      case ComparePredicate::le:
+        return mlir::arith::CmpIPredicate::sle;
+      case ComparePredicate::lt:
+        return mlir::arith::CmpIPredicate::slt;
+      case ComparePredicate::ge:
+        return mlir::arith::CmpIPredicate::sge;
+      case ComparePredicate::gt:
+        return mlir::arith::CmpIPredicate::sgt;
+      case ComparePredicate::eq:
+        return mlir::arith::CmpIPredicate::eq;
+      case ComparePredicate::ne:
+        return mlir::arith::CmpIPredicate::ne;
+    }
+
+    AXON_UNREACHABLE("Unsupported integer compare predicate");
   }
 };
 
@@ -934,9 +967,19 @@ struct SumOpLowering : mlir::OpConversionPattern<SumOp> {
     auto init_value = mlir::arith::ConstantOp::create(
         rewriter, loc, rewriter.getZeroAttr(element_type));
 
-    auto sum_op =
-        reduce<mlir::arith::AddFOp>(rewriter, loc, adaptor.getInput(),
-                                    op.getKeepDims(), op.getDim(), init_value);
+    mlir::Value sum_op;
+    if (element_type.isFloat()) {
+      sum_op = reduce<mlir::arith::AddFOp>(rewriter, loc, adaptor.getInput(),
+                                           op.getKeepDims(), op.getDim(),
+                                           init_value);
+    } else if (element_type.isInteger()) {
+      sum_op = reduce<mlir::arith::AddIOp>(rewriter, loc, adaptor.getInput(),
+                                           op.getKeepDims(), op.getDim(),
+                                           init_value);
+    } else {
+      return rewriter.notifyMatchFailure(
+          op, "sum currently supports integer or floating element types only");
+    }
 
     rewriter.replaceOp(op, sum_op);
     return mlir::success();

@@ -42,6 +42,12 @@ static auto getElementType(DataType data_type, mlir::OpBuilder& builder)
       return builder.getF32Type();
     case DataType::Float64:
       return builder.getF64Type();
+    case DataType::Int1:
+      return builder.getI1Type();
+    case DataType::Int32:
+      return builder.getI32Type();
+    case DataType::Int64:
+      return builder.getI64Type();
   }
 
   AXON_UNREACHABLE("Unsupported data type");
@@ -102,6 +108,24 @@ static auto codegen(const insts::Constant& op, CompilationContext& ctx)
     case DataType::Float64: {
       auto data_ptr = reinterpret_cast<f64*>(constant->data_ptr());
       auto data_ref = llvm::ArrayRef<f64>(data_ptr, constant->size());
+      data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
+      break;
+    }
+    case DataType::Int1: {
+      auto data_ptr = reinterpret_cast<bool*>(constant->data_ptr());
+      llvm::SmallVector<bool> values(data_ptr, data_ptr + constant->size());
+      data_attribute = mlir::DenseElementsAttr::get(result_type, values);
+      break;
+    }
+    case DataType::Int32: {
+      auto data_ptr = reinterpret_cast<i32*>(constant->data_ptr());
+      auto data_ref = llvm::ArrayRef<i32>(data_ptr, constant->size());
+      data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
+      break;
+    }
+    case DataType::Int64: {
+      auto data_ptr = reinterpret_cast<i64*>(constant->data_ptr());
+      auto data_ref = llvm::ArrayRef<i64>(data_ptr, constant->size());
       data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
       break;
     }
@@ -218,25 +242,34 @@ static auto codegen(const insts::GetParameter& op, CompilationContext& ctx)
 static auto codegen(const insts::FillLike& op, CompilationContext& ctx)
     -> void {
   auto like = ctx.values[op.input_id];
-  // Extract the scalar value according to its stored dtype.
-  f64 fill;
-  switch (op.fill_value.data_type().kind()) {
-    case DataType::Float32: {
-      fill = static_cast<f64>(op.fill_value.as<f32>());
-      break;
-    }
-    case DataType::Float64: {
-      fill = static_cast<f64>(op.fill_value.as<f64>());
-      break;
-    }
-  }
   auto like_type = mlir::cast<mlir::RankedTensorType>(like.getType());
   auto element_type = like_type.getElementType();
+
+  mlir::Attribute fill_attr;
+  switch (op.fill_value.data_type().kind()) {
+    case DataType::Float32:
+      fill_attr = getFloatAttr(element_type, op.fill_value.as<f32>());
+      break;
+    case DataType::Float64:
+      fill_attr = getFloatAttr(element_type, op.fill_value.as<f64>());
+      break;
+    case DataType::Int1:
+      fill_attr = ctx.builder.getBoolAttr(op.fill_value.as<bool>());
+      break;
+    case DataType::Int32:
+      fill_attr = ctx.builder.getIntegerAttr(element_type,
+                                             op.fill_value.as<i32>());
+      break;
+    case DataType::Int64:
+      fill_attr = ctx.builder.getIntegerAttr(element_type,
+                                             op.fill_value.as<i64>());
+      break;
+  }
 
   auto inst_id = ctx.current_id;
   ctx.values[inst_id] =
       FillOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like.getType(),
-                     getFloatAttr(element_type, fill));
+                     fill_attr);
 }
 
 static auto codegen(const insts::MatMul& op, CompilationContext& ctx) -> void {
@@ -311,6 +344,8 @@ static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx)
     -> void {
   auto input = ctx.values[op.input_id];
   auto data_type = op.scalar.data_type();
+  auto element_type =
+      mlir::cast<mlir::RankedTensorType>(input.getType()).getElementType();
 
   mlir::Attribute attr;
   switch (data_type.kind()) {
@@ -320,6 +355,18 @@ static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx)
     }
     case DataType::Float64: {
       attr = ctx.builder.getF64FloatAttr(op.scalar.as<f64>());
+      break;
+    }
+    case DataType::Int1: {
+      attr = ctx.builder.getBoolAttr(op.scalar.as<bool>());
+      break;
+    }
+    case DataType::Int32: {
+      attr = ctx.builder.getIntegerAttr(element_type, op.scalar.as<i32>());
+      break;
+    }
+    case DataType::Int64: {
+      attr = ctx.builder.getIntegerAttr(element_type, op.scalar.as<i64>());
       break;
     }
   }

@@ -106,6 +106,15 @@ export class CpuStorage final : public StorageBase {
     } else if (data_type() == DataType::Float64) {
       auto* ptr = reinterpret_cast<f64*>(data_);
       std::fill_n(ptr, size(), 0.0);
+    } else if (data_type() == DataType::Int32) {
+      auto* ptr = reinterpret_cast<i32*>(data_);
+      std::fill_n(ptr, size(), 0);
+    } else if (data_type() == DataType::Int64) {
+      auto* ptr = reinterpret_cast<i64*>(data_);
+      std::fill_n(ptr, size(), 0);
+    } else if (data_type() == DataType::Int1) {
+      auto* ptr = reinterpret_cast<bool*>(data_);
+      std::fill_n(ptr, size(), false);
     }
   }
 
@@ -142,6 +151,21 @@ export class CpuStorage final : public StorageBase {
       case DataType::Float64: {
         auto* data_ptr = reinterpret_cast<f64*>(impl.data());
         std::fill_n(data_ptr, num_elems, scalar.as<f64>());
+        break;
+      }
+      case DataType::Int32: {
+        auto* data_ptr = reinterpret_cast<i32*>(impl.data());
+        std::fill_n(data_ptr, num_elems, scalar.as<i32>());
+        break;
+      }
+      case DataType::Int64: {
+        auto* data_ptr = reinterpret_cast<i64*>(impl.data());
+        std::fill_n(data_ptr, num_elems, scalar.as<i64>());
+        break;
+      }
+      case DataType::Int1: {
+        auto* data_ptr = reinterpret_cast<bool*>(impl.data());
+        std::fill_n(data_ptr, num_elems, scalar.as<bool>());
         break;
       }
     }
@@ -182,6 +206,12 @@ export class CpuStorage final : public StorageBase {
         }
         return impl;
       }
+      case DataType::Int1:
+      case DataType::Int32:
+      case DataType::Int64: {
+        throw std::runtime_error(
+            "randn is only supported for floating point dtypes");
+      }
     }
     AXON_UNREACHABLE("Unhandled data type");
   }
@@ -210,6 +240,33 @@ export class CpuStorage final : public StorageBase {
         auto* ptr = reinterpret_cast<f64*>(impl.data());
         auto* fill_ptr = ptr;
         fillBuffer<f64>(list, fill_ptr);
+        return impl;
+      }
+      case DataType::Int32: {
+        auto shape = computeShape(list);
+        auto strides = computeStrides(shape, Layout::RowMajor);
+        CpuStorage impl(shape, strides, data_type);
+        auto* ptr = reinterpret_cast<i32*>(impl.data());
+        auto* fill_ptr = ptr;
+        fillBuffer<i32>(list, fill_ptr);
+        return impl;
+      }
+      case DataType::Int64: {
+        auto shape = computeShape(list);
+        auto strides = computeStrides(shape, Layout::RowMajor);
+        CpuStorage impl(shape, strides, data_type);
+        auto* ptr = reinterpret_cast<i64*>(impl.data());
+        auto* fill_ptr = ptr;
+        fillBuffer<i64>(list, fill_ptr);
+        return impl;
+      }
+      case DataType::Int1: {
+        auto shape = computeShape(list);
+        auto strides = computeStrides(shape, Layout::RowMajor);
+        CpuStorage impl(shape, strides, data_type);
+        auto* ptr = reinterpret_cast<bool*>(impl.data());
+        auto* fill_ptr = ptr;
+        fillBuffer<bool>(list, fill_ptr);
         return impl;
       }
     }
@@ -272,6 +329,15 @@ export class ScalarStorage final : public StorageBase {
         break;
       case DataType::Float64:
         value_ = Scalar(0.0);
+        break;
+      case DataType::Int1:
+        value_ = Scalar(false);
+        break;
+      case DataType::Int32:
+        value_ = Scalar(static_cast<i32>(0));
+        break;
+      case DataType::Int64:
+        value_ = Scalar(static_cast<i64>(0));
         break;
     }
   }

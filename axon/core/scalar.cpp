@@ -40,7 +40,14 @@ export class Scalar {
         return static_cast<T>(as<f32>());
       case DataType::Float64:
         return static_cast<T>(as<f64>());
+      case DataType::Int1:
+        return static_cast<T>(as<bool>());
+      case DataType::Int32:
+        return static_cast<T>(as<i32>());
+      case DataType::Int64:
+        return static_cast<T>(as<i64>());
     }
+    AXON_UNREACHABLE("Unsupported scalar conversion");
   }
 
   auto cast(DataType data_type) const -> Scalar {
@@ -49,7 +56,14 @@ export class Scalar {
         return Scalar(getAs<f32>());
       case DataType::Float64:
         return Scalar(getAs<f64>());
+      case DataType::Int1:
+        return Scalar(static_cast<bool>(getAs<i64>()));
+      case DataType::Int32:
+        return Scalar(static_cast<i32>(getAs<i64>()));
+      case DataType::Int64:
+        return Scalar(getAs<i64>());
     }
+    AXON_UNREACHABLE("Unsupported scalar cast");
   }
 
   friend auto operator+(const Scalar& lhs, const Scalar& rhs) -> Scalar {
@@ -65,7 +79,23 @@ export class Scalar {
         auto rhs_casted = rhs.as<f64>();
         return Scalar(lhs_casted + rhs_casted);
       }
+      case DataType::Int1: {
+        auto lhs_casted = lhs.as<bool>();
+        auto rhs_casted = rhs.as<bool>();
+        return Scalar(static_cast<bool>(lhs_casted + rhs_casted));
+      }
+      case DataType::Int32: {
+        auto lhs_casted = lhs.as<i32>();
+        auto rhs_casted = rhs.as<i32>();
+        return Scalar(lhs_casted + rhs_casted);
+      }
+      case DataType::Int64: {
+        auto lhs_casted = lhs.as<i64>();
+        auto rhs_casted = rhs.as<i64>();
+        return Scalar(lhs_casted + rhs_casted);
+      }
     }
+    AXON_UNREACHABLE("Unsupported scalar addition");
   }
 
   template <Numeric T>
@@ -80,7 +110,20 @@ export class Scalar {
         auto lhs_casted = lhs.as<f64>();
         return Scalar(lhs_casted - rhs);
       }
+      case DataType::Int1: {
+        auto lhs_casted = lhs.as<bool>();
+        return Scalar(static_cast<bool>(lhs_casted - rhs));
+      }
+      case DataType::Int32: {
+        auto lhs_casted = lhs.as<i32>();
+        return Scalar(lhs_casted - rhs);
+      }
+      case DataType::Int64: {
+        auto lhs_casted = lhs.as<i64>();
+        return Scalar(lhs_casted - rhs);
+      }
     }
+    AXON_UNREACHABLE("Unsupported scalar subtraction");
   }
 
   template <Numeric T>
@@ -95,7 +138,20 @@ export class Scalar {
         auto rhs_casted = rhs.as<f64>();
         return Scalar(lhs - rhs_casted);
       }
+      case DataType::Int1: {
+        auto rhs_casted = rhs.as<bool>();
+        return Scalar(static_cast<bool>(lhs - rhs_casted));
+      }
+      case DataType::Int32: {
+        auto rhs_casted = rhs.as<i32>();
+        return Scalar(lhs - rhs_casted);
+      }
+      case DataType::Int64: {
+        auto rhs_casted = rhs.as<i64>();
+        return Scalar(lhs - rhs_casted);
+      }
     }
+    AXON_UNREACHABLE("Unsupported scalar subtraction");
   }
 
   template <Numeric T>
@@ -110,7 +166,20 @@ export class Scalar {
         auto lhs_casted = lhs.as<f64>();
         return Scalar(lhs_casted + rhs);
       }
+      case DataType::Int1: {
+        auto lhs_casted = lhs.as<bool>();
+        return Scalar(static_cast<bool>(lhs_casted + rhs));
+      }
+      case DataType::Int32: {
+        auto lhs_casted = lhs.as<i32>();
+        return Scalar(lhs_casted + rhs);
+      }
+      case DataType::Int64: {
+        auto lhs_casted = lhs.as<i64>();
+        return Scalar(lhs_casted + rhs);
+      }
     }
+    AXON_UNREACHABLE("Unsupported scalar addition");
   }
 
   template <Numeric T>
@@ -125,7 +194,20 @@ export class Scalar {
         auto rhs_casted = rhs.as<f64>();
         return Scalar(lhs + rhs_casted);
       }
+      case DataType::Int1: {
+        auto rhs_casted = rhs.as<bool>();
+        return Scalar(static_cast<bool>(lhs + rhs_casted));
+      }
+      case DataType::Int32: {
+        auto rhs_casted = rhs.as<i32>();
+        return Scalar(lhs + rhs_casted);
+      }
+      case DataType::Int64: {
+        auto rhs_casted = rhs.as<i64>();
+        return Scalar(lhs + rhs_casted);
+      }
     }
+    AXON_UNREACHABLE("Unsupported scalar addition");
   }
 
   auto data_type() const -> DataType { return data_type_; }

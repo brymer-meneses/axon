@@ -2,6 +2,8 @@ module;
 
 #include <algorithm>
 #include <format>
+#include <string_view>
+#include <type_traits>
 
 #include "axon/base/macros.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -90,6 +92,15 @@ static auto ensureHasSameDataType(const Tensor& lhs, const Tensor& rhs)
     throw std::runtime_error(std::format(
         "Cannot operate on two tensors with different data types got {} and {}",
         lhs.data_type(), rhs.data_type()));
+  }
+}
+
+static auto ensureFloatingPoint(const Tensor& tensor,
+                                std::string_view op_name) -> void {
+  if (!tensor.data_type().isFloatingPoint()) {
+    throw std::runtime_error(std::format(
+        "{} is only supported for floating point tensors, got {}", op_name,
+        tensor.data_type()));
   }
 }
 
@@ -364,15 +375,24 @@ export template <Numeric T>
 auto performScalarMul(std::shared_ptr<Tensor> input, T scalar_value)
     -> std::shared_ptr<Tensor> {
   auto session = getTraceSession(input);
-  auto data_type = DataType::fromType<T>();
-
-  if (data_type != input->data_type()) {
-    // TODO: Improve this error message by adding a format specifier for
-    // DataType and scalar.
-    throw nb::value_error("Tried to multiply a tensor with different dtype");
-  }
+  auto tensor_dtype = input->data_type();
+  auto scalar_dtype = DataType::fromType<T>();
 
   Scalar scalar{scalar_value};
+  if (tensor_dtype != scalar_dtype) {
+    auto tensor_is_float = tensor_dtype.isFloatingPoint();
+    auto scalar_is_float = scalar_dtype.isFloatingPoint();
+    auto tensor_is_int = tensor_dtype.isInteger();
+    auto scalar_is_int = scalar_dtype.isInteger();
+
+    if ((tensor_is_float && scalar_is_float) ||
+        (tensor_is_int && scalar_is_int)) {
+      scalar = scalar.cast(tensor_dtype);
+    } else {
+      throw nb::value_error("Tried to multiply a tensor with different dtype");
+    }
+  }
+
   return session->createTensor<insts::ScalarMul>(input, scalar);
 }
 
@@ -380,13 +400,24 @@ export template <Numeric T>
 auto performPow(std::shared_ptr<Tensor> input, T exponent_value)
     -> std::shared_ptr<Tensor> {
   auto session = getTraceSession(input);
-  auto data_type = DataType::fromType<T>();
+  auto tensor_dtype = input->data_type();
+  auto exponent_dtype = DataType::fromType<T>();
 
-  if (data_type != input->data_type()) {
-    throw nb::value_error("Tried to pow a tensor with different dtype");
+  if (!tensor_dtype.isFloatingPoint()) {
+    throw std::runtime_error(
+        "pow is only defined for floating point tensors");
   }
 
   Scalar exponent{exponent_value};
+  if (tensor_dtype != exponent_dtype) {
+    if (exponent_dtype.isFloatingPoint()) {
+      exponent = exponent.cast(tensor_dtype);
+    } else {
+      throw nb::value_error(
+          "Tried to pow a tensor with a mismatched exponent dtype");
+    }
+  }
+
   return session->createTensor<insts::Pow>(input, exponent);
 }
 
@@ -395,6 +426,10 @@ auto performReduceInst(std::shared_ptr<Tensor> input,
                        std::optional<i32> optional_axis, bool keep_dims)
     -> std::shared_ptr<Tensor> {
   auto session = getTraceSession(input);
+
+  if constexpr (std::is_same_v<InstType, insts::Mean>) {
+    ensureFloatingPoint(*input, "mean");
+  }
 
   if (auto axis = optional_axis) {
     return session->createTensor<InstType>(input, *axis, keep_dims);
@@ -413,6 +448,7 @@ export auto performSoftmax(std::shared_ptr<Tensor> input, i32 axis)
   if (axis >= input->rank()) {
     throw nb::value_error("Passed `dim` exceeded the rank of the tensor.");
   }
+  ensureFloatingPoint(*input, "softmax");
   auto session = getTraceSession(input);
   return session->createTensor<insts::Softmax>(input, axis);
 }
@@ -430,6 +466,11 @@ auto performComparison(std::shared_ptr<Tensor> lhs, std::shared_ptr<Tensor> rhs)
 export template <typename InstType>
 auto performUnaryInst(std::shared_ptr<Tensor> input)
     -> std::shared_ptr<Tensor> {
+  if constexpr (std::is_same_v<InstType, insts::Log>) {
+    ensureFloatingPoint(*input, "log");
+  } else if constexpr (std::is_same_v<InstType, insts::Relu>) {
+    ensureFloatingPoint(*input, "relu");
+  }
   auto session = getTraceSession(input);
   return session->createTensor<InstType>(input);
 }
