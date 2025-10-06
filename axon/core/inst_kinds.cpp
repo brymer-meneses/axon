@@ -295,6 +295,20 @@ struct Mean {
   bool keep_dims;
 };
 
+struct ArgMax {
+  constexpr static auto traits = InstTraits{
+      .num_inputs = 1,
+      .shape_rule = ShapeInfo::Custom,
+      .differentiable = false,
+  };
+
+  auto operator==(const ArgMax& other) const -> bool = default;
+
+  InstId input_id;
+  i64 axis;
+  bool keep_dims;
+};
+
 struct Softmax {
   constexpr static auto traits = InstTraits{
       .num_inputs = 1,
@@ -361,6 +375,7 @@ using InstInternalType =
       insts::MatMul,
       insts::Sum,
       insts::Mean,
+      insts::ArgMax,
       insts::ExpandDims,
       insts::Unsqueeze,
       insts::Squeeze,

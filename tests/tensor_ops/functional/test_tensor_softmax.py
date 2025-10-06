@@ -1,7 +1,8 @@
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as torch_F
 
 import axon
+import axon.nn.functional as axon_F
 from axon import Tensor
 
 
@@ -13,8 +14,8 @@ def test_softmax_forward_backward_all_axes():
         b = torch.randn(*shape, requires_grad=True)
         t = Tensor(b, requires_grad=True)
 
-        ax = t.softmax(axis)
-        torch_soft = F.softmax(b, axis)
+        ax = axon_F.softmax(t, axis)
+        torch_soft = torch_F.softmax(b, axis)
 
         # Forward equality
         axon.testing.assert_are_close(ax, torch_soft)

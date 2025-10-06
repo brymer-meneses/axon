@@ -1,7 +1,8 @@
-import axon
-
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as torch_F
+
+import axon
+import axon.nn.functional as axon_F
 
 from axon import Tensor
 
@@ -13,8 +14,8 @@ def test_mse_loss():
     a0 = Tensor(t0, requires_grad=True)
     a1 = Tensor(t1, requires_grad=True)
 
-    t2 = F.mse_loss(t0, t1)
-    a2 = axon.builtin.mse_loss(a0, a1)
+    t2 = torch_F.mse_loss(t0, t1)
+    a2 = axon_F.mse_loss(a0, a1)
 
     t2.backward()
     a2.backward()

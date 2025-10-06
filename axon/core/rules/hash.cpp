@@ -90,6 +90,14 @@ struct Hash<insts::Sum> {
 };
 
 export template <>
+struct Hash<insts::ArgMax> {
+  static auto hash(const insts::ArgMax& op, const IdMap<InstId, Shape>& shapes)
+      -> llvm::hash_code {
+    return handleReduceInst(op, shapes);
+  }
+};
+
+export template <>
 struct Hash<insts::Softmax> {
   static auto hash(const insts::Softmax& op, const IdMap<InstId, Shape>& shapes)
       -> llvm::hash_code {

@@ -101,35 +101,25 @@ struct InferShapeRule<insts::Squeeze> {
 };
 
 template <typename T>
-  static auto inferShapeOfReduceInst(const T& op, const ShapeMapping& shapes)
-      -> Shape {
-  AXON_ASSERT(shapes.get(op.input_id),
-              "op.input_id must have a shape already.");
+concept ReduceInst =
+    requires { llvm::is_one_of<T, insts::Sum, insts::Mean, insts::ArgMax>(); };
 
-  Shape shape = shapes.get(op.input_id)->get();
-  auto rank = static_cast<i32>(shape.size());
+export template <ReduceInst T>
+struct InferShapeRule<T> {
+  static auto apply(const T& op, const ShapeMapping& shapes) -> Shape {
+    AXON_ASSERT(shapes.get(op.input_id),
+                "op.input_id must have a shape already.");
 
-  if (op.keep_dims) {
-    AXON_ASSERT(op.axis < rank, "Axis must not exceed rank");
-    shape[op.axis] = 1;
+    Shape shape = shapes.get(op.input_id)->get();
+    auto rank = static_cast<i32>(shape.size());
+
+    if (op.keep_dims) {
+      AXON_ASSERT(op.axis < rank, "Axis must not exceed rank");
+      shape[op.axis] = 1;
+      return shape;
+    }
+    shape.erase(shape.begin() + op.axis);
     return shape;
-  }
-  shape.erase(shape.begin() + op.axis);
-  return shape;
-}
-
-export template <>
-struct InferShapeRule<insts::Sum> {
-  static auto apply(const insts::Sum& op, const ShapeMapping& shapes) -> Shape {
-    return inferShapeOfReduceInst(op, shapes);
-  }
-};
-
-export template <>
-struct InferShapeRule<insts::Mean> {
-  static auto apply(const insts::Mean& op, const ShapeMapping& shapes)
-      -> Shape {
-    return inferShapeOfReduceInst(op, shapes);
   }
 };
 

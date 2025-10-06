@@ -3,7 +3,7 @@ from ._core import *
 from . import testing
 from . import runtime
 from . import datasets
-from . import builtin
+from . import nn
 from . import optim
 
 from axon.runtime import no_grad
@@ -13,7 +13,7 @@ __all__ = [
     "testing",
     "runtime",
     "datasets",
-    "builtin",
+    "nn",
     "optim",
     # misc
     "no_grad",

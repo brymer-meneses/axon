@@ -5,6 +5,8 @@ import torch
 import axon
 from axon import Tensor, dtype
 
+import axon.nn.functional as F
+
 
 @pytest.mark.parametrize("torch_dtype", [torch.int32, torch.int64])
 def test_integer_addition(torch_dtype):
@@ -78,9 +80,9 @@ def test_float_only_ops_raise(torch_dtype):
     with pytest.raises(RuntimeError):
         tensor.log()
     with pytest.raises(RuntimeError):
-        tensor.softmax(0)
+        F.softmax(tensor, 0)
     with pytest.raises(RuntimeError):
-        tensor.relu()
+        F.relu(tensor)
     with pytest.raises(RuntimeError):
         tensor.mean()
     with pytest.raises(RuntimeError):

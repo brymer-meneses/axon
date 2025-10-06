@@ -1,7 +1,8 @@
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as torch_F
 
 import axon
+import axon.nn.functional as axon_F
 
 from axon import Tensor
 
@@ -10,8 +11,8 @@ def test_relu():
     t0 = torch.randn(10, 10, requires_grad=True)
     t1 = Tensor(t0, requires_grad=True)
 
-    r0 = F.relu(t0)
-    r1 = t1.relu()
+    r0 = torch_F.relu(t0)
+    r1 = axon_F.relu(t1)
 
     r0.backward(torch.ones_like(r0))
     r1.backward(Tensor.ones(r1.shape))

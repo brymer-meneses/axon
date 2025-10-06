@@ -1,8 +1,10 @@
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as torch_F
+
+import axon
+import axon.nn.functional as axon_F
 
 from axon import Tensor
-import axon
 
 
 def test_cross_entropy_forward_and_backward():
@@ -12,13 +14,13 @@ def test_cross_entropy_forward_and_backward():
     base = torch.randn(N, C)
     logits_t = base.clone().detach().requires_grad_(True)
     targets_idx = torch.randint(0, C, (N,))
-    one_hot = F.one_hot(targets_idx, num_classes=C).to(logits_t.dtype)
+    one_hot = torch_F.one_hot(targets_idx, num_classes=C).to(logits_t.dtype)
 
     logits = Tensor(base, requires_grad=True)
     targets = Tensor(one_hot)
 
-    loss_axon = axon.builtin.cross_entropy(logits * 0.5, targets)
-    loss_torch = F.cross_entropy(logits_t * 0.5, targets_idx)
+    loss_axon = axon_F.cross_entropy(logits * 0.5, targets)
+    loss_torch = torch_F.cross_entropy(logits_t * 0.5, targets_idx)
 
     loss_torch.backward()
     loss_axon.backward()

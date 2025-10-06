@@ -254,9 +254,6 @@ NB_MODULE(_core, m) {
 
       .def("__matmul__", &performMatMul)
 
-      .def("softmax", &performSoftmax, nb::arg("dim"))
-
-      .def("relu", &performUnaryInst<insts::Relu>)
       .def("log", &performUnaryInst<insts::Log>)
 
       .def("accumulate", &performAccumulate, nb::arg("value"))
@@ -266,6 +263,9 @@ NB_MODULE(_core, m) {
 
       .def("mean", &performReduceInst<insts::Mean>,
            nb::arg("dim") = std::nullopt, nb::arg("keepdims") = false)
+
+      .def("argmax", &performArgMax, nb::arg("dim"),
+           nb::arg("keepdims") = false)
 
       .def("item",
            [](std::shared_ptr<Tensor> self) -> nb::object {
@@ -346,6 +346,10 @@ NB_MODULE(_core, m) {
           },
           nb::arg("shape"), nb::arg("requires_grad") = false,
           nb::arg("dtype") = DataType::Float32);
+
+  m.def("softmax", &performSoftmax, nb::arg("input"), nb::arg("dim"));
+
+  m.def("relu", &performUnaryInst<insts::Relu>, nb::arg("input"));
 
   m.def(
       "assert_are_close",

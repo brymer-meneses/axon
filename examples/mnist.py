@@ -1,7 +1,9 @@
 from axon.datasets import DatasetIterator
 import numpy as np
 
-from axon import nn, Tensor, builtin, optim, LoweringLevel
+from axon import nn, Tensor, optim, LoweringLevel
+
+import axon.nn.functional as F
 import axon
 
 
@@ -36,7 +38,7 @@ class Model(nn.Module):
         self.l2 = nn.Linear(256, 10)
 
     def forward(self, x: Tensor) -> Tensor:
-        l1_out = self.l1(x).relu()
+        l1_out = F.relu(self.l1(x))
         l2_out = self.l2(l1_out)
         return l2_out
 
@@ -82,7 +84,7 @@ def train(
             targets = as_one_hot(10, y_batch).astype(np.float32)
             logits = model(inputs)
 
-            loss = builtin.cross_entropy(logits, Tensor(targets))
+            loss = F.cross_entropy(logits, Tensor(targets))
             loss.backward()
 
             if inspect_ir and epoch == 0 and step == 0:
@@ -117,7 +119,7 @@ def evaluate(
             inputs = Tensor(x_batch.reshape(-1, 784))
             targets = Tensor(as_one_hot(10, y_batch).astype(np.float32))
             logits = model(inputs)
-            loss = builtin.cross_entropy(logits, targets)
+            loss = F.cross_entropy(logits, targets)
             total_loss += loss.item()
             batches += 1
 

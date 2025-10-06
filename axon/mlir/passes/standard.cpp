@@ -1,12 +1,14 @@
 module;
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <ranges>
 #include <utility>
 
 #include "axon/base/macros.h"
 #include "axon/mlir/dialect/dialect.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -575,6 +577,26 @@ struct PowOpLowering : mlir::OpConversionPattern<PowOp> {
   }
 };
 
+static auto getReducedIdentityMap(i64 rank, llvm::ArrayRef<i64> excluded,
+                                  bool keep_dims, mlir::MLIRContext* context)
+    -> mlir::AffineMap {
+  llvm::SmallVector<mlir::AffineExpr> affine_exprs;
+  for (auto i : std::views::iota(0, rank)) {
+    if (std::ranges::contains(excluded, i)) {
+      // If we have keep_dims=True, then we should accumulate to the 0th
+      // dimension in the output map. Otherwise, we don't have to push it back
+      // to `affine_exprs`.
+      if (keep_dims) {
+        affine_exprs.push_back(mlir::getAffineConstantExpr(0, context));
+      }
+    } else {
+      affine_exprs.push_back(mlir::getAffineDimExpr(i, context));
+    }
+  }
+
+  return mlir::AffineMap::get(rank, /*symbolCount=*/0, affine_exprs, context);
+}
+
 template <typename ReduceOp>
 static auto reduce(mlir::OpBuilder& rewriter, mlir::Location loc,
                    mlir::Value input, bool keep_dims, i64 axis,
@@ -588,22 +610,7 @@ static auto reduce(mlir::OpBuilder& rewriter, mlir::Location loc,
   llvm::SmallVector iterator_types(rank, mlir::utils::IteratorType::parallel);
   iterator_types[axis] = mlir::utils::IteratorType::reduction;
 
-  llvm::SmallVector<mlir::AffineExpr, 4> output_affine_exprs;
-  for (auto i : std::views::iota(0, rank)) {
-    if (i == axis) {
-      // If we have keep_dims=True, then we should accumulate to the 0th
-      // dimension in the output map. Otherwise, we don't have to push it back
-      // to `affine_exprs`.
-      if (keep_dims) {
-        output_affine_exprs.push_back(mlir::getAffineConstantExpr(0, context));
-      }
-    } else {
-      output_affine_exprs.push_back(mlir::getAffineDimExpr(i, context));
-    }
-  }
-
-  auto output_map = mlir::AffineMap::get(rank, /*symbolCount=*/0,
-                                         output_affine_exprs, context);
+  auto output_map = getReducedIdentityMap(rank, {axis}, keep_dims, context);
   auto input_map = mlir::AffineMap::getMultiDimIdentityMap(rank, context);
 
   llvm::SmallVector<mlir::AffineMap> indexing_maps = {input_map, output_map};
@@ -632,18 +639,6 @@ static auto reduce(mlir::OpBuilder& rewriter, mlir::Location loc,
       });
 
   return reduce_op.getResult(0);
-}
-
-static auto getIdentityMapWithout(i64 rank, llvm::ArrayRef<i64> excluded,
-                                  mlir::MLIRContext* context)
-    -> mlir::AffineMap {
-  llvm::SmallVector<mlir::AffineExpr> affine_exprs;
-  for (auto i : std::views::iota(0, rank)) {
-    if (!std::ranges::contains(excluded, i)) {
-      affine_exprs.push_back(mlir::getAffineDimExpr(i, context));
-    }
-  }
-  return mlir::AffineMap::get(rank, /*symbolCount=*/0, affine_exprs, context);
 }
 
 struct SoftmaxOpLowering : mlir::OpConversionPattern<SoftmaxOp> {
@@ -688,7 +683,7 @@ struct SoftmaxOpLowering : mlir::OpConversionPattern<SoftmaxOp> {
         // lhs map
         mlir::AffineMap::getMultiDimIdentityMap(rank, context),
         // rhs map
-        getIdentityMapWithout(rank, {axis}, context),
+        getReducedIdentityMap(rank, {axis}, /*keep_dims=*/false, context),
         // output map
         mlir::AffineMap::getMultiDimIdentityMap(rank, context),
     };
@@ -721,7 +716,7 @@ struct SoftmaxOpLowering : mlir::OpConversionPattern<SoftmaxOp> {
         // lhs map
         mlir::AffineMap::getMultiDimIdentityMap(rank, context),
         // rhs map
-        getIdentityMapWithout(rank, {axis}, context),
+        getReducedIdentityMap(rank, {axis}, /*keep_dims=*/false, context),
         // output map
         mlir::AffineMap::getMultiDimIdentityMap(rank, context),
     };
@@ -887,54 +882,58 @@ struct ArgMaxOpLowering : mlir::OpConversionPattern<ArgMaxOp> {
       -> mlir::LogicalResult final {
     auto loc = op.getLoc();
 
-    auto result_type = op.getResult().getType();
-    auto input_type = op.getInput().getType();
+    auto result_type =
+        mlir::cast<mlir::RankedTensorType>(op.getResult().getType());
+    auto input_type =
+        mlir::cast<mlir::RankedTensorType>(op.getInput().getType());
 
-    auto element_type = input_type.getElementType();
+    auto input_element_type = input_type.getElementType();
+    auto result_element_type = result_type.getElementType();
 
-    if (!element_type.isIntOrFloat()) {
+    if (!input_element_type.isIntOrFloat()) {
       return rewriter.notifyMatchFailure(
-          op, "Expected element_type to be either int or float");
+          op, "Expected input_element_type to be either int or float");
     }
 
     auto rank = input_type.getRank();
     auto context = op.getContext();
     auto axis = static_cast<i64>(op.getDim());
+    auto keep_dims = op.getKeepDims();
 
-    auto init_value = mlir::arith::ConstantOp::create(
-        rewriter, loc, rewriter.getFloatAttr(element_type, -1e30));
-
-    auto maximum_values =
-        reduce<mlir::arith::MaxNumFOp>(rewriter, loc, adaptor.getInput(),
-                                       /*keep_dims=*/false, axis, init_value);
+    auto init_op = createZerosLike(rewriter, result_type, loc);
+    auto maximum_values = computeMaximumValues(
+        rewriter, loc, adaptor.getInput(), input_element_type, axis);
 
     llvm::SmallVector indexing_maps = {
         mlir::AffineMap::getMultiDimIdentityMap(rank, context),
-        getIdentityMapWithout(rank, {axis}, context),
-        getIdentityMapWithout(rank, {axis}, context),
+        // `maximum_values` is computed with `keep_dims=false`.
+        getReducedIdentityMap(rank, {axis}, /*keep_dims=*/false, context),
+        getReducedIdentityMap(rank, {axis}, keep_dims, context),
     };
 
     llvm::SmallVector iterator_types(rank, mlir::utils::IteratorType::parallel);
     iterator_types[axis] = mlir::utils::IteratorType::reduction;
 
-    auto init_op = createZerosLike(rewriter, result_type, loc);
-
     auto argmax_op = mlir::linalg::GenericOp::create(
         rewriter, loc, mlir::TypeRange{result_type},
         mlir::ValueRange{adaptor.getInput(), maximum_values},
         mlir::ValueRange{init_op}, indexing_maps, iterator_types,
-        [element_type, axis](mlir::OpBuilder& builder, mlir::Location loc,
-                             mlir::ValueRange args) {
+        [input_element_type, result_element_type, axis](
+            mlir::OpBuilder& builder, mlir::Location loc,
+            mlir::ValueRange args) {
           auto in = args[0];
           auto max = args[1];
 
           auto this_index = mlir::linalg::IndexOp::create(
-              builder, loc, builder.getI64IntegerAttr(axis));
-          auto this_index_value = mlir::arith::IndexCastOp::create(
-              builder, loc, element_type, this_index);
+                                builder, loc, builder.getI64IntegerAttr(axis))
+                                .getResult();
+          auto this_index_value =
+              mlir::arith::IndexCastOp::create(builder, loc,
+                                               result_element_type, this_index)
+                  .getResult();
 
           mlir::Value is_max;
-          if (element_type.isFloat()) {
+          if (input_element_type.isFloat()) {
             is_max = mlir::arith::CmpFOp::create(
                 builder, loc, mlir::arith::CmpFPredicate::OEQ, in, max);
           } else {
@@ -951,6 +950,30 @@ struct ArgMaxOpLowering : mlir::OpConversionPattern<ArgMaxOp> {
 
     rewriter.replaceOp(op, argmax_op.getResult(0));
     return mlir::success();
+  }
+
+  static auto computeMaximumValues(mlir::OpBuilder& builder, mlir::Location loc,
+                                   mlir::Value input, mlir::Type element_type,
+                                   i64 axis) -> mlir::Value {
+    if (element_type.isFloat()) {
+      auto init_value = mlir::arith::ConstantOp::create(
+          builder, loc,
+          builder.getFloatAttr(element_type,
+                               -std::numeric_limits<f64>::infinity()));
+      return reduce<mlir::arith::MaxNumFOp>(builder, loc, input,
+                                            /*keep_dims=*/false, axis,
+                                            init_value);
+    } else if (element_type.isInteger()) {
+      auto init_value = mlir::arith::ConstantOp::create(
+          builder, loc,
+          builder.getIntegerAttr(element_type,
+                                 -std::numeric_limits<i64>::infinity()));
+      return reduce<mlir::arith::MaxSIOp>(builder, loc, input,
+                                          /*keep_dims=*/false, axis,
+                                          init_value);
+    }
+
+    AXON_UNREACHABLE("Unhandled element_type");
   }
 };
 
@@ -1062,6 +1085,7 @@ struct AxonToStandardLoweringPass
     // clang-format off
     patterns.add<
       AccumulateOpLowering, 
+      ArgMaxOpLowering,
       ReluOpLowering,
       CompareOpLowering,
       AddOpLowering, 

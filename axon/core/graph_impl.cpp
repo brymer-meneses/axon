@@ -240,6 +240,8 @@ auto Graph::inferDataType(InstId inst_id) -> void {
       auto value = data_types_.get(op.source_id);
       AXON_ASSERT(value, "Value data type missing");
       data_types_.set(inst_id, value->get());
+    } else if constexpr (std::is_same_v<InstType, insts::ArgMax>) {
+      data_types_.set(inst_id, DataType::Int64);
     } else if constexpr (requires {
                            op.lhs_id;
                            op.rhs_id;

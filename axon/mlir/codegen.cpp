@@ -161,6 +161,18 @@ static auto codegen(const insts::Mean& op, CompilationContext& ctx) -> void {
   codegenReduceInst<insts::Mean, MeanOp>(op, ctx);
 }
 
+static auto codegen(const insts::ArgMax& op, CompilationContext& ctx) -> void {
+  auto inst_id = ctx.current_id;
+  auto input = ctx.values[op.input_id];
+  auto shape = ctx.graph.getShape(inst_id);
+  auto result_type =
+      mlir::RankedTensorType::get(shape, ctx.builder.getI64Type());
+
+  ctx.values[inst_id] =
+      ArgMaxOp::create(ctx.builder, ctx.builder.getUnknownLoc(), result_type,
+                       input, op.axis, op.keep_dims);
+}
+
 template <typename InstType, typename LoweredOp>
 static auto codegenElementWiseBinaryInst(const InstType& op,
                                          CompilationContext& ctx) -> void {
@@ -257,19 +269,18 @@ static auto codegen(const insts::FillLike& op, CompilationContext& ctx)
       fill_attr = ctx.builder.getBoolAttr(op.fill_value.as<bool>());
       break;
     case DataType::Int32:
-      fill_attr = ctx.builder.getIntegerAttr(element_type,
-                                             op.fill_value.as<i32>());
+      fill_attr =
+          ctx.builder.getIntegerAttr(element_type, op.fill_value.as<i32>());
       break;
     case DataType::Int64:
-      fill_attr = ctx.builder.getIntegerAttr(element_type,
-                                             op.fill_value.as<i64>());
+      fill_attr =
+          ctx.builder.getIntegerAttr(element_type, op.fill_value.as<i64>());
       break;
   }
 
   auto inst_id = ctx.current_id;
-  ctx.values[inst_id] =
-      FillOp::create(ctx.builder, ctx.builder.getUnknownLoc(), like.getType(),
-                     fill_attr);
+  ctx.values[inst_id] = FillOp::create(ctx.builder, ctx.builder.getUnknownLoc(),
+                                       like.getType(), fill_attr);
 }
 
 static auto codegen(const insts::MatMul& op, CompilationContext& ctx) -> void {

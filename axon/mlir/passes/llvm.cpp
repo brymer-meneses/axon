@@ -30,29 +30,6 @@ export module axon.mlir.passes:llvm_lowering;
 
 namespace axon {
 
-struct AxonToLlvmTypeConverter : mlir::LLVMTypeConverter {
-  AxonToLlvmTypeConverter(mlir::MLIRContext* ctx,
-                          const mlir::LowerToLLVMOptions& options)
-      : mlir::LLVMTypeConverter(ctx, options) {
-    addConversion([ctx, this](mlir::TupleType tuple_type) -> mlir::Type {
-      llvm::SmallVector<mlir::Type> llvm_types;
-      for (mlir::Type elem_type : tuple_type.getTypes()) {
-        mlir::Type converted_type = convertType(elem_type);
-        if (!converted_type) {
-          return {};
-        }
-        if (!mlir::LLVM::isCompatibleType(converted_type)) {
-          return {};
-        }
-
-        llvm_types.push_back(converted_type);
-      }
-
-      return mlir::LLVM::LLVMStructType::getLiteral(ctx, llvm_types);
-    });
-  }
-};
-
 struct AxonToLlvmLoweringPass
     : mlir::PassWrapper<AxonToLlvmLoweringPass,
                         mlir::OperationPass<mlir::ModuleOp>> {
@@ -81,7 +58,7 @@ struct AxonToLlvmLoweringPass
     options.useBarePtrCallConv = true;
 
     mlir::RewritePatternSet patterns{&context};
-    AxonToLlvmTypeConverter type_converter{&context, options};
+    mlir::LLVMTypeConverter type_converter{&context, options};
 
     mlir::populateAffineToStdConversionPatterns(patterns);
     mlir::arith::populateArithToLLVMConversionPatterns(type_converter,

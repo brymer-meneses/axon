@@ -426,13 +426,21 @@ auto performReduceInst(std::shared_ptr<Tensor> input,
                        std::optional<i32> optional_axis, bool keep_dims)
     -> std::shared_ptr<Tensor> {
   auto session = getTraceSession(input);
+  auto rank = input->rank();
 
   if constexpr (std::is_same_v<InstType, insts::Mean>) {
     ensureFloatingPoint(*input, "mean");
   }
 
   if (auto axis = optional_axis) {
-    return session->createTensor<InstType>(input, *axis, keep_dims);
+    auto normalized_axis = *axis;
+    if (normalized_axis < 0) {
+      normalized_axis += rank;
+    }
+    if (normalized_axis < 0 || normalized_axis >= rank) {
+      throw nb::value_error("Passed `dim` exceeded the rank of the tensor.");
+    }
+    return session->createTensor<InstType>(input, normalized_axis, keep_dims);
   }
 
   InstId reduce_id = session->getInstId(input.get());
@@ -441,6 +449,21 @@ auto performReduceInst(std::shared_ptr<Tensor> input,
         session->createInst<InstType>(reduce_id, 0, /*keep_dims=*/false);
   }
   return std::make_shared<Tensor>(session, reduce_id);
+}
+
+export auto performArgMax(std::shared_ptr<Tensor> input, i32 axis,
+                          bool keep_dims) -> std::shared_ptr<Tensor> {
+  auto session = getTraceSession(input);
+  auto rank = static_cast<i32>(input->rank());
+
+  if (axis < 0) {
+    axis += rank;
+  }
+  if (axis < 0 || axis >= rank) {
+    throw nb::value_error("Passed `dim` exceeded the rank of the tensor.");
+  }
+
+  return session->createTensor<insts::ArgMax>(input, axis, keep_dims);
 }
 
 export auto performSoftmax(std::shared_ptr<Tensor> input, i32 axis)

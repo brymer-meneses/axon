@@ -206,15 +206,16 @@ def Axon_ReshapeOp : AxonDialect_Op<"reshape", [
   let hasVerifier = 1;
 }
 
-class AxonDialect_ReduceOp<string mnemonic> : AxonDialect_Op<mnemonic, [Pure, SameOperandsAndResultElementType]> {
+class AxonDialect_ReduceOp<string mnemonic, list<Trait> traits>
+    : AxonDialect_Op<mnemonic, traits> {
   let arguments = (ins AnyTensor:$input, I64Attr:$dim, BoolAttr:$keep_dims);
   let results = (outs AnyTensor:$result);
   let assemblyFormat = "$input `,` $dim `:` type($input) `->` type($result) attr-dict";
 }
 
-def Axon_SumOp : AxonDialect_ReduceOp<"sum"> {}
-def Axon_MeanOp : AxonDialect_ReduceOp<"mean"> {}
-def Axon_ArgMaxOp : AxonDialect_ReduceOp<"argmax"> {}
+def Axon_SumOp : AxonDialect_ReduceOp<"sum", [Pure, SameOperandsAndResultElementType]> {}
+def Axon_MeanOp : AxonDialect_ReduceOp<"mean", [Pure, SameOperandsAndResultElementType]> {}
+def Axon_ArgMaxOp : AxonDialect_ReduceOp<"argmax", [Pure]> {}
 
 def Axon_SoftmaxOp : AxonDialect_Op<"softmax", [
   Pure,
