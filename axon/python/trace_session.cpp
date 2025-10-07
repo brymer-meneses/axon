@@ -65,7 +65,7 @@ export class TraceSession : public std::enable_shared_from_this<TraceSession> {
     markForReset();
   }
 
-  auto declareParam(std::shared_ptr<Tensor>& tensor) -> void {
+  auto declareParam(std::shared_ptr<Tensor> tensor) -> void {
     AXON_DCHECK(tensor->isEvaluated());
 
     auto storage = tensor->storage();

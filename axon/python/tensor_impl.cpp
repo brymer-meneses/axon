@@ -25,6 +25,12 @@ import :trace_session;
 
 namespace axon {
 
+Tensor::Tensor(std::shared_ptr<TraceSession> session, InstId inst_id)
+    : session_(std::move(session)) {
+  session_->insts()[this] = inst_id;
+  requires_grad_ = session_->checkRequiresGrad(inst_id);
+}
+
 Tensor::~Tensor() {
   if (session_) {
     session_->insts().erase(this);
@@ -40,15 +46,8 @@ auto Tensor::shape() const -> llvm::ArrayRef<i64> {
     return storage_->shape();
   }
 
-  // This is a lazy tensor, so get the shape from the trace session.
   AXON_ASSERT(session_ != nullptr);
   return session_->getShape(this);
-}
-
-Tensor::Tensor(std::shared_ptr<TraceSession> session, InstId inst_id)
-    : session_(std::move(session)) {
-  session_->insts()[this] = inst_id;
-  requires_grad_ = session_->checkRequiresGrad(inst_id);
 }
 
 auto Tensor::data_type() const -> DataType {
@@ -56,6 +55,7 @@ auto Tensor::data_type() const -> DataType {
     return storage_->data_type();
   }
 
+  AXON_ASSERT(session_ != nullptr);
   return session_->getDataType(const_cast<Tensor*>(this));
 }
 
