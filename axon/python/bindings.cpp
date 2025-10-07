@@ -323,6 +323,17 @@ NB_MODULE(_core, m) {
           nb::arg("dtype") = DataType::Float32)
 
       .def_static(
+          "ones_like",
+          [](const Tensor& like, bool requires_grad,
+             DataType::InternalType data_type) {
+            auto shape = like.shape();
+            return createFillLike(Scalar(1.0).cast(data_type), shape,
+                                  requires_grad);
+          },
+          nb::arg("like"), nb::arg("requires_grad") = false,
+          nb::arg("dtype") = DataType::Float32)
+
+      .def_static(
           "zeros",
           [](nb::tuple shape_tuple, bool requires_grad,
              DataType::InternalType data_type) {
@@ -331,6 +342,17 @@ NB_MODULE(_core, m) {
                                   requires_grad);
           },
           nb::arg("shape"), nb::arg("requires_grad") = false,
+          nb::arg("dtype") = DataType::Float32)
+
+      .def_static(
+          "zeros_like",
+          [](const Tensor& like, bool requires_grad,
+             DataType::InternalType data_type) {
+            auto shape = like.shape();
+            return createFillLike(Scalar(1.0).cast(data_type), shape,
+                                  requires_grad);
+          },
+          nb::arg("like"), nb::arg("requires_grad") = false,
           nb::arg("dtype") = DataType::Float32)
 
       .def_static(
