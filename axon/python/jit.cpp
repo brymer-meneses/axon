@@ -33,17 +33,19 @@ namespace axon {
 
 class CompiledFunction {
  public:
-  CompiledFunction(mlir::MLIRContext* context, Graph& graph)
+  CompiledFunction(mlir::MLIRContext* context, const Graph& graph,
+                   llvm::ArrayRef<Tensor*> returns)
       : context_(context) {
-    compileModuleAndPrepareEngine(graph);
+    compileModuleAndPrepareEngine(graph, returns);
 
-    auto max_size = 2 * (graph.parameters().size() + 1);
+    auto max_size = 2 * (graph.parameters().size()) + returns.size();
+
     argv_.reserve(max_size);
     arg_slots_.reserve(max_size);
   }
 
   auto execute(llvm::ArrayRef<std::shared_ptr<Tensor>> parameters,
-               Tensor* returned = nullptr) -> void {
+               llvm::ArrayRef<Tensor*> returns) -> void {
     argv_.clear();
     arg_slots_.clear();
 
@@ -61,14 +63,16 @@ class CompiledFunction {
       }
     }
 
-    std::unique_ptr<Storage> storage = nullptr;
-    if (returned) {
+    llvm::SmallVector<std::unique_ptr<Storage>> storages;
+    for (auto& returned : returns) {
       auto cpu =
           CpuStorage::createUninit(returned->shape(), returned->data_type());
-      storage = std::make_unique<Storage>(Storage(std::move(cpu)));
+      auto storage = std::make_unique<Storage>(Storage(std::move(cpu)));
 
       arg_slots_.push_back(storage->data_ptr());
       argv_.push_back(reinterpret_cast<void*>(&arg_slots_.back()));
+
+      storages.push_back(std::move(storage));
     }
 
     auto invocation_result = engine_->invokePacked("graph", argv_);
@@ -76,25 +80,30 @@ class CompiledFunction {
       throw std::runtime_error("JIT invocation failed");
     }
 
-    if (returned) {
+    for (auto i = 0; i < storages.size(); i += 1) {
+      auto& returned = returns[i];
+      auto& storage = storages[i];
+
       returned->setStorage(std::move(storage));
     }
-
   }
 
  private:
-  auto compileModuleAndPrepareEngine(Graph& graph) -> void {
+  auto compileModuleAndPrepareEngine(const Graph& graph,
+                                     llvm::ArrayRef<Tensor*> returns) -> void {
     mlir::OpBuilder builder(context_);
     mlir::PassManager pm(context_);
 
     pm.enableVerifier();
 
-    module_ = codegenGraph(graph, builder);
+    auto return_ids = getInstIds(returns);
+
+    mlir::ModuleOp module = codegenGraph(graph, return_ids, builder);
     axon::buildLlvmLoweringPipeline(pm, LoweringLevel::LLVM);
 
-    auto lowering_result = pm.run(module_);
+    auto lowering_result = pm.run(module);
     if (lowering_result.failed()) {
-      module_.print(llvm::outs());
+      module.print(llvm::outs());
       throw std::runtime_error("Failed to compile graph.");
     }
 
@@ -105,20 +114,34 @@ class CompiledFunction {
     mlir::ExecutionEngineOptions engine_options;
     engine_options.transformer = opt_pipeline;
 
-    auto maybe_engine = mlir::ExecutionEngine::create(module_, engine_options);
+    auto maybe_engine = mlir::ExecutionEngine::create(module, engine_options);
     if (!maybe_engine) {
-      module_.print(llvm::outs());
+      module.print(llvm::outs());
       throw std::runtime_error("Failed to create JIT engine");
     }
 
     engine_ = std::move(maybe_engine.get());
   }
 
+  static auto getInstIds(llvm::ArrayRef<Tensor*> tensors)
+      -> llvm::SmallVector<InstId> {
+    llvm::SmallVector<InstId> inst_ids;
+    for (auto tensor : tensors) {
+      AXON_DCHECK(tensor);
+
+      auto inst_id = tensor->getInstId();
+      AXON_DCHECK(inst_id.isValid());
+
+      inst_ids.push_back(inst_id);
+    }
+
+    return inst_ids;
+  }
+
  private:
   std::unique_ptr<mlir::ExecutionEngine> engine_;
 
   mlir::MLIRContext* context_;
-  mlir::ModuleOp module_;
 
   llvm::SmallVector<void*> argv_;
   llvm::SmallVector<std::byte*> arg_slots_;

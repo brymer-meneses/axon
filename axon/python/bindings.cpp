@@ -170,17 +170,14 @@ NB_MODULE(_core, m) {
           throw nb::value_error("Failed to inspect a non-lazy tensor.");
         }
 
-        session->setReturned(tensor);
-
-        auto module = codegenGraph(session->graph(), builder);
+        auto inst_id = session->getInstId(tensor.get());
+        auto module = codegenGraph(session->graph(), {inst_id}, builder);
         axon::buildLlvmLoweringPipeline(pm, level);
 
         auto lowering_result = pm.run(module);
         if (lowering_result.failed()) {
           throw std::runtime_error("Failed to compile graph.");
         }
-
-        session->setReturnedToNone();
 
         module.print(llvm::outs());
       },
@@ -216,6 +213,8 @@ NB_MODULE(_core, m) {
       .def_prop_ro("grad", &Tensor::grad)
 
       .def_prop_ro("is_evaluated", &Tensor::isEvaluated)
+
+      .def("save", &Tensor::save)
 
       .def("zero_grad", &Tensor::zeroGrad)
 

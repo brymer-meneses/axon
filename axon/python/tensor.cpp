@@ -41,6 +41,10 @@ export class Tensor {
 
   auto asString() -> std::string;
 
+  auto getInstId() const -> InstId;
+
+  auto save() -> void;
+
   auto isEvaluated() const -> bool { return storage_ != nullptr; }
 
   auto isRoot() const -> bool;

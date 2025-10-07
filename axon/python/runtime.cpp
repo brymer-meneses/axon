@@ -31,16 +31,17 @@ export class Runtime {
     return *context;
   }
 
-  auto execute(Graph& graph, llvm::ArrayRef<std::shared_ptr<Tensor>> parameters,
-               Tensor* returned = nullptr) {
+  auto execute(const Graph& graph,
+               llvm::ArrayRef<std::shared_ptr<Tensor>> parameters,
+               llvm::ArrayRef<Tensor*> returns) {
     auto hash = graph.hash();
     if (graph_registry_.contains(graph)) {
-      return graph_registry_[graph]->execute(parameters, returned);
+      return graph_registry_[graph]->execute(parameters, returns);
     }
 
     auto compiled_function =
-        std::make_unique<CompiledFunction>(&mlir_context_, graph);
-    compiled_function->execute(parameters, returned);
+        std::make_unique<CompiledFunction>(&mlir_context_, graph, returns);
+    compiled_function->execute(parameters, returns);
     graph_registry_[graph] = std::move(compiled_function);
   }
 

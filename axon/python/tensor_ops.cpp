@@ -18,6 +18,7 @@ import axon.core;
 import :tensor;
 import :jit;
 import :tensor_impl;
+import :trace_session;
 
 namespace nb = nanobind;
 
@@ -95,12 +96,12 @@ static auto ensureHasSameDataType(const Tensor& lhs, const Tensor& rhs)
   }
 }
 
-static auto ensureFloatingPoint(const Tensor& tensor,
-                                std::string_view op_name) -> void {
+static auto ensureFloatingPoint(const Tensor& tensor, std::string_view op_name)
+    -> void {
   if (!tensor.data_type().isFloatingPoint()) {
-    throw std::runtime_error(std::format(
-        "{} is only supported for floating point tensors, got {}", op_name,
-        tensor.data_type()));
+    throw std::runtime_error(
+        std::format("{} is only supported for floating point tensors, got {}",
+                    op_name, tensor.data_type()));
   }
 }
 
@@ -404,8 +405,7 @@ auto performPow(std::shared_ptr<Tensor> input, T exponent_value)
   auto exponent_dtype = DataType::fromType<T>();
 
   if (!tensor_dtype.isFloatingPoint()) {
-    throw std::runtime_error(
-        "pow is only defined for floating point tensors");
+    throw std::runtime_error("pow is only defined for floating point tensors");
   }
 
   Scalar exponent{exponent_value};

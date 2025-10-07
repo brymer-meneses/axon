@@ -5,6 +5,7 @@ module;
 #include "axon/base/macros.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Hashing.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 
 export module axon.core:graph;
@@ -59,9 +60,6 @@ export class Graph {
 
   auto reset() -> void;
 
-  auto setReturned(InstId returned_id) -> void { returned_id_ = returned_id; }
-  auto getReturnedId() const -> InstId { return returned_id_; }
-
   auto getDataType(InstId inst_id) const -> DataType {
     auto data_type = data_types_.get(inst_id);
     AXON_ASSERT(data_type, "No data type registered for inst");
@@ -108,7 +106,7 @@ export class Graph {
 
   IdStore<InstId, InstId> gradients_;
 
-  InstId returned_id_;
+  llvm::SmallVector<InstId> returns_;
 };
 
 }  // namespace axon

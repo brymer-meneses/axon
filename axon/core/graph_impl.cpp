@@ -120,8 +120,6 @@ auto Graph::createOp(Inst&& inst, bool emit_grad) -> InstId {
 }
 
 auto Graph::merge(Graph& graph) -> void {
-  AXON_ASSERT(!graph.returned_id_.isValid());
-
   auto param_offset = static_cast<i32>(parameters_.size());
   auto inst_offset = static_cast<i32>(insts_.size());
 
@@ -196,7 +194,6 @@ auto Graph::reset() -> void {
   shapes_.clear();
   data_types_.clear();
   gradients_.clear();
-  returned_id_ = InstId::None;
 }
 
 auto Graph::inferShape(InstId inst_id) -> void {

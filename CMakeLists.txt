@@ -136,6 +136,7 @@ target_sources(_core
     axon/python/runtime.cpp
     axon/python/tensor_ops.cpp
     axon/python/tensor_impl.cpp
+    axon/python/trace_session.cpp
     axon/python/abi.cpp
   PUBLIC
     axon/python/bindings.cpp

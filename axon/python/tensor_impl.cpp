@@ -7,6 +7,7 @@ module;
 
 #include "axon/base/macros.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "nanobind/nanobind.h"
@@ -20,156 +21,9 @@ import :tensor;
 import :runtime;
 import :jit;
 import :storage;
+import :trace_session;
 
 namespace axon {
-
-export class TraceSession : public std::enable_shared_from_this<TraceSession> {
- public:
-  auto getInstId(const Tensor* tensor) const -> InstId {
-    AXON_ASSERT(insts_.contains(tensor));
-    return insts_.at(tensor);
-  }
-  auto getShape(const Tensor* tensor) const -> llvm::ArrayRef<i64> {
-    auto inst_id = getInstId(tensor);
-    return graph_.getShape(inst_id);
-  }
-
-  auto getDataType(const Tensor* tensor) const -> DataType {
-    auto inst_id = getInstId(tensor);
-    return graph_.getDataType(inst_id);
-  }
-
-  template <typename InstType, typename... Args>
-  auto createTensor(Args&&... args) -> std::shared_ptr<Tensor> {
-    auto inst_id = createInst<InstType>(std::forward<Args>(args)...);
-    auto session = shared_from_this();
-    return std::make_shared<Tensor>(session, inst_id);
-  }
-
-  template <typename InstType, typename... Args>
-  auto createInst(Args&&... args) -> InstId {
-    auto emit_grad = Runtime::get().shouldEmitGrad();
-    auto inst_id = graph_.createOp(InstType(forward(args)...), emit_grad);
-    return inst_id;
-  }
-
-  auto checkRequiresGrad(InstId inst_id) const -> bool {
-    return graph_.checkRequiresGrad(inst_id);
-  }
-
-  auto setReturned(std::shared_ptr<Tensor>& tensor) -> void {
-    graph_.setReturned(getInstId(tensor.get()));
-  }
-
-  auto setReturnedToNone() -> void { graph_.setReturned(InstId::None); }
-
-  auto performBackward(Tensor* tensor, Tensor* grad) -> void {
-    auto tensor_id = getInstId(tensor);
-    InstId grad_id;
-    if (grad == nullptr) {
-      grad_id = graph_.createOp(insts::FillLike(tensor_id, Scalar(1.0f)));
-    } else {
-      grad_id = getInstId(grad);
-    }
-
-    graph_.performBackward(tensor_id, grad_id);
-    evaluate(tensor);
-    markForReset();
-  }
-
-  auto declareParam(std::shared_ptr<Tensor> tensor) -> void {
-    AXON_DCHECK(tensor->isEvaluated());
-
-    auto storage = tensor->storage();
-    auto inst_id = graph_.declareParam(storage->shape(), storage->data_type(),
-                                       tensor->requiresGrad());
-
-    insts_[tensor.get()] = inst_id;
-    parameters_.push_back(std::move(tensor));
-  }
-
-  auto merge(TraceSession& other) -> void {
-    auto offset = graph_.insts().size();
-
-    for (auto [tensor, inst_id] : other.insts_) {
-      insts_[tensor] = InstId(static_cast<i32>(offset) + inst_id.value());
-    }
-
-    for (auto tensor : other.parameters_) {
-      parameters_.push_back(std::move(tensor));
-    }
-
-    graph_.merge(other.graph_);
-  }
-
-  auto evaluate(Tensor* returned) -> void {
-    AXON_ASSERT(returned != nullptr);
-    AXON_ASSERT(insts_.contains(returned));
-
-    ensureParameterGradsAreZerod();
-
-    auto returned_id = insts_[returned];
-    graph_.setReturned(returned_id);
-    Runtime::get().execute(graph_, parameters_, returned);
-    graph_.setReturned(InstId::None);
-  }
-
-  auto evaluate() -> void {
-    ensureParameterGradsAreZerod();
-
-    AXON_DCHECK(parameters_.size() > 0);
-    Runtime::get().execute(graph_, parameters_);
-  }
-
-  // Mark this session to be reset the next time a new trace starts.
-  auto markForReset() -> void { should_reset_ = true; }
-
-  // Query whether this session has been finalized by a previous
-  // evaluate/backward and should not be reused for starting a new trace.
-  auto shouldReset() const -> bool { return should_reset_; }
-
-  auto graph() const -> const Graph& { return graph_; }
-
-  auto insts() -> llvm::DenseMap<Tensor*, InstId>& { return insts_; }
-  auto insts() const -> const llvm::DenseMap<Tensor*, InstId>& {
-    return insts_;
-  }
-
-  auto parameters() -> llvm::SmallVector<std::shared_ptr<Tensor>>& {
-    return parameters_;
-  }
-
-  auto parameters() const -> const llvm::SmallVector<std::shared_ptr<Tensor>>& {
-    return parameters_;
-  }
-
- private:
-  // forward or get inst id
-  auto forward(auto&& arg) -> auto {
-    using T = std::decay_t<decltype(arg)>;
-    if constexpr (std::is_same_v<T, std::shared_ptr<Tensor>>) {
-      return getInstId(arg.get());
-    } else {
-      return std::forward<T>(arg);
-    }
-  };
-
-  // ensure that the gradients of the parameters exists and are zero'd
-  auto ensureParameterGradsAreZerod() -> void {
-    for (auto& p : parameters_) {
-      AXON_ASSERT(p != nullptr);
-      if (p->requiresGrad() && p->grad() == nullptr) {
-        p->zeroGrad();
-      }
-    }
-  }
-
- private:
-  Graph graph_;
-  llvm::DenseMap<Tensor*, InstId> insts_;
-  llvm::SmallVector<std::shared_ptr<Tensor>> parameters_;
-  bool should_reset_ = false;
-};
 
 Tensor::~Tensor() {
   if (session_) {
@@ -220,6 +74,14 @@ auto Tensor::zeroGrad() -> void {
   }
 }
 
+auto Tensor::save() -> void {
+  if (!session_) {
+    throw nb::value_error("Tried to save a root tensor.");
+  }
+
+  session_->markAsSaved(this);
+}
+
 auto Tensor::evaluate() -> void {
   if (!session_) {
     throw nb::value_error("Tried to evaluate an already materialized tensor.");
@@ -256,6 +118,14 @@ auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
     session_->declareParam(grad);
   }
   session_->performBackward(this, grad.get());
+}
+
+auto Tensor::getInstId() const -> InstId {
+  if (session_) {
+    return session_->getInstId(this);
+  }
+
+  return InstId::None;
 }
 
 auto Tensor::isRoot() const -> bool {
@@ -319,10 +189,14 @@ static auto dumpRecursive(llvm::raw_string_ostream& stream,
 
 auto Tensor::asString() -> std::string {
   if (!isEvaluated()) {
-    evaluate();
+    std::string repr;
+    llvm::raw_string_ostream stream{repr};
+    stream << "LazyTensor(";
+    if (requires_grad_) {
+      stream << "requires_grad)";
+    }
+    return repr;
   }
-
-  AXON_ASSERT(isEvaluated());
 
   std::string repr;
   llvm::raw_string_ostream stream{repr};

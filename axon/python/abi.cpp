@@ -43,7 +43,8 @@ export class MemRefDescriptor {
     AXON_DCHECK(descriptor->offset_ == 0);
 
     auto cpu = CpuStorage::create(
-        reinterpret_cast<std::byte*>(descriptor->aligned_ptr_), shape, data_type,
+        reinterpret_cast<std::byte*>(descriptor->aligned_ptr_), shape,
+        data_type,
         /*is_owned=*/false, strides);
     return Storage(std::move(cpu));
   }
@@ -99,8 +100,5 @@ export class MemRefDescriptor {
   void* aligned_ptr_;
   i64 offset_;
 };
-
-// Deprecated TensorDescriptor removed. Parameters are passed as individual
-// MemRefDescriptor objects for data and optional grad.
 
 }  // namespace axon::abi

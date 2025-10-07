@@ -450,8 +450,9 @@ static auto codegen(const insts::Log& op, CompilationContext& ctx) -> void {
       ctx.builder, ctx.builder.getUnknownLoc(), input);
 };
 
-static auto getFunctionType(const Graph& graph, mlir::OpBuilder& builder)
-    -> mlir::FunctionType {
+static auto getFunctionType(const Graph& graph,
+                            llvm::ArrayRef<InstId> returned_ids,
+                            mlir::OpBuilder& builder) -> mlir::FunctionType {
   llvm::SmallVector<mlir::Type> arg_types;
   auto context = builder.getContext();
   AXON_ASSERT(context != nullptr);
@@ -466,27 +467,28 @@ static auto getFunctionType(const Graph& graph, mlir::OpBuilder& builder)
     }
   }
 
-  auto returned_id = graph.getReturnedId();
-  if (!returned_id) {
-    return builder.getFunctionType(arg_types, {});
+  llvm::SmallVector<mlir::Type> returns;
+  for (auto returned_id : returned_ids) {
+    auto shape = graph.getShape(returned_id);
+    auto returned_dtype = graph.getDataType(returned_id);
+    auto returned_element_type = getElementType(returned_dtype, builder);
+    auto returned_type =
+        mlir::RankedTensorType::get(shape, returned_element_type);
+    returns.push_back(returned_type);
   }
 
-  auto shape = graph.getShape(returned_id);
-  auto returned_dtype = graph.getDataType(returned_id);
-  auto returned_element_type = getElementType(returned_dtype, builder);
-  auto returned_type =
-      mlir::RankedTensorType::get(shape, returned_element_type);
-  return builder.getFunctionType(arg_types, {returned_type});
+  return builder.getFunctionType(arg_types, returns);
 }
 
-export auto codegenGraph(const Graph& graph, mlir::OpBuilder& builder)
-    -> mlir::ModuleOp {
+export auto codegenGraph(const Graph& graph,
+                         llvm::ArrayRef<InstId> returned_ids,
+                         mlir::OpBuilder& builder) -> mlir::ModuleOp {
   auto module = mlir::ModuleOp::create(builder.getUnknownLoc());
   builder.setInsertionPointToEnd(module.getBody());
 
   auto loc = builder.getUnknownLoc();
 
-  auto func_type = getFunctionType(graph, builder);
+  auto func_type = getFunctionType(graph, returned_ids, builder);
   auto func_op = builder.create<mlir::func::FuncOp>(loc, "graph", func_type);
 
   builder.setInsertionPointToStart(func_op.addEntryBlock());
@@ -511,12 +513,12 @@ export auto codegenGraph(const Graph& graph, mlir::OpBuilder& builder)
     inst.visit([&](const auto& op) { codegen(op, ctx); });
   }
 
-  if (auto returned_id = graph.getReturnedId()) {
-    mlir::func::ReturnOp::create(ctx.builder, loc, ctx.values[returned_id]);
-  } else {
-    mlir::func::ReturnOp::create(ctx.builder, loc);
+  llvm::SmallVector<mlir::Value> returns;
+  for (auto returned_id : returned_ids) {
+    returns.push_back(ctx.values[returned_id]);
   }
 
+  mlir::func::ReturnOp::create(ctx.builder, loc, returns);
   return module;
 }
 
