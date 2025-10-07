@@ -88,11 +88,7 @@ auto Tensor::evaluate() -> void {
   }
 
   session_->evaluate(this);
-
-  // If this tensor doesn't require gradients, then we can prune this graph.
-  if (!requires_grad_) {
-    session_->markForReset();
-  }
+  session_->markForReset();
 }
 
 auto Tensor::backward(std::shared_ptr<Tensor> grad) -> void {
