@@ -182,6 +182,10 @@ export class Storage {
         auto base = reinterpret_cast<const bool*>(impl_->data());
         return Scalar(base[off]);
       }
+      case DataType::Int8: {
+        auto base = reinterpret_cast<const i8*>(impl_->data());
+        return Scalar(base[off]);
+      }
       case DataType::Int32: {
         auto base = reinterpret_cast<const i32*>(impl_->data());
         return Scalar(base[off]);

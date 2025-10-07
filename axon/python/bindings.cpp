@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstdint>
 #include <format>
 #include <limits>
 #include <memory>
@@ -117,6 +118,8 @@ static auto createScalarFromPythonObject(nb::handle value,
         return Scalar(nb::cast<double>(value));
       case DataType::Int1:
         return Scalar(static_cast<bool>(nb::cast<bool>(value)));
+      case DataType::Int8:
+        return Scalar(static_cast<i8>(nb::cast<i8>(value)));
       case DataType::Int32: {
         auto casted = nb::cast<i64>(value);
         if (casted < std::numeric_limits<i32>::min() ||
@@ -287,6 +290,8 @@ NB_MODULE(_core, m) {
                  return nb::cast(*self->storage()->as<f64>());
                case DataType::Int1:
                  return nb::cast(*self->storage()->as<bool>());
+               case DataType::Int8:
+                 return nb::cast(*self->storage()->as<i8>());
                case DataType::Int32:
                  return nb::cast(*self->storage()->as<i32>());
                case DataType::Int64:

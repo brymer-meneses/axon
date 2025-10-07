@@ -44,6 +44,8 @@ static auto getElementType(DataType data_type, mlir::OpBuilder& builder)
       return builder.getF64Type();
     case DataType::Int1:
       return builder.getI1Type();
+    case DataType::Int8:
+      return builder.getI8Type();
     case DataType::Int32:
       return builder.getI32Type();
     case DataType::Int64:
@@ -51,11 +53,6 @@ static auto getElementType(DataType data_type, mlir::OpBuilder& builder)
   }
 
   AXON_UNREACHABLE("Unsupported data type");
-}
-
-static auto getFloatAttr(mlir::Type element_type, f64 value)
-    -> mlir::FloatAttr {
-  return mlir::FloatAttr::get(element_type, value);
 }
 
 static auto codegen(const insts::AccumulateGrad& op, CompilationContext& ctx)
@@ -260,10 +257,12 @@ static auto codegen(const insts::FillLike& op, CompilationContext& ctx)
   mlir::Attribute fill_attr;
   switch (op.fill_value.data_type().kind()) {
     case DataType::Float32:
-      fill_attr = getFloatAttr(element_type, op.fill_value.as<f32>());
+      fill_attr =
+          ctx.builder.getFloatAttr(element_type, op.fill_value.as<f32>());
       break;
     case DataType::Float64:
-      fill_attr = getFloatAttr(element_type, op.fill_value.as<f64>());
+      fill_attr =
+          ctx.builder.getFloatAttr(element_type, op.fill_value.as<f64>());
       break;
     case DataType::Int1:
       fill_attr = ctx.builder.getBoolAttr(op.fill_value.as<bool>());

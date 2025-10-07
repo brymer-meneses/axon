@@ -168,6 +168,11 @@ export class CpuStorage final : public StorageBase {
         std::fill_n(data_ptr, num_elems, scalar.as<bool>());
         break;
       }
+      case DataType::Int8: {
+        auto* data_ptr = reinterpret_cast<i8*>(impl.data());
+        std::fill_n(data_ptr, num_elems, scalar.as<i8>());
+        break;
+      }
     }
     return impl;
   }
@@ -186,6 +191,11 @@ export class CpuStorage final : public StorageBase {
 
     auto num_elems = computeNumElems(shape);
     auto strides = computeStrides(shape, layout);
+
+    if (data_type.isInteger()) {
+      throw std::runtime_error(
+          "randn is only supported for floating point dtypes");
+    }
 
     switch (data_type.kind()) {
       case DataType::Float32: {
@@ -206,14 +216,10 @@ export class CpuStorage final : public StorageBase {
         }
         return impl;
       }
-      case DataType::Int1:
-      case DataType::Int32:
-      case DataType::Int64: {
-        throw std::runtime_error(
-            "randn is only supported for floating point dtypes");
-      }
+
+      default:
+        AXON_UNREACHABLE("Unhandled data type {}", data_type);
     }
-    AXON_UNREACHABLE("Unhandled data type");
   }
 
   static auto createZerosLike(const Storage& storage) -> CpuStorage {
@@ -267,6 +273,15 @@ export class CpuStorage final : public StorageBase {
         auto* ptr = reinterpret_cast<bool*>(impl.data());
         auto* fill_ptr = ptr;
         fillBuffer<bool>(list, fill_ptr);
+        return impl;
+      }
+      case DataType::Int8: {
+        auto shape = computeShape(list);
+        auto strides = computeStrides(shape, Layout::RowMajor);
+        CpuStorage impl(shape, strides, data_type);
+        auto* ptr = reinterpret_cast<i8*>(impl.data());
+        auto* fill_ptr = ptr;
+        fillBuffer<i8>(list, fill_ptr);
         return impl;
       }
     }
@@ -332,6 +347,9 @@ export class ScalarStorage final : public StorageBase {
         break;
       case DataType::Int1:
         value_ = Scalar(false);
+        break;
+      case DataType::Int8:
+        value_ = Scalar(0);
         break;
       case DataType::Int32:
         value_ = Scalar(static_cast<i32>(0));

@@ -292,8 +292,9 @@ struct BackwardRule<insts::Pow> {
       return {};
     }
 
+    auto exponent = Scalar(op.exponent.getAs<f32>() - 1.0f);
     // d/dx (x^a) = a * x^(a-1)
-    auto x_pow = ctx.createOp(insts::Pow(op.input_id, op.exponent - 1.0f));
+    auto x_pow = ctx.createOp(insts::Pow(op.input_id, exponent));
     auto scaled = ctx.createOp(insts::ScalarMul(x_pow, op.exponent));
     auto dx = ctx.createOp(insts::Mul(grad_id, scaled));
 

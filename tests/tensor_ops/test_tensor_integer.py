@@ -96,7 +96,7 @@ def test_randn_disallows_integer_dtype():
 
 def test_boolean_tensor_construction():
     ones = Tensor.ones((3,), dtype=dtype.bool)
-    axon.testing.assert_are_close(ones, np.ones((3,), dtype=bool))
+    axon.testing.assert_are_close(ones, np.ones((3,), dtype=np.bool))
 
     zeros = Tensor.zeros((2,), dtype=dtype.bool)
-    axon.testing.assert_are_close(zeros, np.zeros((2,), dtype=bool))
+    axon.testing.assert_are_close(zeros, np.zeros((2,), dtype=np.bool))

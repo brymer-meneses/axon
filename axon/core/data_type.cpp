@@ -21,6 +21,7 @@ export class DataType {
     Float32,
     Float64,
     Int1,
+    Int8,
     Int32,
     Int64,
   };
@@ -37,6 +38,7 @@ export class DataType {
       case DataType::Float64:
         return 8;
       case DataType::Int1:
+      case DataType::Int8:
         return 1;
       case DataType::Int32:
         return 4;
@@ -53,6 +55,8 @@ export class DataType {
         return "float64";
       case DataType::Int1:
         return "bool";
+      case DataType::Int8:
+        return "int8";
       case DataType::Int32:
         return "int32";
       case DataType::Int64:
@@ -74,6 +78,7 @@ export class DataType {
       case Int1:
       case Int32:
       case Int64:
+      case Int8:
         return true;
     }
   }
@@ -91,13 +96,11 @@ export class DataType {
       return DataType::Float64;
     } else if constexpr (std::is_same_v<T, bool>) {
       return DataType::Int1;
+    } else if constexpr (std::is_same_v<T, i8>) {
+      return DataType::Int8;
     } else if constexpr (std::is_same_v<T, i32>) {
       return DataType::Int32;
     } else if constexpr (std::is_same_v<T, i64>) {
-      return DataType::Int64;
-    } else if constexpr (std::is_same_v<T, std::int32_t>) {
-      return DataType::Int32;
-    } else if constexpr (std::is_same_v<T, std::int64_t>) {
       return DataType::Int64;
     } else {
       static_assert(false,
@@ -116,6 +119,8 @@ export class DataType {
                static_cast<u8>(nanobind::dlpack::dtype_code::Int)) {
       if (dtype.bits == 1) {
         return DataType::Int1;
+      } else if (dtype.bits == 8) {
+        return DataType::Int8;
       } else if (dtype.bits == 32) {
         return DataType::Int32;
       } else if (dtype.bits == 64) {

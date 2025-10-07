@@ -34,13 +34,14 @@ class Model(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-        self.l1 = nn.Linear(28 * 28, 256)
-        self.l2 = nn.Linear(256, 10)
+        self.l1 = nn.Linear(28 * 28, 512)
+        self.l2 = nn.Linear(512, 256)
+        self.l3 = nn.Linear(256, 10)
 
     def forward(self, x: Tensor) -> Tensor:
         l1_out = F.relu(self.l1(x))
-        l2_out = self.l2(l1_out)
-        return l2_out
+        l2_out = F.relu(self.l2(l1_out))
+        return self.l3(l2_out)
 
 
 def train(
@@ -107,12 +108,14 @@ def train(
 def evaluate(
     model: Model, x_test: np.ndarray, y_test: np.ndarray, batch_size: int = 100
 ):
-    """Evaluate model on test set and return average cross-entropy loss (float)."""
+    """Evaluate the model on the test set and return (avg_loss, accuracy)."""
     x_test = (x_test / 255.0).astype(np.float32)
     test_dataset = DatasetIterator(x_test, y_test, batch_size=batch_size, shuffle=False)
 
     total_loss = 0.0
     batches = 0
+    total_correct = 0
+    total_samples = 0
 
     with axon.no_grad():
         for x_batch, y_batch in test_dataset():
@@ -123,10 +126,17 @@ def evaluate(
             total_loss += loss.item()
             batches += 1
 
-    if batches == 0:
-        return None
+            predictions = logits.argmax(1)
+            total_correct += (predictions == Tensor(y_batch)).sum().item()
+            total_samples += y_batch.shape[0]
 
-    return total_loss / batches
+    if batches == 0 or total_samples == 0:
+        return None, None
+
+    avg_loss = total_loss / batches
+    accuracy = float(total_correct) / float(total_samples)
+
+    return avg_loss, accuracy
 
 
 def main() -> None:
@@ -139,12 +149,12 @@ def main() -> None:
         x_train,
         y_train,
         batch_size=500,
-        epochs=4,
+        epochs=1,
         lr=5e-1,
         inspect_ir=True,
     )
 
-    test_loss = evaluate(
+    test_loss, test_accuracy = evaluate(
         model,
         x_test,
         y_test,
@@ -153,6 +163,7 @@ def main() -> None:
 
     print(f"Final train loss (per-epoch sums): {train_loss}")
     print(f"Final test  loss (avg): {test_loss}")
+    print(f"Final test accuracy: {test_accuracy}")
 
 
 if __name__ == "__main__":

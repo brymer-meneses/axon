@@ -11,9 +11,9 @@ class dtype(enum.Enum):
 
     bool = 2
 
-    int32 = 3
+    int32 = 4
 
-    int64 = 4
+    int64 = 5
 
 float32: dtype = dtype.float32
 

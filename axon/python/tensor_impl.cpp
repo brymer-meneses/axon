@@ -217,6 +217,11 @@ auto Tensor::asString() -> std::string {
                           /*indent_width=*/8);
       break;
     }
+    case DataType::Int8: {
+      dumpRecursive<i8>(stream, storage_.get(), 0, idx,
+                        /*indent_width=*/8);
+      break;
+    }
     case DataType::Int32: {
       dumpRecursive<i32>(stream, storage_.get(), 0, idx,
                          /*indent_width=*/8);

@@ -42,6 +42,8 @@ export class Scalar {
         return static_cast<T>(as<f64>());
       case DataType::Int1:
         return static_cast<T>(as<bool>());
+      case DataType::Int8:
+        return static_cast<T>(as<i8>());
       case DataType::Int32:
         return static_cast<T>(as<i32>());
       case DataType::Int64:
@@ -57,157 +59,15 @@ export class Scalar {
       case DataType::Float64:
         return Scalar(getAs<f64>());
       case DataType::Int1:
-        return Scalar(static_cast<bool>(getAs<i64>()));
+        return Scalar(getAs<bool>());
+      case DataType::Int8:
+        return Scalar(getAs<i8>());
       case DataType::Int32:
-        return Scalar(static_cast<i32>(getAs<i64>()));
+        return Scalar(getAs<i32>());
       case DataType::Int64:
         return Scalar(getAs<i64>());
     }
     AXON_UNREACHABLE("Unsupported scalar cast");
-  }
-
-  friend auto operator+(const Scalar& lhs, const Scalar& rhs) -> Scalar {
-    AXON_ASSERT(lhs.data_type() == rhs.data_type());
-    switch (lhs.data_type().kind()) {
-      case DataType::Float32: {
-        auto lhs_casted = lhs.as<f32>();
-        auto rhs_casted = rhs.as<f32>();
-        return Scalar(lhs_casted + rhs_casted);
-      }
-      case DataType::Float64: {
-        auto lhs_casted = lhs.as<f64>();
-        auto rhs_casted = rhs.as<f64>();
-        return Scalar(lhs_casted + rhs_casted);
-      }
-      case DataType::Int1: {
-        auto lhs_casted = lhs.as<bool>();
-        auto rhs_casted = rhs.as<bool>();
-        return Scalar(static_cast<bool>(lhs_casted + rhs_casted));
-      }
-      case DataType::Int32: {
-        auto lhs_casted = lhs.as<i32>();
-        auto rhs_casted = rhs.as<i32>();
-        return Scalar(lhs_casted + rhs_casted);
-      }
-      case DataType::Int64: {
-        auto lhs_casted = lhs.as<i64>();
-        auto rhs_casted = rhs.as<i64>();
-        return Scalar(lhs_casted + rhs_casted);
-      }
-    }
-    AXON_UNREACHABLE("Unsupported scalar addition");
-  }
-
-  template <Numeric T>
-  friend auto operator-(const Scalar& lhs, T rhs) -> Scalar {
-    AXON_ASSERT(lhs.data_type() == DataType::fromType<T>());
-    switch (lhs.data_type().kind()) {
-      case DataType::Float32: {
-        auto lhs_casted = lhs.as<f32>();
-        return Scalar(lhs_casted - rhs);
-      }
-      case DataType::Float64: {
-        auto lhs_casted = lhs.as<f64>();
-        return Scalar(lhs_casted - rhs);
-      }
-      case DataType::Int1: {
-        auto lhs_casted = lhs.as<bool>();
-        return Scalar(static_cast<bool>(lhs_casted - rhs));
-      }
-      case DataType::Int32: {
-        auto lhs_casted = lhs.as<i32>();
-        return Scalar(lhs_casted - rhs);
-      }
-      case DataType::Int64: {
-        auto lhs_casted = lhs.as<i64>();
-        return Scalar(lhs_casted - rhs);
-      }
-    }
-    AXON_UNREACHABLE("Unsupported scalar subtraction");
-  }
-
-  template <Numeric T>
-  friend auto operator-(T lhs, const Scalar& rhs) -> Scalar {
-    AXON_ASSERT(rhs.data_type() == DataType::fromType<T>());
-    switch (rhs.data_type().kind()) {
-      case DataType::Float32: {
-        auto rhs_casted = rhs.as<f32>();
-        return Scalar(lhs - rhs_casted);
-      }
-      case DataType::Float64: {
-        auto rhs_casted = rhs.as<f64>();
-        return Scalar(lhs - rhs_casted);
-      }
-      case DataType::Int1: {
-        auto rhs_casted = rhs.as<bool>();
-        return Scalar(static_cast<bool>(lhs - rhs_casted));
-      }
-      case DataType::Int32: {
-        auto rhs_casted = rhs.as<i32>();
-        return Scalar(lhs - rhs_casted);
-      }
-      case DataType::Int64: {
-        auto rhs_casted = rhs.as<i64>();
-        return Scalar(lhs - rhs_casted);
-      }
-    }
-    AXON_UNREACHABLE("Unsupported scalar subtraction");
-  }
-
-  template <Numeric T>
-  friend auto operator+(const Scalar& lhs, T rhs) -> Scalar {
-    AXON_ASSERT(lhs.data_type() == DataType::fromType<T>());
-    switch (lhs.data_type().kind()) {
-      case DataType::Float32: {
-        auto lhs_casted = lhs.as<f32>();
-        return Scalar(lhs_casted + rhs);
-      }
-      case DataType::Float64: {
-        auto lhs_casted = lhs.as<f64>();
-        return Scalar(lhs_casted + rhs);
-      }
-      case DataType::Int1: {
-        auto lhs_casted = lhs.as<bool>();
-        return Scalar(static_cast<bool>(lhs_casted + rhs));
-      }
-      case DataType::Int32: {
-        auto lhs_casted = lhs.as<i32>();
-        return Scalar(lhs_casted + rhs);
-      }
-      case DataType::Int64: {
-        auto lhs_casted = lhs.as<i64>();
-        return Scalar(lhs_casted + rhs);
-      }
-    }
-    AXON_UNREACHABLE("Unsupported scalar addition");
-  }
-
-  template <Numeric T>
-  friend auto operator+(T lhs, const Scalar& rhs) -> Scalar {
-    AXON_ASSERT(rhs.data_type() == DataType::fromType<T>());
-    switch (rhs.data_type().kind()) {
-      case DataType::Float32: {
-        auto rhs_casted = rhs.as<f32>();
-        return Scalar(lhs + rhs_casted);
-      }
-      case DataType::Float64: {
-        auto rhs_casted = rhs.as<f64>();
-        return Scalar(lhs + rhs_casted);
-      }
-      case DataType::Int1: {
-        auto rhs_casted = rhs.as<bool>();
-        return Scalar(static_cast<bool>(lhs + rhs_casted));
-      }
-      case DataType::Int32: {
-        auto rhs_casted = rhs.as<i32>();
-        return Scalar(lhs + rhs_casted);
-      }
-      case DataType::Int64: {
-        auto rhs_casted = rhs.as<i64>();
-        return Scalar(lhs + rhs_casted);
-      }
-    }
-    AXON_UNREACHABLE("Unsupported scalar addition");
   }
 
   auto data_type() const -> DataType { return data_type_; }
