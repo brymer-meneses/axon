@@ -114,6 +114,12 @@ static auto codegen(const insts::Constant& op, CompilationContext& ctx)
       data_attribute = mlir::DenseElementsAttr::get(result_type, values);
       break;
     }
+    case DataType::Int8: {
+      auto data_ptr = reinterpret_cast<i8*>(constant->data_ptr());
+      auto data_ref = llvm::ArrayRef<i8>(data_ptr, constant->size());
+      data_attribute = mlir::DenseElementsAttr::get(result_type, data_ref);
+      break;
+    }
     case DataType::Int32: {
       auto data_ptr = reinterpret_cast<i32*>(constant->data_ptr());
       auto data_ref = llvm::ArrayRef<i32>(data_ptr, constant->size());
@@ -267,6 +273,9 @@ static auto codegen(const insts::FillLike& op, CompilationContext& ctx)
     case DataType::Int1:
       fill_attr = ctx.builder.getBoolAttr(op.fill_value.as<bool>());
       break;
+    case DataType::Int8:
+      fill_attr = ctx.builder.getBoolAttr(op.fill_value.as<i8>());
+      break;
     case DataType::Int32:
       fill_attr =
           ctx.builder.getIntegerAttr(element_type, op.fill_value.as<i32>());
@@ -369,6 +378,10 @@ static auto codegen(const insts::ScalarMul& op, CompilationContext& ctx)
     }
     case DataType::Int1: {
       attr = ctx.builder.getBoolAttr(op.scalar.as<bool>());
+      break;
+    }
+    case DataType::Int8: {
+      attr = ctx.builder.getIntegerAttr(element_type, op.scalar.as<i8>());
       break;
     }
     case DataType::Int32: {

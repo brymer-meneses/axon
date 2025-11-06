@@ -130,11 +130,11 @@ export class DataType {
                static_cast<u8>(nanobind::dlpack::dtype_code::UInt)) {
       if (dtype.bits == 1) {
         return DataType::Int1;
-      }
-      if (dtype.bits == 32) {
+      } else if (dtype.bits == 8) {
+        return DataType::Int8;
+      } else if (dtype.bits == 32) {
         return DataType::Int32;
-      }
-      if (dtype.bits == 64) {
+      } else if (dtype.bits == 64) {
         return DataType::Int64;
       }
     } else if (dtype.code ==

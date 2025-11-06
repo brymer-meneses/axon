@@ -110,6 +110,7 @@ def evaluate(
 ):
     """Evaluate the model on the test set and return (avg_loss, accuracy)."""
     x_test = (x_test / 255.0).astype(np.float32)
+    y_test = y_test.astype(np.int64)
     test_dataset = DatasetIterator(x_test, y_test, batch_size=batch_size, shuffle=False)
 
     total_loss = 0.0
@@ -148,8 +149,8 @@ def main() -> None:
         model,
         x_train,
         y_train,
-        batch_size=500,
-        epochs=1,
+        batch_size=512,
+        epochs=3,
         lr=5e-1,
         inspect_ir=True,
     )
